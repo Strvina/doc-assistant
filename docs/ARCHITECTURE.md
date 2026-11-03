@@ -37,7 +37,7 @@ src/docassist/
   llm/
     base.py         # LLMProvider interfejs
     claude.py       # ClaudeProvider
-    openai.py       # OpenAIProvider
+    openai_provider.py  # OpenAIProvider
     fake.py         # FakeProvider (testovi)
     prompts.py      # sistemski prompt i formatiranje konteksta
   factory.py        # pravi embedder/store/LLM iz Settings

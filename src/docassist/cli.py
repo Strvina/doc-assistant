@@ -2,6 +2,7 @@
 
 uv run python -m docassist.cli index data/sample_docs
 uv run python -m docassist.cli search "Koliki je moment pritezanja za M8?"
+uv run python -m docassist.cli ask "Koliko dana godišnjeg odmora imam?" [--provider openai]
 uv run python -m docassist.cli docs
 uv run python -m docassist.cli delete <doc_id>
 """
@@ -14,8 +15,10 @@ from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 from docassist.config import Settings
-from docassist.factory import MissingAPIKeyError, build_store
+from docassist.factory import MissingAPIKeyError, build_llm, build_store
 from docassist.ingest import SUPPORTED_EXTENSIONS, DocumentLoadError, ingest
+from docassist.llm import LLMError
+from docassist.rag import answer
 from docassist.retrieval import EmbedderMismatchError, retrieve
 
 
@@ -27,7 +30,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     settings = Settings.from_env()
     try:
         return args.handler(args, settings)
-    except (MissingAPIKeyError, EmbedderMismatchError) as exc:
+    except (MissingAPIKeyError, EmbedderMismatchError, LLMError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
@@ -45,6 +48,12 @@ def _parser() -> argparse.ArgumentParser:
     search.add_argument("question")
     search.add_argument("-k", type=int, default=None, help="number of results (default TOP_K)")
     search.set_defaults(handler=cmd_search)
+
+    ask = commands.add_parser("ask", help="answer a question from the documents, with citations")
+    ask.add_argument("question")
+    ask.add_argument("-k", type=int, default=None, help="chunks given to the LLM (default TOP_K)")
+    ask.add_argument("--provider", choices=["claude", "openai", "fake"], default=None)
+    ask.set_defaults(handler=cmd_ask)
 
     docs = commands.add_parser("docs", help="list indexed documents")
     docs.set_defaults(handler=cmd_docs)
@@ -81,6 +90,28 @@ def cmd_search(args: argparse.Namespace, settings: Settings) -> int:
         chunk = result.chunk
         print(f"\n#{rank}  score {result.score:.3f}  [{chunk.source}, p. {chunk.page}]")
         print(_indent(_shorten(chunk.text, 400)))
+    return 0
+
+
+def cmd_ask(args: argparse.Namespace, settings: Settings) -> int:
+    store = build_store(settings)
+    llm = build_llm(settings, args.provider)
+    result = answer(args.question, store, llm, k=args.k or settings.top_k)
+
+    print(result.text)
+    if result.citations:
+        print()
+        print("Sources:")
+        for citation in result.citations:
+            print(f"  - {citation.source}, p. {citation.page}")
+    if result.invalid_citations:
+        print()
+        print(f"Warning: citations not found in the context: {result.invalid_citations}")
+    print()
+    print(
+        f"[{result.provider} {result.model} · {result.latency_s:.1f} s · "
+        f"{result.input_tokens} in / {result.output_tokens} out tokens]"
+    )
     return 0
 
 

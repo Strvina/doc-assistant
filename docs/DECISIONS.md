@@ -86,3 +86,19 @@ isti sadržaj se ne embeduje ponovo (ušteda na API pozivima).
 **Zašto:** vektori različitih modela nisu uporedivi — mešanje bi tiho vraćalo besmislene rezultate.
 Fake režim omogućava da se ceo tok (index → search) proba bez API ključa.
 **Ograničenje:** fake embeddings ne razumeju značenje ni prevod (SR pitanje neće naći DE odgovor).
+
+### ADR-014 · LLM sloj: kontekst u user poruci, citati se proveravaju, refusal fallback
+**Odluka:**
+- Sistemski prompt je fiksan (može da se kešira); dokumenti idu u user poruku kao
+  `<documents><document source=".." page="..">`, uz pravilo da su dokumenti podaci, ne instrukcije.
+- Citati `[fajl, str. N]` se parsiraju iz odgovora i proveravaju protiv pronađenih chunk-ova;
+  citat na stranu koja nije bila u kontekstu ide u `invalid_citations` (izmišljen izvor).
+  `Answer.found` = postoji bar jedan validan citat.
+- Prazan indeks / nema rezultata → odgovor "Nema toga..." bez poziva LLM-a (nema troška).
+- Claude: zvanični `anthropic` SDK, `max_tokens=16000`, adaptivno razmišljanje (podrazumevano
+  za model), `ANTHROPIC_EFFORT` opciono; server-side refusal fallback (`fallbacks="default"`,
+  beta `server-side-fallback-2026-07-01`) za sve osim Haiku modela.
+- OpenAI: Responses API, `store=False`; `OPENAI_MODEL` mora biti postavljen (bez pogađanja imena modela).
+- `LLM_PROVIDER=fake` — offline odgovor (prva rečenica najboljeg chunk-a + citat) za probu UI-ja bez ključa.
+**Zašto:** proverljivi citati su suština projekta; fiksni sistemski prompt smanjuje cenu;
+fake provajder omogućava razvoj i demo toka bez API kredita.

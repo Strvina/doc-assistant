@@ -8,7 +8,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-VALID_PROVIDERS = ("claude", "openai")
+VALID_PROVIDERS = ("claude", "openai", "fake")  # fake = offline canned answers
+VALID_EFFORTS = ("", "low", "medium", "high", "xhigh", "max")
 # "fake" = offline hashing embedder: no API key, keyword-like matching (dev/tests only)
 VALID_EMBEDDING_PROVIDERS = ("openai", "fake")
 
@@ -18,6 +19,7 @@ class Settings:
     llm_provider: str
     anthropic_api_key: str | None
     anthropic_model: str
+    anthropic_effort: str | None
     openai_api_key: str | None
     openai_model: str
     embedding_provider: str
@@ -34,6 +36,10 @@ class Settings:
         if provider not in VALID_PROVIDERS:
             raise ValueError(f"LLM_PROVIDER must be one of {VALID_PROVIDERS}, got {provider!r}")
 
+        effort = os.getenv("ANTHROPIC_EFFORT", "").lower()
+        if effort not in VALID_EFFORTS:
+            raise ValueError(f"ANTHROPIC_EFFORT must be one of {VALID_EFFORTS[1:]}, got {effort!r}")
+
         embedding_provider = os.getenv("EMBEDDING_PROVIDER", "openai").lower()
         if embedding_provider not in VALID_EMBEDDING_PROVIDERS:
             raise ValueError(
@@ -45,6 +51,7 @@ class Settings:
             llm_provider=provider,
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY") or None,
             anthropic_model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5"),
+            anthropic_effort=effort or None,
             openai_api_key=os.getenv("OPENAI_API_KEY") or None,
             openai_model=os.getenv("OPENAI_MODEL", ""),
             embedding_provider=embedding_provider,

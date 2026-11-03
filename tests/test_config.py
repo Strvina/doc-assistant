@@ -12,6 +12,7 @@ def clean_env(monkeypatch):
         "LLM_PROVIDER",
         "ANTHROPIC_API_KEY",
         "ANTHROPIC_MODEL",
+        "ANTHROPIC_EFFORT",
         "OPENAI_API_KEY",
         "OPENAI_MODEL",
         "EMBEDDING_PROVIDER",
@@ -53,4 +54,13 @@ def test_invalid_provider(clean_env):
 def test_invalid_embedding_provider(clean_env):
     clean_env.setenv("EMBEDDING_PROVIDER", "word2vec")
     with pytest.raises(ValueError, match="EMBEDDING_PROVIDER"):
+        Settings.from_env(load_dotenv_file=False)
+
+
+def test_effort(clean_env):
+    assert Settings.from_env(load_dotenv_file=False).anthropic_effort is None
+    clean_env.setenv("ANTHROPIC_EFFORT", "Low")
+    assert Settings.from_env(load_dotenv_file=False).anthropic_effort == "low"
+    clean_env.setenv("ANTHROPIC_EFFORT", "extreme")
+    with pytest.raises(ValueError, match="ANTHROPIC_EFFORT"):
         Settings.from_env(load_dotenv_file=False)
