@@ -75,10 +75,10 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 
 ## Faza 7 — Završna obrada (26–30. 11.)  · grana: `chore/polish`
 
-- [ ] 7.1 Dockerfile + `docker compose up` pokreće sve
-- [ ] 7.2 README na engleskom: arhitektura (dijagram), odluke, rezultati evaluacije
+- [x] 7.1 Dockerfile + `docker compose up` pokreće sve — `compose config` proveren, build nije pokrenut (Docker Desktop nije radio)
+- [ ] 7.2 README na engleskom: arhitektura (dijagram), odluke, rezultati evaluacije — dijagram i odluke urađeni; fale rezultati evaluacije (6.3)
 - [ ] 7.3 Demo video 2–3 min
-- [ ] 7.4 Sekcija "Data protection": gde su podaci, brisanje, bez treniranja na podacima
+- [x] 7.4 Sekcija "Data protection": gde su podaci, brisanje, bez treniranja na podacima
 
 ---
 

@@ -26,7 +26,7 @@ Python 3.12 · uv · Claude API (OpenAI opciono, ADR-018) · lokalni višejezič
 
 ## Trenutno stanje
 
-- **Faza:** 6 — Evaluacija i monitoring — **gotova osim 6.3** (grana `feat/eval`, PR #6, nadovezan na PR #5); faza 4 čeka deploy
+- **Faza:** sve faze urađene do nivoa koji ne traži API ključ (PR #1–#8, nadovezani). Čeka: ključ → provera sa Claude-om, 6.3 eval, deploy (4.4), screenshot (4.5), video (7.3), **prijava (4.6)**
 - **Urađeno:**
   - Faza 0: skelet, planski fajlovi, CI, GitHub repo `Strvina/doc-assistant`, `main` push-ovan.
   - Faza 1 (PR #1): demo dokumenti, loader-i PDF/DOCX/TXT, chunking, `ingest(path)`.
@@ -42,6 +42,7 @@ Python 3.12 · uv · Claude API (OpenAI opciono, ADR-018) · lokalni višejezič
 - **Odluka 2026-11-04:** koristimo **samo Claude** (ADR-018). OpenAI ostaje opciono u kodu.
   - PR #7: pretraga na lokalnom višejezičnom modelu (ADR-019) — jedini potreban ključ je `ANTHROPIC_API_KEY`.
     Eval pretrage: tačna strana među top-5 u 100 % pitanja (fake: 56 %).
+- Faza 7 (PR #8): Dockerfile + `compose.yaml` (ui, api, opciono n8n), README: dijagram, Docker, Data protection.
 - **U toku:** —
 - **Blokirano / ostalo iz faze 0:**
   - 0.5 zaštita grane `main` nije uključena (sekcija uklonjena iz `WORKFLOW.md` — odlučiti da li ostaje u planu).
@@ -49,7 +50,7 @@ Python 3.12 · uv · Claude API (OpenAI opciono, ADR-018) · lokalni višejezič
 
 ## Sledeći korak
 
-1. Pregledati i spojiti PR-ove redom: #1 → #2 → #3 → #4 → #5 → #6 → #7 (svaki je napravljen na grani prethodnog).
+1. Pregledati i spojiti PR-ove redom: #1 → #2 → … → #8 (svaki je napravljen na grani prethodnog).
 2. Upisati `ANTHROPIC_API_KEY` u `.env` (kopija `.env.example`): `uv run python -m docassist.cli index data/sample_docs --rebuild`,
    pa `ask "Koliki je moment pritezanja za M8?"` → očekivano 20 Nm, `montageanleitung_pv400.pdf`, str. 2;
    zatim `ask ... --agent` i `python -m docassist.eval` (6.3, rezultate u `docs/EVAL_RESULTS.md`).
@@ -68,6 +69,7 @@ Python 3.12 · uv · Claude API (OpenAI opciono, ADR-018) · lokalni višejezič
 - Agent petlje (Claude/OpenAI) su testirane samo sa lažnim klijentima — prvo pravo pokretanje
   `ask --agent` sa ključem je važna provera (posebno OpenAI `include=reasoning.encrypted_content`).
 - n8n workflow nije importovan u živi n8n — proveriti po `automations/README.md`.
+- Docker image nije build-ovan (Docker Desktop nije radio) — pokrenuti `docker compose up --build`.
 - Claude ide preko zvaničnog SDK-a sa refusal fallback-om; `ANTHROPIC_EFFORT` (npr. `low`) je poluga za cenu/brzinu (ADR-014).
 - `pymupdf` je namerno na 1.x (ADR-009). Lokalni venv je trenutno na Python 3.14, CI na 3.12.
 
@@ -88,3 +90,4 @@ Python 3.12 · uv · Claude API (OpenAI opciono, ADR-018) · lokalni višejezič
 | 2026-11-04 | Faza 5: agent sa alatima, FastAPI, n8n eskalacija; ADR-016 | #5 |
 | 2026-11-04 | Faza 6: eval skup + alat, SQLite log, 👍/👎; odluka samo Claude; ADR-017, ADR-018 | #6 |
 | 2026-11-04 | Lokalni višejezični embeddings (izmereno: 100 % top-5), chunk 500/100; ADR-019 | #7 |
+| 2026-11-04 | Faza 7 (delimično): Docker, README dijagram + Data protection | #8 |
