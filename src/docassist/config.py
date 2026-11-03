@@ -1,0 +1,43 @@
+"""Application settings loaded from environment variables (and a local .env file)."""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+VALID_PROVIDERS = ("claude", "openai")
+
+
+@dataclass(frozen=True)
+class Settings:
+    llm_provider: str
+    anthropic_api_key: str | None
+    anthropic_model: str
+    openai_api_key: str | None
+    openai_model: str
+    embedding_model: str
+    index_dir: Path
+    top_k: int
+
+    @classmethod
+    def from_env(cls, load_dotenv_file: bool = True) -> Settings:
+        if load_dotenv_file:
+            load_dotenv()
+
+        provider = os.getenv("LLM_PROVIDER", "claude").lower()
+        if provider not in VALID_PROVIDERS:
+            raise ValueError(f"LLM_PROVIDER must be one of {VALID_PROVIDERS}, got {provider!r}")
+
+        return cls(
+            llm_provider=provider,
+            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY") or None,
+            anthropic_model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5"),
+            openai_api_key=os.getenv("OPENAI_API_KEY") or None,
+            openai_model=os.getenv("OPENAI_MODEL", ""),
+            embedding_model=os.getenv("EMBEDDING_MODEL", "text-embedding-3-small"),
+            index_dir=Path(os.getenv("INDEX_DIR", "data/index")),
+            top_k=int(os.getenv("TOP_K", "5")),
+        )
