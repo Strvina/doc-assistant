@@ -30,6 +30,7 @@ class Settings:
     escalation_webhook_url: str | None = None
     outbox_dir: Path = Path("data/outbox")
     api_token: str | None = None
+    log_db: Path = Path("data/logs.sqlite")
     max_questions_per_session: int = 30
 
     @classmethod
@@ -66,6 +67,7 @@ class Settings:
             escalation_webhook_url=_env("ESCALATION_WEBHOOK_URL") or None,
             outbox_dir=Path(_env("OUTBOX_DIR", "data/outbox")),
             api_token=_env("API_TOKEN") or None,
+            log_db=Path(_env("LOG_DB", "data/logs.sqlite")),
             allow_uploads=_env("ALLOW_UPLOADS", "true").lower() in ("1", "true", "yes"),
             max_questions_per_session=int(_env("MAX_QUESTIONS_PER_SESSION", "30")),
         )

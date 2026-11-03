@@ -24,6 +24,7 @@ def clean_env(monkeypatch):
         "ESCALATION_WEBHOOK_URL",
         "OUTBOX_DIR",
         "API_TOKEN",
+        "LOG_DB",
     ):
         monkeypatch.delenv(var, raising=False)
     return monkeypatch

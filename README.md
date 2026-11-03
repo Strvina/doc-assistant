@@ -74,6 +74,18 @@ curl -X POST localhost:8000/ask -H "Content-Type: application/json"      -d '{"q
 `GET /health`, `GET|POST /documents`, `DELETE /documents/{doc_id}`, `POST /ask`.
 Set `API_TOKEN` to require an `X-API-Key` header.
 
+## Evaluation & monitoring
+
+```bash
+uv run python -m docassist.eval --retrieval-only     # is the right page found? (no LLM cost)
+uv run python -m docassist.eval                      # full answers, Markdown summary
+uv run python -m docassist.eval --agent              # same questions through the agent
+```
+
+30 questions in [`eval/questions.yaml`](eval/questions.yaml) (Serbian, German, English, including
+cross-language questions and questions the documents cannot answer). Every UI/API answer is logged
+to SQLite with latency, tokens and 👍/👎 feedback; see *Usage statistics* in the sidebar or `GET /stats`.
+
 ## Demo documents
 
 [`data/sample_docs/`](data/sample_docs/) contains documents of a **fictional** switchgear

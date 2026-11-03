@@ -67,11 +67,11 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 
 ## Faza 6 — Evaluacija i monitoring (21–25. 11.)  · grana: `feat/eval`
 
-- [ ] 6.1 `eval/questions.yaml`: 25–30 pitanja + očekivani izvor + ključne činjenice
-- [ ] 6.2 `uv run python -m docassist.eval` → tačnost izvora, "ne znam" tačnost, latencija, trošak
-- [ ] 6.3 Uporedni izveštaj Claude vs OpenAI (tabela u `docs/EVAL_RESULTS.md`)
-- [ ] 6.4 Logovanje upita u SQLite (pitanje, odgovor, izvori, latencija, tokeni, ocena)
-- [ ] 6.5 👍/👎 u UI + jednostavna statistika
+- [x] 6.1 `eval/questions.yaml`: 25–30 pitanja + očekivani izvor + ključne činjenice
+- [x] 6.2 `uv run python -m docassist.eval` → tačnost izvora, "ne znam" tačnost, latencija, trošak
+- [ ] 6.3 Uporedni izveštaj Claude modela (Sonnet vs Haiku, RAG vs agent) u `docs/EVAL_RESULTS.md` — čeka API ključ (ADR-018)
+- [x] 6.4 Logovanje upita u SQLite (pitanje, odgovor, izvori, latencija, tokeni, ocena)
+- [x] 6.5 👍/👎 u UI + jednostavna statistika (+ `POST /feedback`, `GET /stats` u API-ju)
 
 ## Faza 7 — Završna obrada (26–30. 11.)  · grana: `chore/polish`
 

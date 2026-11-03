@@ -20,13 +20,13 @@ Ako se odluka promeni, ne briši staru: označi je kao *Zamenjena sa ADR-XXX*.
 **Zašto:** bez servera i Docker-a za start, dovoljno za demo.
 **Alternativa:** Postgres + pgvector (produkcijski izbor; moguća migracija kasnije).
 
-### ADR-004 · OpenAI embeddings (iza interfejsa)
+### ADR-004 · OpenAI embeddings (iza interfejsa) — *zamenjena sa ADR-018*
 **Odluka:** embeddings preko OpenAI API-ja; model se podešava u `.env`.
 **Zašto:** dobar kvalitet za više jezika (SR/DE/EN), jeftino, bez teških lokalnih zavisnosti (torch).
 **Alternativa:** lokalni višejezični model (npr. multilingual-e5) — razmotriti posle evaluacije.
 **Napomena:** Anthropic nema embedding API, pa je OpenAI ključ potreban i kad je LLM Claude.
 
-### ADR-005 · Claude i OpenAI iza zajedničkog `LLMProvider` interfejsa
+### ADR-005 · Claude i OpenAI iza zajedničkog `LLMProvider` interfejsa — *dopunjena sa ADR-018*
 **Odluka:** jedan interfejs, provajder se bira preko `LLM_PROVIDER`.
 **Zašto:** oglas izričito traži oba; omogućava uporednu evaluaciju (faza 6).
 
@@ -128,3 +128,18 @@ Citati agenta se proveravaju protiv svih pasusa koje su alati vratili.
 REST API (FastAPI) sa opcionim `X-API-Key` (`API_TOKEN`); `/health` je uvek otvoren.
 **Zašto:** pokazuje razumevanje oba API-ja (ADR-008); zajednički alati = isto ponašanje za oba
 modela i fer poređenje u fazi 6.
+
+### ADR-017 · Evaluacija i logovanje
+**Odluka:** `eval/questions.yaml` (30 pitanja: SR/DE/EN, pitanja preko jezika, 3 bez odgovora);
+metrike: pogodak strane u pretrazi, citirana tačna strana/dokument, pokrivenost ključnih činjenica,
+"nema toga" na pitanjima bez odgovora, pogrešno "nema toga", izmišljeni citati, latencija, tokeni, trošak.
+`--retrieval-only` meri samo pretragu (bez LLM troška). Svaki upit iz UI-ja i API-ja se loguje u
+SQLite (`LOG_DB`) sa ocenom 👍/👎; statistika u UI sidebar-u i na `GET /stats`.
+**Zašto:** brojke umesto utiska — za izbor modela/podešavanja i za razgovor za posao.
+Test proverava da je svaka očekivana činjenica stvarno na navedenoj strani (nema grešaka u skupu).
+
+### ADR-018 · Samo Claude za odgovore; OpenAI ostaje opciono
+**Odluka (2026-11-04):** projekat koristi isključivo Claude za odgovore i agenta. `OpenAIProvider`
+ostaje u kodu kao neobavezna opcija (vidljiv samo uz `OPENAI_API_KEY` + `OPENAI_MODEL`).
+Embeddings prelaze sa OpenAI na lokalni višejezični model (zaseban PR) — *menja ADR-004*.
+**Zašto:** jedan provajder = jedan račun i manji trošak; arhitektura i dalje pokazuje da podržava oba.

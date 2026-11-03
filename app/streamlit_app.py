@@ -14,6 +14,7 @@ from docassist.config import Settings
 from docassist.factory import MissingAPIKeyError, build_llm, build_store, build_tool_context
 from docassist.ingest import SUPPORTED_EXTENSIONS, DocumentLoadError, ingest
 from docassist.llm import LLMError
+from docassist.logs import QueryLog
 from docassist.rag import Answer, answer
 from docassist.retrieval import EmbedderMismatchError, VectorStore
 
@@ -35,6 +36,16 @@ st.set_page_config(page_title="Doc Assistant", page_icon="📄", layout="wide")
 @st.cache_resource
 def get_settings() -> Settings:
     return Settings.from_env()
+
+
+@st.cache_resource
+def get_log(_settings: Settings) -> QueryLog:
+    return QueryLog(_settings.log_db)
+
+
+def save_feedback(log: QueryLog, log_id: int) -> None:
+    value = st.session_state.get(f"feedback_{log_id}")  # 1 = 👍, 0 = 👎, None = cleared
+    log.set_feedback(log_id, None if value is None else (1 if value == 1 else -1))
 
 
 @st.cache_resource
@@ -130,7 +141,7 @@ def sidebar(settings: Settings, store: VectorStore) -> tuple[str, int, bool]:
     return provider, top_k, agent_mode
 
 
-def render_answer(result: Answer) -> None:
+def render_answer(result: Answer, log: QueryLog | None = None, log_id: int | None = None) -> None:
     if result.tool_calls:
         with st.expander(f"🛠 {len(result.tool_calls)} tool call(s)"):
             for call in result.tool_calls:
@@ -154,6 +165,8 @@ def render_answer(result: Answer) -> None:
     if result.input_tokens or result.output_tokens:
         meta += f" · {result.input_tokens} in / {result.output_tokens} out tokens"
     st.caption(meta)
+    if log is not None and log_id is not None:
+        st.feedback("thumbs", key=f"feedback_{log_id}", on_change=save_feedback, args=(log, log_id))
 
 
 def main() -> None:
@@ -172,15 +185,28 @@ def main() -> None:
         "Ask in Serbian, German or English."
     )
 
+    log = get_log(settings)
+    with st.sidebar.expander("Usage statistics"):
+        stats = log.stats()
+        lines = [
+            f"Questions: **{stats.queries}**",
+            f"Answered from documents: **{_pct(stats.found_rate)}**",
+            f"Average latency: **{stats.avg_latency_s or 0} s**",
+            f"Tokens in / out: **{stats.input_tokens} / {stats.output_tokens}**",
+            f"Feedback: 👍 {stats.thumbs_up} · 👎 {stats.thumbs_down}",
+        ]
+        st.markdown("  \n".join(lines))
+
     history: list[Answer] = st.session_state.setdefault("history", [])
+    log_ids: list[int] = st.session_state.setdefault("log_ids", [])
     if not history:
         st.markdown("**Try:** " + " · ".join(f"_{q}_" for q in EXAMPLE_QUESTIONS))
 
-    for past in history:
+    for past, past_id in zip(history, log_ids, strict=False):
         with st.chat_message("user"):
             st.markdown(past.question)
         with st.chat_message("assistant"):
-            render_answer(past)
+            render_answer(past, log, past_id)
 
     limit_reached = len(history) >= settings.max_questions_per_session
     if limit_reached:
@@ -209,8 +235,14 @@ def main() -> None:
         except (MissingAPIKeyError, LLMError) as exc:
             st.error(str(exc))
             return
-        render_answer(result)
+        log_id = log.log(result, channel="ui", mode="agent" if agent_mode else "rag")
+        render_answer(result, log, log_id)
     history.append(result)
+    log_ids.append(log_id)
+
+
+def _pct(value: float | None) -> str:
+    return "—" if value is None else f"{value * 100:.0f} %"
 
 
 main()
