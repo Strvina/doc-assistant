@@ -17,6 +17,7 @@ def clean_env(monkeypatch):
         "OPENAI_MODEL",
         "EMBEDDING_PROVIDER",
         "EMBEDDING_MODEL",
+        "EMBEDDING_CACHE_DIR",
         "INDEX_DIR",
         "TOP_K",
         "ALLOW_UPLOADS",
@@ -40,7 +41,8 @@ def test_defaults(clean_env):
     assert settings.anthropic_api_key is None
     assert settings.index_dir == Path("data/index")
     assert settings.top_k == 5
-    assert settings.embedding_provider == "openai"
+    assert settings.embedding_provider == "local"
+    assert "multilingual" in settings.embedding_model
 
 
 def test_env_overrides(clean_env):
@@ -92,3 +94,10 @@ def test_ui_settings(clean_env):
     settings = Settings.from_env(load_dotenv_file=False)
     assert settings.allow_uploads is False
     assert settings.max_questions_per_session == 3
+
+
+def test_embedding_model_default_follows_provider(clean_env):
+    clean_env.setenv("EMBEDDING_PROVIDER", "openai")
+    assert Settings.from_env(load_dotenv_file=False).embedding_model == "text-embedding-3-small"
+    clean_env.setenv("EMBEDDING_MODEL", "custom-model")
+    assert Settings.from_env(load_dotenv_file=False).embedding_model == "custom-model"

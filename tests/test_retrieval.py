@@ -9,6 +9,7 @@ from docassist.models import Chunk
 from docassist.retrieval import (
     EmbedderMismatchError,
     FakeEmbedder,
+    LocalEmbedder,
     OpenAIEmbedder,
     VectorStore,
     retrieve,
@@ -84,6 +85,32 @@ def test_openai_embedder_batches_and_keeps_order():
     assert [len(batch) for _, batch in client.calls] == [2, 2, 1]
     assert {model for model, _ in client.calls} == {"text-embedding-3-small"}
     assert embedder.name == "openai:text-embedding-3-small"
+
+
+# --- LocalEmbedder (fake backend, no model download) -------------------------------------
+
+
+class FakeFastembed:
+    def __init__(self):
+        self.calls = []
+
+    def passage_embed(self, texts, batch_size):
+        self.calls.append(("passage", list(texts), batch_size))
+        return iter([[float(len(t)), 1.0] for t in texts])  # fastembed yields numpy arrays
+
+    def query_embed(self, texts):
+        self.calls.append(("query", list(texts)))
+        return iter([[0.5, 0.5] for _ in texts])
+
+
+def test_local_embedder_uses_passage_and_query_encoding():
+    backend = FakeFastembed()
+    embedder = LocalEmbedder("some/multilingual-model", backend=backend, batch_size=8)
+
+    assert embedder.embed(["ab", "abc"]) == [[2.0, 1.0], [3.0, 1.0]]
+    assert embedder.embed_query("pitanje") == [0.5, 0.5]
+    assert backend.calls == [("passage", ["ab", "abc"], 8), ("query", ["pitanje"])]
+    assert embedder.name == "local:some/multilingual-model"
 
 
 # --- VectorStore -------------------------------------------------------------------------

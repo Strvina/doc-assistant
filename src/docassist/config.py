@@ -10,8 +10,14 @@ from dotenv import load_dotenv
 
 VALID_PROVIDERS = ("claude", "openai", "fake")  # fake = offline canned answers
 VALID_EFFORTS = ("", "low", "medium", "high", "xhigh", "max")
-# "fake" = offline hashing embedder: no API key, keyword-like matching (dev/tests only)
-VALID_EMBEDDING_PROVIDERS = ("openai", "fake")
+# local = multilingual model on this machine (default, ADR-019); openai = optional API;
+# fake = hashing embedder for tests (keyword-like matching only)
+VALID_EMBEDDING_PROVIDERS = ("local", "openai", "fake")
+DEFAULT_EMBEDDING_MODELS = {
+    "local": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    "openai": "text-embedding-3-small",
+    "fake": "hashing",
+}
 
 
 @dataclass(frozen=True)
@@ -24,6 +30,7 @@ class Settings:
     openai_model: str
     embedding_provider: str
     embedding_model: str
+    embedding_cache_dir: Path
     index_dir: Path
     top_k: int
     allow_uploads: bool = True
@@ -46,7 +53,7 @@ class Settings:
         if effort not in VALID_EFFORTS:
             raise ValueError(f"ANTHROPIC_EFFORT must be one of {VALID_EFFORTS[1:]}, got {effort!r}")
 
-        embedding_provider = _env("EMBEDDING_PROVIDER", "openai").lower()
+        embedding_provider = _env("EMBEDDING_PROVIDER", "local").lower()
         if embedding_provider not in VALID_EMBEDDING_PROVIDERS:
             raise ValueError(
                 f"EMBEDDING_PROVIDER must be one of {VALID_EMBEDDING_PROVIDERS}, "
@@ -61,7 +68,8 @@ class Settings:
             openai_api_key=_env("OPENAI_API_KEY") or None,
             openai_model=_env("OPENAI_MODEL", ""),
             embedding_provider=embedding_provider,
-            embedding_model=_env("EMBEDDING_MODEL", "text-embedding-3-small"),
+            embedding_model=_env("EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODELS[embedding_provider]),
+            embedding_cache_dir=Path(_env("EMBEDDING_CACHE_DIR", "data/models")),
             index_dir=Path(_env("INDEX_DIR", "data/index")),
             top_k=int(_env("TOP_K", "5")),
             escalation_webhook_url=_env("ESCALATION_WEBHOOK_URL") or None,

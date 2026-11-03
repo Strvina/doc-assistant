@@ -111,7 +111,7 @@ class VectorStore:
     def search(self, query: str, k: int = 5) -> list[SearchResult]:
         if k <= 0 or self.count() == 0:
             return []
-        [query_embedding] = self._embedder.embed([query])
+        query_embedding = self._embedder.embed_query(query)
         result = self._collection.query(
             query_embeddings=[query_embedding],
             n_results=min(k, self.count()),

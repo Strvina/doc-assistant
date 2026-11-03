@@ -1,6 +1,6 @@
 """Embeddings, vector store and retrieval."""
 
-from docassist.retrieval.embedder import Embedder, FakeEmbedder, OpenAIEmbedder
+from docassist.retrieval.embedder import Embedder, FakeEmbedder, LocalEmbedder, OpenAIEmbedder
 from docassist.retrieval.store import (
     DocumentInfo,
     EmbedderMismatchError,
@@ -21,6 +21,7 @@ __all__ = [
     "Embedder",
     "EmbedderMismatchError",
     "FakeEmbedder",
+    "LocalEmbedder",
     "OpenAIEmbedder",
     "SearchResult",
     "VectorStore",

@@ -21,8 +21,8 @@ Ako odgovor nije u dokumentima, bot to kaže umesto da izmišlja.
 
 ## Stack (detalji u `docs/DECISIONS.md`)
 
-Python 3.12 · uv · Claude API + OpenAI API (iza zajedničkog interfejsa) · OpenAI embeddings ·
-ChromaDB · Streamlit (UI) · FastAPI (API, faza 5) · n8n (automatizacije) · ruff + pytest · GitHub Actions
+Python 3.12 · uv · Claude API (OpenAI opciono, ADR-018) · lokalni višejezični embeddings
+(fastembed, ADR-019) · ChromaDB · Streamlit (UI) · FastAPI · n8n · ruff + pytest · GitHub Actions
 
 ## Trenutno stanje
 
@@ -39,8 +39,9 @@ ChromaDB · Streamlit (UI) · FastAPI (API, faza 5) · n8n (automatizacije) · r
   - Faza 5 (PR #5): agent sa 5 alata (nativne petlje za Claude i OpenAI), FastAPI (`docassist.api`),
     n8n workflow za eskalaciju (`automations/`), agent režim u CLI (`--agent`) i UI.
   - Faza 6 (PR #6): `eval/questions.yaml` (30 pitanja), `python -m docassist.eval`, SQLite log + 👍/👎 + statistika.
-- **Odluka 2026-11-04:** koristimo **samo Claude** (ADR-018). OpenAI ostaje opciono u kodu; embeddings
-  prelaze na lokalni višejezični model (sledeći PR).
+- **Odluka 2026-11-04:** koristimo **samo Claude** (ADR-018). OpenAI ostaje opciono u kodu.
+  - PR #7: pretraga na lokalnom višejezičnom modelu (ADR-019) — jedini potreban ključ je `ANTHROPIC_API_KEY`.
+    Eval pretrage: tačna strana među top-5 u 100 % pitanja (fake: 56 %).
 - **U toku:** —
 - **Blokirano / ostalo iz faze 0:**
   - 0.5 zaštita grane `main` nije uključena (sekcija uklonjena iz `WORKFLOW.md` — odlučiti da li ostaje u planu).
@@ -48,10 +49,10 @@ ChromaDB · Streamlit (UI) · FastAPI (API, faza 5) · n8n (automatizacije) · r
 
 ## Sledeći korak
 
-1. Pregledati i spojiti PR-ove redom: #1 → #2 → #3 → #4 → #5 → #6 (svaki je napravljen na grani prethodnog).
-2. Kad ključevi budu u `.env` (+ `OPENAI_MODEL`): `uv run python -m docassist.cli index data/sample_docs --rebuild`,
+1. Pregledati i spojiti PR-ove redom: #1 → #2 → #3 → #4 → #5 → #6 → #7 (svaki je napravljen na grani prethodnog).
+2. Upisati `ANTHROPIC_API_KEY` u `.env` (kopija `.env.example`): `uv run python -m docassist.cli index data/sample_docs --rebuild`,
    pa `ask "Koliki je moment pritezanja za M8?"` → očekivano 20 Nm, `montageanleitung_pv400.pdf`, str. 2;
-   isto sa `--provider openai`.
+   zatim `ask ... --agent` i `python -m docassist.eval` (6.3, rezultate u `docs/EVAL_RESULTS.md`).
 3. `uv run streamlit run app/streamlit_app.py` → proba u browseru; zatim deploy po `docs/DEPLOY.md` (4.4),
    screenshot u README (4.5) i **prijava na oglas (4.6)**.
 
@@ -62,7 +63,8 @@ ChromaDB · Streamlit (UI) · FastAPI (API, faza 5) · n8n (automatizacije) · r
 - PDF se čita po blokovima: jedan pasus / stavka liste / red tabele = jedan red (ADR-012).
 - Chunk-ovi ne prelaze granicu strane; `chunk_id` = `izvor::pN::i`, `doc_id` = hash sadržaja fajla.
 - Indeks pamti embedder; promena embedder-a traži `index --rebuild` (ADR-013).
-- `EMBEDDING_PROVIDER=fake` + `LLM_PROVIDER=fake` = ceo tok bez ključa (poklapanje reči, "odgovor" = citat prve rečenice).
+- Bez ključa: `LLM_PROVIDER=fake` ("odgovor" = citat prve rečenice); pretraga je i tada prava (lokalni model).
+- Lokalni model se kešira u `data/models/` (nije u gitu); promena modela traži `index --rebuild`.
 - Agent petlje (Claude/OpenAI) su testirane samo sa lažnim klijentima — prvo pravo pokretanje
   `ask --agent` sa ključem je važna provera (posebno OpenAI `include=reasoning.encrypted_content`).
 - n8n workflow nije importovan u živi n8n — proveriti po `automations/README.md`.
@@ -85,3 +87,4 @@ ChromaDB · Streamlit (UI) · FastAPI (API, faza 5) · n8n (automatizacije) · r
 | 2026-11-03 | Faza 4: Streamlit UI, zaštite za javni demo, DEPLOY.md; ADR-015 | #4 |
 | 2026-11-04 | Faza 5: agent sa alatima, FastAPI, n8n eskalacija; ADR-016 | #5 |
 | 2026-11-04 | Faza 6: eval skup + alat, SQLite log, 👍/👎; odluka samo Claude; ADR-017, ADR-018 | #6 |
+| 2026-11-04 | Lokalni višejezični embeddings (izmereno: 100 % top-5), chunk 500/100; ADR-019 | #7 |

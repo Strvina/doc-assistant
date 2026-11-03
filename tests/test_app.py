@@ -30,6 +30,7 @@ def test_starts_empty(app):
     assert any("No documents yet" in c.value for c in app.sidebar.caption)
     labels = app.sidebar.radio(key="provider").options
     assert labels[0].endswith("— no key")  # Claude without a key
+    assert not any("ChatGPT" in label for label in labels)  # optional, hidden without a key
     assert app.sidebar.radio(key="provider").value == "fake"
 
 
