@@ -10,17 +10,18 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 - [x] 0.1 Skelet repozitorijuma (`src/`, `tests/`, `pyproject.toml`, uv)
 - [x] 0.2 Planski fajlovi (CONTEXT, PLAN, ARCHITECTURE, DECISIONS, WORKFLOW)
 - [x] 0.3 CI: ruff lint + format check + pytest na svaki PR
-- [ ] 0.4 GitHub repo kreiran, `main` push-ovan
+- [x] 0.4 GitHub repo kreiran, `main` push-ovan
 - [ ] 0.5 Zaštita grane `main` (PR obavezan, CI mora da prođe)
 - [ ] 0.6 `.env` lokalno sa API ključevima (Anthropic, OpenAI)
 
 ## Faza 1 — Učitavanje dokumenata (5–6. 11.)  · grana: `feat/ingest`
 
-- [ ] 1.1 Demo dokumenti u `data/sample_docs/` (izmišljena firma; SR pravilnik o radu,
+- [x] 1.1 Demo dokumenti u `data/sample_docs/` (izmišljena firma; SR pravilnik o radu,
       DE uputstvo za montažu, EN procedura kontrole kvaliteta, SR bezbednost na radu, FAQ)
-- [ ] 1.2 Loader-i: PDF (`pymupdf`), DOCX (`python-docx`), TXT/MD → lista `Page(text, page_no)`
-- [ ] 1.3 Chunking: ~800 karaktera, preklapanje ~150, čuva `source`, `page`, `chunk_id`
-- [ ] 1.4 Testovi za loader-e i chunking (mali fixture fajlovi u `tests/fixtures/`)
+- [x] 1.2 Loader-i: PDF (`pymupdf`), DOCX (`python-docx`), TXT/MD → lista `Page(source, page_no, text)`
+- [x] 1.3 Chunking: ~800 karaktera, preklapanje ~150, čuva `source`, `page`, `chunk_id`
+- [x] 1.4 Testovi za loader-e i chunking (`tests/test_loaders.py`, `tests/test_chunker.py`;
+      fixture fajlovi se prave u `tmp_path`, bez binarnih fajlova u `tests/fixtures/`)
 
 **Gotovo kad:** `ingest("fajl.pdf")` vraća chunk-ove sa ispravnim metapodacima, testovi prolaze.
 

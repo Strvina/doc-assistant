@@ -27,6 +27,25 @@ cp .env.example .env    # add your API keys
 uv run pytest
 ```
 
+## Demo documents
+
+[`data/sample_docs/`](data/sample_docs/) contains documents of a **fictional** switchgear
+manufacturer, Panelvolt d.o.o. (all people, phone numbers and `*.example` addresses are made up):
+
+| File | Language | Content |
+|---|---|---|
+| `pravilnik_o_radu.pdf` | Serbian | Employee handbook: working hours, leave, sick leave, remote work |
+| `montageanleitung_pv400.pdf` | German | Installation manual for the PV-400 cabinet system |
+| `quality_control_procedure.docx` | English | Quality control procedure and routine tests |
+| `bezbednost_na_radu.docx` | Serbian | Occupational health and safety rules |
+| `faq.txt` | Serbian | Employee FAQ |
+
+They are generated from the text sources in `scripts/sample_docs_src/`:
+
+```bash
+uv run python scripts/build_sample_docs.py
+```
+
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
