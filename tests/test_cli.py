@@ -60,3 +60,16 @@ def test_missing_openai_key_is_a_clear_error(offline_env, monkeypatch, capsys):
 
     assert cli.main(["docs"]) == 2
     assert "OPENAI_API_KEY" in capsys.readouterr().err
+
+
+def test_ask_agent_offline(offline_env, monkeypatch, capsys):
+    monkeypatch.setenv("LLM_PROVIDER", "fake")
+    monkeypatch.setenv("OUTBOX_DIR", str(offline_env / "outbox"))
+    cli.main(["index", str(SAMPLE_DOCS)])
+    capsys.readouterr()
+
+    assert cli.main(["ask", "Kada radi kantina?", "--agent"]) == 0
+
+    out = capsys.readouterr().out
+    assert "→ search_documents(" in out
+    assert "Sources:" in out

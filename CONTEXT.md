@@ -26,7 +26,7 @@ ChromaDB · Streamlit (UI) · FastAPI (API, faza 5) · n8n (automatizacije) · r
 
 ## Trenutno stanje
 
-- **Faza:** 4 — Streamlit UI — **gotova osim deploy-a** (grana `feat/ui`, PR #4, nadovezan na PR #3)
+- **Faza:** 5 — Agent i automatizacija — **gotova** (grana `feat/agent`, PR #5, nadovezan na PR #4); faza 4 čeka deploy
 - **Urađeno:**
   - Faza 0: skelet, planski fajlovi, CI, GitHub repo `Strvina/doc-assistant`, `main` push-ovan.
   - Faza 1 (PR #1): demo dokumenti, loader-i PDF/DOCX/TXT, chunking, `ingest(path)`.
@@ -36,6 +36,8 @@ ChromaDB · Streamlit (UI) · FastAPI (API, faza 5) · n8n (automatizacije) · r
     sistemski prompt, `rag.answer()` sa proverom citata, CLI `ask`.
   - Faza 4 (PR #4): `app/streamlit_app.py` — upload/lista/brisanje dokumenata, chat sa istorijom,
     citati u expander-ima, izbor modela, zaštite za javni demo; `docs/DEPLOY.md`.
+  - Faza 5 (PR #5): agent sa 5 alata (nativne petlje za Claude i OpenAI), FastAPI (`docassist.api`),
+    n8n workflow za eskalaciju (`automations/`), agent režim u CLI (`--agent`) i UI.
 - **U toku:** —
 - **Blokirano / ostalo iz faze 0:**
   - 0.5 zaštita grane `main` nije uključena (sekcija uklonjena iz `WORKFLOW.md` — odlučiti da li ostaje u planu).
@@ -43,7 +45,7 @@ ChromaDB · Streamlit (UI) · FastAPI (API, faza 5) · n8n (automatizacije) · r
 
 ## Sledeći korak
 
-1. Pregledati i spojiti PR-ove redom: #1 → #2 → #3 → #4 (svaki je napravljen na grani prethodnog).
+1. Pregledati i spojiti PR-ove redom: #1 → #2 → #3 → #4 → #5 (svaki je napravljen na grani prethodnog).
 2. Kad ključevi budu u `.env` (+ `OPENAI_MODEL`): `uv run python -m docassist.cli index data/sample_docs --rebuild`,
    pa `ask "Koliki je moment pritezanja za M8?"` → očekivano 20 Nm, `montageanleitung_pv400.pdf`, str. 2;
    isto sa `--provider openai`.
@@ -58,6 +60,9 @@ ChromaDB · Streamlit (UI) · FastAPI (API, faza 5) · n8n (automatizacije) · r
 - Chunk-ovi ne prelaze granicu strane; `chunk_id` = `izvor::pN::i`, `doc_id` = hash sadržaja fajla.
 - Indeks pamti embedder; promena embedder-a traži `index --rebuild` (ADR-013).
 - `EMBEDDING_PROVIDER=fake` + `LLM_PROVIDER=fake` = ceo tok bez ključa (poklapanje reči, "odgovor" = citat prve rečenice).
+- Agent petlje (Claude/OpenAI) su testirane samo sa lažnim klijentima — prvo pravo pokretanje
+  `ask --agent` sa ključem je važna provera (posebno OpenAI `include=reasoning.encrypted_content`).
+- n8n workflow nije importovan u živi n8n — proveriti po `automations/README.md`.
 - Claude ide preko zvaničnog SDK-a sa refusal fallback-om; `ANTHROPIC_EFFORT` (npr. `low`) je poluga za cenu/brzinu (ADR-014).
 - `pymupdf` je namerno na 1.x (ADR-009). Lokalni venv je trenutno na Python 3.14, CI na 3.12.
 
@@ -75,3 +80,4 @@ ChromaDB · Streamlit (UI) · FastAPI (API, faza 5) · n8n (automatizacije) · r
 | 2026-11-03 | Faza 2: embedder (OpenAI/Fake), Chroma store, retrieve, CLI; ADR-013 | #2 |
 | 2026-11-03 | Faza 3: LLM provajderi (Claude/OpenAI/Fake), prompt, answer() sa citatima, CLI ask; ADR-014 | #3 |
 | 2026-11-03 | Faza 4: Streamlit UI, zaštite za javni demo, DEPLOY.md; ADR-015 | #4 |
+| 2026-11-04 | Faza 5: agent sa alatima, FastAPI, n8n eskalacija; ADR-016 | #5 |

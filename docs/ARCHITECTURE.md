@@ -42,8 +42,11 @@ src/docassist/
     prompts.py      # sistemski prompt i formatiranje konteksta
   factory.py        # pravi embedder/store/LLM iz Settings
   rag.py            # answer(question) — spaja sve
-  agent/            # faza 5: alati i agent petlja
-  api.py            # faza 5: FastAPI
+  agent/
+    tools.py        # alati + JSON šeme, execute_tool, webhook/jsonl izlazi
+    prompts.py      # sistemski prompt agenta
+    __init__.py     # run_agent(question) → Answer sa tool_calls
+  api.py            # FastAPI: /ask, /documents, /health
   cli.py            # index / search / docs / delete / ask iz terminala
 app/streamlit_app.py
 eval/               # faza 6

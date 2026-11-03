@@ -112,3 +112,19 @@ Prazne vrednosti u `.env` (`TOP_K=`) znače "koristi podrazumevano".
 **Zašto:** javni link troši moj API kredit i deli isti indeks među svim posetiocima —
 bez ovih ograničenja svako bi mogao da ubaci proizvoljan sadržaj ili potroši kredit.
 **Alternativa:** login/korisnici (van opsega, vidi PLAN).
+
+### ADR-016 · Agent: nativna petlja po provajderu, zajednički alati
+**Odluka:** svaki provajder ima svoju `run_agent` petlju nad nativnim API-jem
+(Claude: `tool_use`/`tool_result`, istorija samo raste — `response.content` se vraća nepromenjen;
+OpenAI: Responses API `function_call`/`function_call_output`, `store=False` +
+`include=["reasoning.encrypted_content"]`). Alati (`agent/tools.py`) su zajednički, sa striktnim
+JSON šemama (`strict: true`, sva polja obavezna). `tool_choice` ostaje `auto` (Claude Sonnet/Opus 5.5
+ne dozvoljavaju forsiran poziv) — kada koristiti alat piše u sistemskom promptu.
+Greške alata se vraćaju modelu kao `is_error` rezultat (model se oporavlja), nepoznato ime alata
+se toleriše po velikim/malim slovima. Max 8 koraka po pitanju.
+Eskalacija: `ESCALATION_WEBHOOK_URL` (n8n) ili lokalni `data/outbox/escalations.jsonl`;
+zahtevi za odmor su nacrti u `data/outbox/leave_requests.jsonl`.
+Citati agenta se proveravaju protiv svih pasusa koje su alati vratili.
+REST API (FastAPI) sa opcionim `X-API-Key` (`API_TOKEN`); `/health` je uvek otvoren.
+**Zašto:** pokazuje razumevanje oba API-ja (ADR-008); zajednički alati = isto ponašanje za oba
+modela i fer poređenje u fazi 6.
