@@ -48,6 +48,7 @@ _PDF_TEXT_FLAGS = (pymupdf.TEXTFLAGS_TEXT & ~pymupdf.TEXT_PRESERVE_LIGATURES) | 
 )
 
 _MULTI_BLANK_LINES = re.compile(r"\n{3,}")
+_BULLETS = frozenset("•◦▪▫●○■□‣⁃")
 
 
 def load_document(path: str | Path) -> list[Page]:
@@ -76,7 +77,34 @@ def load_pdf(path: Path) -> list[str]:
     with pymupdf.open(path) as pdf:
         if pdf.needs_pass:
             raise DocumentLoadError(f"{path.name} is password-protected")
-        return [page.get_text("text", flags=_PDF_TEXT_FLAGS) for page in pdf]
+        return [_pdf_page_text(page) for page in pdf]
+
+
+def _pdf_page_text(page: pymupdf.Page) -> str:
+    """Page text with one paragraph per line, paragraphs separated by a blank line.
+
+    PDFs store visual lines, so a sentence is often cut by a line wrap. PyMuPDF groups lines
+    into blocks (paragraphs, table rows, list items); joining the lines of a block gives
+    whole sentences and keeps a table row like "M8 20 Nm 13 mm" on one line.
+    """
+    blocks = page.get_text("blocks", flags=_PDF_TEXT_FLAGS, sort=False)
+    paragraphs = []
+    for *_, text, _block_no, block_type in blocks:
+        if block_type != 0:  # 1 = image block
+            continue
+        paragraph = ""
+        for line in text.split("\n"):
+            line = " ".join(line.split())
+            if not line:
+                continue
+            if paragraph and line[0] in _BULLETS:  # each list item on its own line
+                paragraph += "\n"
+            elif paragraph and not paragraph.endswith("-"):
+                paragraph += " "
+            paragraph += line
+        if paragraph:
+            paragraphs.append(paragraph)
+    return "\n\n".join(paragraphs)
 
 
 def load_docx(path: Path) -> list[str]:

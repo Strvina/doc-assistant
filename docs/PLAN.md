@@ -19,9 +19,9 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 - [x] 1.1 Demo dokumenti u `data/sample_docs/` (izmišljena firma; SR pravilnik o radu,
       DE uputstvo za montažu, EN procedura kontrole kvaliteta, SR bezbednost na radu, FAQ)
 - [x] 1.2 Loader-i: PDF (`pymupdf`), DOCX (`python-docx`), TXT/MD → lista `Page(source, page_no, text)`
-- [ ] 1.3 Chunking: ~800 karaktera, preklapanje ~150, čuva `source`, `page`, `chunk_id`
-- [ ] 1.4 Testovi za loader-e i chunking — loader testovi urađeni uz 1.2 (`tests/test_loaders.py`,
-      fixture fajlovi se prave u `tmp_path`); ostaju testovi za chunking
+- [x] 1.3 Chunking: ~800 karaktera, preklapanje ~150, čuva `source`, `page`, `chunk_id`
+- [x] 1.4 Testovi za loader-e i chunking (`tests/test_loaders.py`, `tests/test_chunker.py`;
+      fixture fajlovi se prave u `tmp_path`, bez binarnih fajlova u `tests/fixtures/`)
 
 **Gotovo kad:** `ingest("fajl.pdf")` vraća chunk-ove sa ispravnim metapodacima, testovi prolaze.
 

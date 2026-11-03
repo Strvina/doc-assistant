@@ -55,6 +55,21 @@ def test_pdf_keeps_serbian_and_german_characters(tmp_path):
     assert load_document(path)[0].text == text
 
 
+def test_pdf_joins_wrapped_lines_into_paragraphs(tmp_path):
+    long_sentence = " ".join(["Schaltschrank"] * 60) + "."
+    html = (
+        f"<p>{long_sentence}</p><p>Second paragraph.</p>"
+        "<ul><li>first item</li><li>second item</li></ul>"
+    )
+    path = make_pdf(tmp_path / "wrap.pdf", [html])
+
+    paragraphs = load_document(path)[0].text.split("\n\n")
+
+    assert paragraphs[0] == long_sentence  # several visual lines → one line
+    assert paragraphs[1] == "Second paragraph."
+    assert paragraphs[2].splitlines() == ["• first item", "• second item"]
+
+
 def test_password_protected_pdf_raises(tmp_path):
     path = make_pdf(
         tmp_path / "secret.pdf",
@@ -272,7 +287,7 @@ def test_sample_docs_load(name):
     ("name", "page_no", "fact"),
     [
         ("pravilnik_o_radu.pdf", 2, "najmanje 20 radnih dana"),
-        ("montageanleitung_pv400.pdf", 2, "M8\n20 Nm"),
+        ("montageanleitung_pv400.pdf", 2, "M8 20 Nm 13 mm"),
         ("quality_control_procedure.docx", 2, "500 V DC for 60 s | ≥ 1 MΩ"),
         ("bezbednost_na_radu.docx", 3, "Hitnu pomoć na broj 194"),
         ("faq.txt", 1, "Kantina radi od 10:30 do 13:30"),

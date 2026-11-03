@@ -67,3 +67,12 @@ a `scripts/build_sample_docs.py` od njih pravi PDF/DOCX/TXT u `data/sample_docs/
 I izvori i generisani fajlovi su u gitu.
 **Zašto:** sadržaj se lako menja i pregleda u diff-u; generisani fajlovi su odmah spremni za demo i
 testove. Firma (Panelvolt d.o.o.), ljudi, brojevi telefona i domeni (`*.example`) su izmišljeni.
+
+### ADR-012 · Chunk-ovi ne prelaze granicu strane; PDF se čita po blokovima
+**Odluka:** chunker (800 znakova, preklapanje 150) seče svaku stranu posebno, redom po pasusima,
+redovima, rečenicama i rečima. PDF loader spaja redove jednog PyMuPDF bloka u jedan red
+(pasus / stavka liste / red tabele), a blokove razdvaja praznim redom.
+**Zašto:** svaki chunk mora da ima tačno jednu stranu za citat. PDF čuva vizuelne redove, pa bi
+rečenice bile presečene prelomom reda; po blokovima chunker dobija prirodne granice, a red tabele
+(`M8 20 Nm 13 mm`) ostaje ceo.
+**Cena:** rečenica koja prelazi na sledeću stranu deli se na dva chunk-a.
