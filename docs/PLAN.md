@@ -27,11 +27,12 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 
 ## Faza 2 — Indeks i pretraga (7–8. 11.)  · grana: `feat/retrieval`
 
-- [ ] 2.1 `Embedder` interfejs + `OpenAIEmbedder` + `FakeEmbedder` za testove
-- [ ] 2.2 `VectorStore` nad ChromaDB (persist u `data/index/`): add, search, delete po dokumentu
-- [ ] 2.3 `retrieve(question, k=5)` → chunk-ovi sa skorom
-- [ ] 2.4 CLI skripta: `uv run python -m docassist.cli index data/sample_docs` i `ask "pitanje"`
-- [ ] 2.5 Testovi (sa FakeEmbedder, bez mreže)
+- [x] 2.1 `Embedder` interfejs + `OpenAIEmbedder` + `FakeEmbedder` za testove
+- [x] 2.2 `VectorStore` nad ChromaDB (persist u `data/index/`): add, search, delete po dokumentu
+- [x] 2.3 `retrieve(question, k=5)` → chunk-ovi sa skorom
+- [x] 2.4 CLI skripta: `uv run python -m docassist.cli index data/sample_docs` i `search "pitanje"`
+      (+ `docs`, `delete`; `ask` sa LLM odgovorom dolazi u fazi 3)
+- [x] 2.5 Testovi (sa FakeEmbedder, bez mreže)
 
 **Gotovo kad:** iz terminala vidim relevantne chunk-ove za pitanje na srpskom o nemačkom dokumentu.
 

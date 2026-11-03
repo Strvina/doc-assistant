@@ -40,10 +40,11 @@ src/docassist/
     openai.py       # OpenAIProvider
     fake.py         # FakeProvider (testovi)
     prompts.py      # sistemski prompt i formatiranje konteksta
+  factory.py        # pravi embedder/store/LLM iz Settings
   rag.py            # answer(question) — spaja sve
   agent/            # faza 5: alati i agent petlja
   api.py            # faza 5: FastAPI
-  cli.py            # index / ask iz terminala
+  cli.py            # index / search / docs / delete / ask iz terminala
 app/streamlit_app.py
 eval/               # faza 6
 automations/        # n8n export

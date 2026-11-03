@@ -76,3 +76,13 @@ redovima, rečenicama i rečima. PDF loader spaja redove jednog PyMuPDF bloka u 
 rečenice bile presečene prelomom reda; po blokovima chunker dobija prirodne granice, a red tabele
 (`M8 20 Nm 13 mm`) ostaje ceo.
 **Cena:** rečenica koja prelazi na sledeću stranu deli se na dva chunk-a.
+
+### ADR-013 · Indeks pamti embedder; `EMBEDDING_PROVIDER=fake` za rad bez ključa
+**Odluka:** Chroma kolekcija u metapodacima čuva ime embedder-a (npr. `openai:text-embedding-3-small`).
+Ako se indeks otvori drugim embedder-om → jasna greška i uputstvo `index --rebuild`.
+`FakeEmbedder` (heširane reči + trigrami) se može uključiti i van testova sa `EMBEDDING_PROVIDER=fake`.
+Dokument se identifikuje po imenu fajla: isti naziv + nov sadržaj zamenjuje staru verziju,
+isti sadržaj se ne embeduje ponovo (ušteda na API pozivima).
+**Zašto:** vektori različitih modela nisu uporedivi — mešanje bi tiho vraćalo besmislene rezultate.
+Fake režim omogućava da se ceo tok (index → search) proba bez API ključa.
+**Ograničenje:** fake embeddings ne razumeju značenje ni prevod (SR pitanje neće naći DE odgovor).
