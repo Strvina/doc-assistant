@@ -26,7 +26,7 @@ ChromaDB · Streamlit (UI) · FastAPI (API, faza 5) · n8n (automatizacije) · r
 
 ## Trenutno stanje
 
-- **Faza:** 5 — Agent i automatizacija — **gotova** (grana `feat/agent`, PR #5, nadovezan na PR #4); faza 4 čeka deploy
+- **Faza:** 6 — Evaluacija i monitoring — **gotova osim 6.3** (grana `feat/eval`, PR #6, nadovezan na PR #5); faza 4 čeka deploy
 - **Urađeno:**
   - Faza 0: skelet, planski fajlovi, CI, GitHub repo `Strvina/doc-assistant`, `main` push-ovan.
   - Faza 1 (PR #1): demo dokumenti, loader-i PDF/DOCX/TXT, chunking, `ingest(path)`.
@@ -38,6 +38,9 @@ ChromaDB · Streamlit (UI) · FastAPI (API, faza 5) · n8n (automatizacije) · r
     citati u expander-ima, izbor modela, zaštite za javni demo; `docs/DEPLOY.md`.
   - Faza 5 (PR #5): agent sa 5 alata (nativne petlje za Claude i OpenAI), FastAPI (`docassist.api`),
     n8n workflow za eskalaciju (`automations/`), agent režim u CLI (`--agent`) i UI.
+  - Faza 6 (PR #6): `eval/questions.yaml` (30 pitanja), `python -m docassist.eval`, SQLite log + 👍/👎 + statistika.
+- **Odluka 2026-11-04:** koristimo **samo Claude** (ADR-018). OpenAI ostaje opciono u kodu; embeddings
+  prelaze na lokalni višejezični model (sledeći PR).
 - **U toku:** —
 - **Blokirano / ostalo iz faze 0:**
   - 0.5 zaštita grane `main` nije uključena (sekcija uklonjena iz `WORKFLOW.md` — odlučiti da li ostaje u planu).
@@ -45,7 +48,7 @@ ChromaDB · Streamlit (UI) · FastAPI (API, faza 5) · n8n (automatizacije) · r
 
 ## Sledeći korak
 
-1. Pregledati i spojiti PR-ove redom: #1 → #2 → #3 → #4 → #5 (svaki je napravljen na grani prethodnog).
+1. Pregledati i spojiti PR-ove redom: #1 → #2 → #3 → #4 → #5 → #6 (svaki je napravljen na grani prethodnog).
 2. Kad ključevi budu u `.env` (+ `OPENAI_MODEL`): `uv run python -m docassist.cli index data/sample_docs --rebuild`,
    pa `ask "Koliki je moment pritezanja za M8?"` → očekivano 20 Nm, `montageanleitung_pv400.pdf`, str. 2;
    isto sa `--provider openai`.
@@ -81,3 +84,4 @@ ChromaDB · Streamlit (UI) · FastAPI (API, faza 5) · n8n (automatizacije) · r
 | 2026-11-03 | Faza 3: LLM provajderi (Claude/OpenAI/Fake), prompt, answer() sa citatima, CLI ask; ADR-014 | #3 |
 | 2026-11-03 | Faza 4: Streamlit UI, zaštite za javni demo, DEPLOY.md; ADR-015 | #4 |
 | 2026-11-04 | Faza 5: agent sa alatima, FastAPI, n8n eskalacija; ADR-016 | #5 |
+| 2026-11-04 | Faza 6: eval skup + alat, SQLite log, 👍/👎; odluka samo Claude; ADR-017, ADR-018 | #6 |

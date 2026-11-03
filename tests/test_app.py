@@ -14,6 +14,7 @@ def app(tmp_path, monkeypatch):
     monkeypatch.setenv("EMBEDDING_PROVIDER", "fake")
     monkeypatch.setenv("LLM_PROVIDER", "fake")
     monkeypatch.setenv("INDEX_DIR", str(tmp_path / "index"))
+    monkeypatch.setenv("LOG_DB", str(tmp_path / "logs.sqlite"))
     for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENAI_MODEL", "TOP_K"):
         monkeypatch.setenv(key, "")  # set empty so a local .env cannot fill them in
     st.cache_resource.clear()  # settings and store are cached per process
@@ -70,6 +71,7 @@ def test_public_demo_mode(tmp_path, monkeypatch):
     monkeypatch.setenv("EMBEDDING_PROVIDER", "fake")
     monkeypatch.setenv("LLM_PROVIDER", "fake")
     monkeypatch.setenv("INDEX_DIR", str(tmp_path / "index"))
+    monkeypatch.setenv("LOG_DB", str(tmp_path / "logs.sqlite"))
     monkeypatch.setenv("ALLOW_UPLOADS", "false")
     monkeypatch.setenv("MAX_QUESTIONS_PER_SESSION", "1")
     for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENAI_MODEL", "TOP_K"):

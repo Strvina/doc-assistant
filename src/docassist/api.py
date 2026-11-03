@@ -20,6 +20,7 @@ from docassist.config import Settings
 from docassist.factory import MissingAPIKeyError, build_llm, build_store, build_tool_context
 from docassist.ingest import SUPPORTED_EXTENSIONS, DocumentLoadError, ingest
 from docassist.llm import LLMError, LLMProvider
+from docassist.logs import QueryLog
 from docassist.rag import Answer, answer
 from docassist.retrieval import EmbedderMismatchError, VectorStore
 
@@ -49,6 +50,7 @@ class ToolCallOut(BaseModel):
 
 
 class AskResponse(BaseModel):
+    log_id: int | None = None
     answer: str
     found: bool
     citations: list[CitationOut]
@@ -59,6 +61,11 @@ class AskResponse(BaseModel):
     latency_s: float
     input_tokens: int
     output_tokens: int
+
+
+class FeedbackRequest(BaseModel):
+    log_id: int
+    rating: int = Field(description="1 = helpful, -1 = not helpful, 0 = clear")
 
 
 class DocumentOut(BaseModel):
@@ -105,6 +112,16 @@ def get_store(request: Request, settings: SettingsDep) -> VectorStore:
 StoreDep = Annotated[VectorStore, Depends(get_store)]
 
 
+def get_log(request: Request, settings: SettingsDep) -> QueryLog:
+    state = request.app.state
+    if state.log is None:
+        state.log = QueryLog(settings.log_db)
+    return state.log
+
+
+LogDep = Annotated[QueryLog, Depends(get_log)]
+
+
 def check_token(settings: SettingsDep, x_api_key: Annotated[str | None, Header()] = None) -> None:
     expected = settings.api_token
     if expected and not secrets.compare_digest(x_api_key or "", expected):
@@ -124,6 +141,7 @@ def create_app(
     )
     app.state.settings = settings
     app.state.store = store
+    app.state.log = None
     auth = [Depends(check_token)]
 
     @app.get("/health")
@@ -174,7 +192,9 @@ def create_app(
         return {"chunks_removed": removed}
 
     @app.post("/ask", dependencies=auth)
-    def ask(request: AskRequest, settings: SettingsDep, store: StoreDep) -> AskResponse:
+    def ask(
+        request: AskRequest, settings: SettingsDep, store: StoreDep, log: LogDep
+    ) -> AskResponse:
         try:
             llm = llm_factory(settings, request.provider)
             if request.agent:
@@ -190,7 +210,21 @@ def create_app(
             raise HTTPException(503, str(exc)) from exc
         except LLMError as exc:
             raise HTTPException(502, str(exc)) from exc
-        return to_response(result)
+        response = to_response(result)
+        response.log_id = log.log(result, channel="api", mode="agent" if request.agent else "rag")
+        return response
+
+    @app.post("/feedback", dependencies=auth)
+    def feedback(request: FeedbackRequest, log: LogDep) -> dict[str, bool]:
+        if request.rating not in (1, -1, 0):
+            raise HTTPException(422, "rating must be 1, -1 or 0")
+        if not log.set_feedback(request.log_id, request.rating or None):
+            raise HTTPException(404, f"No query with log_id {request.log_id}")
+        return {"ok": True}
+
+    @app.get("/stats", dependencies=auth)
+    def stats(log: LogDep) -> dict[str, Any]:
+        return vars_of(log.stats())
 
     return app
 

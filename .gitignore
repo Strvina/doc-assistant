@@ -31,3 +31,6 @@ logs/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Evaluation reports (summaries go to docs/EVAL_RESULTS.md)
+eval/results/

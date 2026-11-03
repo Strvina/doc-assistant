@@ -28,6 +28,7 @@ def settings(tmp_path, monkeypatch):
     monkeypatch.setenv("INDEX_DIR", str(tmp_path / "index"))
     monkeypatch.setenv("OUTBOX_DIR", str(tmp_path / "outbox"))
     monkeypatch.setenv("API_TOKEN", "")
+    monkeypatch.setenv("LOG_DB", str(tmp_path / "logs.sqlite"))
     return Settings.from_env(load_dotenv_file=False)
 
 
@@ -122,3 +123,16 @@ def test_api_token(settings, tmp_path):
     assert client.get("/documents", headers={"X-API-Key": "wrong"}).status_code == 401
     assert client.get("/documents", headers={"X-API-Key": "s3cret"}).status_code == 200
     assert client.get("/health").status_code == 200  # health stays open for monitoring
+
+
+def test_ask_is_logged_and_accepts_feedback(client):
+    upload(client, "faq.txt")
+    body = client.post("/ask", json={"question": "Kada radi kantina?"}).json()
+
+    assert body["log_id"] == 1
+    assert client.post("/feedback", json={"log_id": 1, "rating": 1}).json() == {"ok": True}
+    assert client.post("/feedback", json={"log_id": 99, "rating": 1}).status_code == 404
+    assert client.post("/feedback", json={"log_id": 1, "rating": 3}).status_code == 422
+
+    stats = client.get("/stats").json()
+    assert stats["queries"] == 1 and stats["thumbs_up"] == 1

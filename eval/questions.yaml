@@ -1,0 +1,210 @@
+# Evaluation set for the demo documents in data/sample_docs/.
+#
+# source/page: where the answer is (null = not in the documents, the assistant must say so).
+# facts: strings the answer must contain (case-insensitive); "a|b" accepts either spelling.
+#        Mostly numbers, so they work whatever language the answer is in.
+# Cross-lingual questions (question language != document language) are the interesting part.
+
+- id: hr-leave-days
+  lang: sr
+  question: Koliko dana godišnjeg odmora imam najmanje?
+  source: pravilnik_o_radu.pdf
+  page: 2
+  facts: ["20"]
+
+- id: hr-leave-notice
+  lang: sr
+  question: Koliko unapred moram da podnesem zahtev za godišnji odmor?
+  source: pravilnik_o_radu.pdf
+  page: 2
+  facts: ["15"]
+
+- id: hr-leave-deadline
+  lang: sr
+  question: Do kada moram da iskoristim ostatak godišnjeg odmora?
+  source: pravilnik_o_radu.pdf
+  page: 2
+  facts: ["30", "jun"]
+
+- id: hr-overtime-pay
+  lang: sr
+  question: Za koliko procenata se uvećava zarada za prekovremeni rad?
+  source: pravilnik_o_radu.pdf
+  page: 1
+  facts: ["26"]
+
+- id: hr-sick-notice
+  lang: sr
+  question: Do koliko sati moram da javim rukovodiocu da sam bolestan?
+  source: pravilnik_o_radu.pdf
+  page: 3
+  facts: ["9:00|9 h|9h|devet"]
+
+- id: hr-remote-days
+  lang: sr
+  question: Koliko dana nedeljno mogu da radim od kuće?
+  source: pravilnik_o_radu.pdf
+  page: 3
+  facts: ["2|dva"]
+
+- id: hr-per-diem-de
+  lang: en
+  question: What is the daily allowance for a business trip to Germany?
+  source: pravilnik_o_radu.pdf
+  page: 3
+  facts: ["60"]
+
+- id: hr-salary-date
+  lang: sr
+  question: Do kog datuma u mesecu se isplaćuje plata?
+  source: pravilnik_o_radu.pdf
+  page: 3
+  facts: ["10"]
+
+- id: hr-wedding-leave
+  lang: de
+  question: Wie viele Tage bezahlte Freistellung bekomme ich bei meiner Hochzeit?
+  source: pravilnik_o_radu.pdf
+  page: 2
+  facts: ["5|fünf"]
+
+- id: mount-torque-m8
+  lang: sr
+  question: Koliki je moment pritezanja za M8 vijke na sabirnicama?
+  source: montageanleitung_pv400.pdf
+  page: 2
+  facts: ["20 Nm|20Nm"]
+
+- id: mount-weight
+  lang: sr
+  question: Koliko teži prazan orman PV-400?
+  source: montageanleitung_pv400.pdf
+  page: 1
+  facts: ["180"]
+
+- id: mount-front-clearance
+  lang: en
+  question: What is the minimum free space required in front of the cabinet door?
+  source: montageanleitung_pv400.pdf
+  page: 2
+  facts: ["1000|1 000|1.000|1 m"]
+
+- id: mount-earthing
+  lang: sr
+  question: Koliki je minimalni presek provodnika za uzemljenje ormana?
+  source: montageanleitung_pv400.pdf
+  page: 3
+  facts: ["16"]
+
+- id: mount-filters
+  lang: de
+  question: Wie oft müssen die Filtermatten der Lüftungsgitter gewechselt werden?
+  source: montageanleitung_pv400.pdf
+  page: 3
+  facts: ["6|sechs"]
+
+- id: mount-connectors
+  lang: sr
+  question: Koliko spojnica treba za spajanje dva ormana jedan uz drugi?
+  source: montageanleitung_pv400.pdf
+  page: 2
+  facts: ["8|osam"]
+
+- id: qc-insulation
+  lang: en
+  question: What is the acceptance criterion for the insulation resistance test?
+  source: quality_control_procedure.docx
+  page: 2
+  facts: ["1 MΩ|1 MOhm|1 megaohm|1MΩ"]
+
+- id: qc-dielectric
+  lang: sr
+  question: Kojim naponom se radi dielektrični test na gotovom ormanu?
+  source: quality_control_procedure.docx
+  page: 2
+  facts: ["2500|2 500|2.500"]
+
+- id: qc-ncr-deadline
+  lang: en
+  question: Within how many hours must a nonconformity report be opened?
+  source: quality_control_procedure.docx
+  page: 3
+  facts: ["24"]
+
+- id: qc-retention
+  lang: sr
+  question: Koliko godina se čuvaju izveštaji o ispitivanju?
+  source: quality_control_procedure.docx
+  page: 3
+  facts: ["10|deset"]
+
+- id: qc-aql
+  lang: de
+  question: Welcher AQL-Wert gilt bei der Wareneingangsprüfung elektrischer Bauteile?
+  source: quality_control_procedure.docx
+  page: 1
+  facts: ["1.0|1,0"]
+
+- id: safety-shoes
+  lang: sr
+  question: Koje zaštitne cipele su obavezne u proizvodnim halama?
+  source: bezbednost_na_radu.docx
+  page: 1
+  facts: ["S3"]
+
+- id: safety-loto
+  lang: en
+  question: Who is allowed to remove a lockout padlock?
+  source: bezbednost_na_radu.docx
+  page: 2
+  facts: []
+
+- id: safety-emergency
+  lang: sr
+  question: Koji broj zovem kod strujnog udara?
+  source: bezbednost_na_radu.docx
+  page: 3
+  facts: ["194"]
+
+- id: safety-training
+  lang: sr
+  question: Koliko često se obnavlja obuka za rad u ispitnoj stanici?
+  source: bezbednost_na_radu.docx
+  page: 1
+  facts: ["6|šest"]
+
+- id: faq-canteen
+  lang: sr
+  question: Kada radi kantina?
+  source: faq.txt
+  page: 1
+  facts: ["10:30", "13:30"]
+
+- id: faq-training-budget
+  lang: en
+  question: What is the yearly training budget per employee?
+  source: faq.txt
+  page: 1
+  facts: ["600"]
+
+- id: faq-wifi
+  lang: sr
+  question: Kako se zove Wi-Fi mreža za zaposlene?
+  source: faq.txt
+  page: 1
+  facts: ["Panelvolt-Staff"]
+
+- id: none-bonus
+  lang: sr
+  question: Koliki je bonus za najboljeg radnika meseca?
+  source: null
+
+- id: none-pets
+  lang: en
+  question: Can I bring my dog to the office?
+  source: null
+
+- id: none-christmas
+  lang: de
+  question: Wie hoch ist das Weihnachtsgeld?
+  source: null
