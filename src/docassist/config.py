@@ -26,21 +26,23 @@ class Settings:
     embedding_model: str
     index_dir: Path
     top_k: int
+    allow_uploads: bool = True
+    max_questions_per_session: int = 30
 
     @classmethod
     def from_env(cls, load_dotenv_file: bool = True) -> Settings:
         if load_dotenv_file:
             load_dotenv()
 
-        provider = os.getenv("LLM_PROVIDER", "claude").lower()
+        provider = _env("LLM_PROVIDER", "claude").lower()
         if provider not in VALID_PROVIDERS:
             raise ValueError(f"LLM_PROVIDER must be one of {VALID_PROVIDERS}, got {provider!r}")
 
-        effort = os.getenv("ANTHROPIC_EFFORT", "").lower()
+        effort = _env("ANTHROPIC_EFFORT", "").lower()
         if effort not in VALID_EFFORTS:
             raise ValueError(f"ANTHROPIC_EFFORT must be one of {VALID_EFFORTS[1:]}, got {effort!r}")
 
-        embedding_provider = os.getenv("EMBEDDING_PROVIDER", "openai").lower()
+        embedding_provider = _env("EMBEDDING_PROVIDER", "openai").lower()
         if embedding_provider not in VALID_EMBEDDING_PROVIDERS:
             raise ValueError(
                 f"EMBEDDING_PROVIDER must be one of {VALID_EMBEDDING_PROVIDERS}, "
@@ -49,13 +51,21 @@ class Settings:
 
         return cls(
             llm_provider=provider,
-            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY") or None,
-            anthropic_model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5"),
+            anthropic_api_key=_env("ANTHROPIC_API_KEY") or None,
+            anthropic_model=_env("ANTHROPIC_MODEL", "claude-sonnet-5-5"),
             anthropic_effort=effort or None,
-            openai_api_key=os.getenv("OPENAI_API_KEY") or None,
-            openai_model=os.getenv("OPENAI_MODEL", ""),
+            openai_api_key=_env("OPENAI_API_KEY") or None,
+            openai_model=_env("OPENAI_MODEL", ""),
             embedding_provider=embedding_provider,
-            embedding_model=os.getenv("EMBEDDING_MODEL", "text-embedding-3-small"),
-            index_dir=Path(os.getenv("INDEX_DIR", "data/index")),
-            top_k=int(os.getenv("TOP_K", "5")),
+            embedding_model=_env("EMBEDDING_MODEL", "text-embedding-3-small"),
+            index_dir=Path(_env("INDEX_DIR", "data/index")),
+            top_k=int(_env("TOP_K", "5")),
+            allow_uploads=_env("ALLOW_UPLOADS", "true").lower() in ("1", "true", "yes"),
+            max_questions_per_session=int(_env("MAX_QUESTIONS_PER_SESSION", "30")),
         )
+
+
+def _env(name: str, default: str = "") -> str:
+    """Environment variable, with blank values (``TOP_K=`` in .env) treated as unset."""
+    value = os.getenv(name, "").strip()
+    return value or default

@@ -47,11 +47,11 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 
 ## Faza 4 — Streamlit UI + deploy = **MVP** (11–14. 11.)  · grana: `feat/ui`
 
-- [ ] 4.1 Upload dokumenata, lista ubačenih dokumenata, brisanje dokumenta
-- [ ] 4.2 Chat sa istorijom; citati prikazani ispod odgovora (klik → tekst chunk-a)
-- [ ] 4.3 Izbor modela u sidebar-u (Claude / ChatGPT)
-- [ ] 4.4 Deploy online demo + link u README
-- [ ] 4.5 README: opis, screenshot, kako pokrenuti
+- [x] 4.1 Upload dokumenata, lista ubačenih dokumenata, brisanje dokumenta
+- [x] 4.2 Chat sa istorijom; citati prikazani ispod odgovora (klik → tekst chunk-a)
+- [x] 4.3 Izbor modela u sidebar-u (Claude / ChatGPT)
+- [ ] 4.4 Deploy online demo + link u README — uputstvo spremno u `docs/DEPLOY.md`
+- [ ] 4.5 README: opis, screenshot, kako pokrenuti — opis i pokretanje urađeni; fali screenshot
 - [ ] **4.6 PRIJAVA NA OGLAS** (CV na srpskom + link na demo i GitHub)
 
 ## Faza 5 — Agent i automatizacija (15–20. 11.)  · grana: `feat/agent`

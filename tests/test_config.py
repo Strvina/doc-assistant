@@ -19,6 +19,8 @@ def clean_env(monkeypatch):
         "EMBEDDING_MODEL",
         "INDEX_DIR",
         "TOP_K",
+        "ALLOW_UPLOADS",
+        "MAX_QUESTIONS_PER_SESSION",
     ):
         monkeypatch.delenv(var, raising=False)
     return monkeypatch
@@ -64,3 +66,25 @@ def test_effort(clean_env):
     clean_env.setenv("ANTHROPIC_EFFORT", "extreme")
     with pytest.raises(ValueError, match="ANTHROPIC_EFFORT"):
         Settings.from_env(load_dotenv_file=False)
+
+
+def test_blank_values_use_defaults(clean_env):
+    for var in ("LLM_PROVIDER", "ANTHROPIC_MODEL", "INDEX_DIR", "TOP_K", "ANTHROPIC_API_KEY"):
+        clean_env.setenv(var, "  ")
+    settings = Settings.from_env(load_dotenv_file=False)
+    assert settings.llm_provider == "claude"
+    assert settings.anthropic_model == "claude-sonnet-5-5"
+    assert settings.index_dir == Path("data/index")
+    assert settings.top_k == 5
+    assert settings.anthropic_api_key is None
+
+
+def test_ui_settings(clean_env):
+    settings = Settings.from_env(load_dotenv_file=False)
+    assert settings.allow_uploads is True
+    assert settings.max_questions_per_session == 30
+    clean_env.setenv("ALLOW_UPLOADS", "false")
+    clean_env.setenv("MAX_QUESTIONS_PER_SESSION", "3")
+    settings = Settings.from_env(load_dotenv_file=False)
+    assert settings.allow_uploads is False
+    assert settings.max_questions_per_session == 3

@@ -27,6 +27,16 @@ cp .env.example .env    # add your API keys
 uv run pytest
 ```
 
+## Web UI
+
+```bash
+uv run streamlit run app/streamlit_app.py
+```
+
+Upload documents (or click *Load demo documents*), pick Claude or ChatGPT in the sidebar and ask.
+Every answer lists its sources; expand one to see the exact passage. Deployment notes:
+[docs/DEPLOY.md](docs/DEPLOY.md).
+
 ## Command line
 
 ```bash

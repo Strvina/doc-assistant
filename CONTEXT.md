@@ -26,7 +26,7 @@ ChromaDB · Streamlit (UI) · FastAPI (API, faza 5) · n8n (automatizacije) · r
 
 ## Trenutno stanje
 
-- **Faza:** 3 — LLM sloj — **gotova** (grana `feat/llm`, PR #3, nadovezan na PR #2)
+- **Faza:** 4 — Streamlit UI — **gotova osim deploy-a** (grana `feat/ui`, PR #4, nadovezan na PR #3)
 - **Urađeno:**
   - Faza 0: skelet, planski fajlovi, CI, GitHub repo `Strvina/doc-assistant`, `main` push-ovan.
   - Faza 1 (PR #1): demo dokumenti, loader-i PDF/DOCX/TXT, chunking, `ingest(path)`.
@@ -34,6 +34,8 @@ ChromaDB · Streamlit (UI) · FastAPI (API, faza 5) · n8n (automatizacije) · r
     `retrieve()`, `factory.py`, CLI (`index`, `search`, `docs`, `delete`).
   - Faza 3 (PR #3): `LLMProvider` (`ClaudeProvider`, `OpenAIProvider`, `FakeProvider`),
     sistemski prompt, `rag.answer()` sa proverom citata, CLI `ask`.
+  - Faza 4 (PR #4): `app/streamlit_app.py` — upload/lista/brisanje dokumenata, chat sa istorijom,
+    citati u expander-ima, izbor modela, zaštite za javni demo; `docs/DEPLOY.md`.
 - **U toku:** —
 - **Blokirano / ostalo iz faze 0:**
   - 0.5 zaštita grane `main` nije uključena (sekcija uklonjena iz `WORKFLOW.md` — odlučiti da li ostaje u planu).
@@ -41,11 +43,12 @@ ChromaDB · Streamlit (UI) · FastAPI (API, faza 5) · n8n (automatizacije) · r
 
 ## Sledeći korak
 
-1. Pregledati i spojiti PR-ove redom: #1 → #2 → #3 (svaki je napravljen na grani prethodnog).
+1. Pregledati i spojiti PR-ove redom: #1 → #2 → #3 → #4 (svaki je napravljen na grani prethodnog).
 2. Kad ključevi budu u `.env` (+ `OPENAI_MODEL`): `uv run python -m docassist.cli index data/sample_docs --rebuild`,
    pa `ask "Koliki je moment pritezanja za M8?"` → očekivano 20 Nm, `montageanleitung_pv400.pdf`, str. 2;
    isto sa `--provider openai`.
-3. Faza 4 — `feat/ui`: Streamlit.
+3. `uv run streamlit run app/streamlit_app.py` → proba u browseru; zatim deploy po `docs/DEPLOY.md` (4.4),
+   screenshot u README (4.5) i **prijava na oglas (4.6)**.
 
 ## Napomene za sledeću sesiju
 
@@ -71,3 +74,4 @@ ChromaDB · Streamlit (UI) · FastAPI (API, faza 5) · n8n (automatizacije) · r
 | 2026-11-03 | Faza 1: demo dokumenti (SR/DE/EN), loader-i PDF/DOCX/TXT, chunking, testovi; ADR-009–012 | #1 |
 | 2026-11-03 | Faza 2: embedder (OpenAI/Fake), Chroma store, retrieve, CLI; ADR-013 | #2 |
 | 2026-11-03 | Faza 3: LLM provajderi (Claude/OpenAI/Fake), prompt, answer() sa citatima, CLI ask; ADR-014 | #3 |
+| 2026-11-03 | Faza 4: Streamlit UI, zaštite za javni demo, DEPLOY.md; ADR-015 | #4 |
