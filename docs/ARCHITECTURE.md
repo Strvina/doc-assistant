@@ -47,6 +47,8 @@ src/docassist/
 app/streamlit_app.py
 eval/               # faza 6
 automations/        # n8n export
+scripts/
+  build_sample_docs.py  # pravi data/sample_docs/ iz scripts/sample_docs_src/
 data/sample_docs/   # demo dokumenti (u gitu)
 data/index/         # Chroma baza (NIJE u gitu)
 ```
@@ -54,6 +56,16 @@ data/index/         # Chroma baza (NIJE u gitu)
 ## Ključni interfejsi
 
 ```python
+@dataclass(frozen=True)
+class Page:
+    source: str  # naziv fajla, npr. "pravilnik_o_radu.pdf"
+    page_no: int  # 1-based, pozicija u originalu (prazne strane se preskaču, numeracija ostaje)
+    text: str
+
+
+def load_document(path) -> list[Page]: ...  # .pdf, .docx, .txt, .md — vidi ADR-010
+
+
 class Embedder(Protocol):
     def embed(self, texts: list[str]) -> list[list[float]]: ...
 

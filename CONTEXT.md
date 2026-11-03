@@ -26,15 +26,31 @@ ChromaDB · Streamlit (UI) · FastAPI (API, faza 5) · n8n (automatizacije) · r
 
 ## Trenutno stanje
 
-- **Faza:** 0 — Setup
-- **Urađeno:** skelet repozitorijuma, planski fajlovi, CI (ruff + pytest), PR template.
+- **Faza:** 1 — Učitavanje dokumenata (grana `feat/ingest`)
+- **Urađeno:**
+  - Faza 0: skelet, planski fajlovi, CI, GitHub repo `Strvina/doc-assistant`, `main` push-ovan.
+  - 1.1: 5 demo dokumenata izmišljene firme Panelvolt d.o.o. u `data/sample_docs/`
+    (2× PDF, 2× DOCX, 1× TXT; SR/DE/EN), generišu se skriptom `scripts/build_sample_docs.py`.
+  - 1.2: `docassist.ingest.load_document(path) -> list[Page]` za PDF, DOCX, TXT/MD, sa testovima
+    (`tests/test_loaders.py`, 39 testova ukupno).
 - **U toku:** —
-- **Blokirano:** —
+- **Blokirano / ostalo iz faze 0:**
+  - 0.5 zaštita grane `main` nije uključena (sekcija uklonjena iz `WORKFLOW.md` — odlučiti da li ostaje u planu).
+  - 0.6 lokalni `.env` sa API ključevima — potreban tek od faze 2.
 
 ## Sledeći korak
 
-1. Završiti fazu 0: kreirati GitHub repo, push `main`, uključiti zaštitu grane (vidi `docs/WORKFLOW.md`).
-2. Otvoriti granu `feat/ingest` i krenuti sa zadatkom **1.1** iz `docs/PLAN.md`.
+1. Pregledati i spojiti PR za 1.1 + 1.2 (`feat/ingest`).
+2. Zadatak **1.3** — chunker (`src/docassist/ingest/chunker.py`, `Chunk` u `models.py`),
+   pa **1.4** — testovi za chunking. Funkcija `ingest(path)` = `load_document` + chunking.
+
+## Napomene za sledeću sesiju
+
+- `Page.page_no` je pozicija u originalu; prazne strane se preskaču bez pomeranja numeracije.
+- DOCX "strane" su delovi između eksplicitnih preloma strane (ADR-010); demo DOCX-ovi ih imaju.
+- PDF tabele se iz PyMuPDF-a čitaju ćeliju po ćeliju, svaka u svom redu (npr. `M8\n20 Nm\n13 mm`) —
+  chunker ne sme da ih raseče na nezgodnom mestu ako može.
+- `pymupdf` je namerno na 1.x (ADR-009).
 
 ## Otvorena pitanja
 
@@ -46,3 +62,4 @@ ChromaDB · Streamlit (UI) · FastAPI (API, faza 5) · n8n (automatizacije) · r
 | Datum | Šta je urađeno | PR |
 |---|---|---|
 | 2026-11-03 | Ideja, plan, skelet repozitorijuma i CI | — |
+| 2026-11-03 | 1.1 demo dokumenti (SR/DE/EN) + 1.2 loader-i PDF/DOCX/TXT sa testovima; ADR-009–011 | #1 |

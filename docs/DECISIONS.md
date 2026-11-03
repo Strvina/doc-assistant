@@ -42,3 +42,28 @@ Sve spoljne usluge imaju Fake implementacije.
 ### ADR-008 · Agent bez framework-a (faza 5)
 **Odluka:** tool use preko nativnih API-ja (Claude tool use / OpenAI function calling), sopstvena petlja.
 **Zašto:** isti razlog kao ADR-002; pokazuje razumevanje kako agenti rade.
+
+### ADR-009 · PyMuPDF ostaje na 1.x liniji
+**Odluka:** `pymupdf>=1.28.2,<2`.
+**Zašto:** `pymupdf` 2.x (izašao 2. 11. 2026.) uvlači `onnxruntime`, `numpy`, `networkx` i
+`pymupdf4llm` (~65 MB wheel + zavisnosti) za analizu rasporeda koja nam ne treba. 1.x nema
+zavisnosti, što je bitno za brz CI i mali demo deploy.
+**Alternativa:** preći na 2.x ako zatreba prepoznavanje tabela/rasporeda (npr. za skenirane ili složene PDF-ove).
+
+### ADR-010 · "Strana" u DOCX = tekst između eksplicitnih preloma strane
+**Odluka:** DOCX loader deli dokument na strane samo na eksplicitnim prelomima
+(`Ctrl+Enter` / `w:br type="page"` i "Page break before" na pasusu). Tabele se čitaju redom kojim
+se pojavljuju, ćelije spojene sa ` | `. TXT/MD je jedna strana, osim ako sadrži form feed (`\f`).
+Prazne strane se preskaču, ali se numeracija ne pomera.
+**Zašto:** DOCX ne čuva raspored strana — on zavisi od fonta, štampača i verzije Word-a.
+Word-ovi `lastRenderedPageBreak` markeri postoje samo ako je fajl sačuvan u Word-u i zastare posle
+izmena, pa bi citat "str. X" mogao da bude pogrešan bez upozorenja.
+**Alternativa:** citirati DOCX po naslovu poglavlja umesto po strani — razmotriti u fazi 3
+ako se pokaže da su strane u DOCX-u nedovoljno precizne.
+
+### ADR-011 · Demo dokumenti se generišu iz tekstualnih izvora
+**Odluka:** sadržaj demo dokumenata je u `scripts/sample_docs_src/*.md` (mali podskup Markdown-a),
+a `scripts/build_sample_docs.py` od njih pravi PDF/DOCX/TXT u `data/sample_docs/`.
+I izvori i generisani fajlovi su u gitu.
+**Zašto:** sadržaj se lako menja i pregleda u diff-u; generisani fajlovi su odmah spremni za demo i
+testove. Firma (Panelvolt d.o.o.), ljudi, brojevi telefona i domeni (`*.example`) su izmišljeni.
