@@ -76,3 +76,29 @@ redovima, rečenicama i rečima. PDF loader spaja redove jednog PyMuPDF bloka u 
 rečenice bile presečene prelomom reda; po blokovima chunker dobija prirodne granice, a red tabele
 (`M8 20 Nm 13 mm`) ostaje ceo.
 **Cena:** rečenica koja prelazi na sledeću stranu deli se na dva chunk-a.
+
+### ADR-013 · Indeks pamti embedder; `EMBEDDING_PROVIDER=fake` za rad bez ključa
+**Odluka:** Chroma kolekcija u metapodacima čuva ime embedder-a (npr. `openai:text-embedding-3-small`).
+Ako se indeks otvori drugim embedder-om → jasna greška i uputstvo `index --rebuild`.
+`FakeEmbedder` (heširane reči + trigrami) se može uključiti i van testova sa `EMBEDDING_PROVIDER=fake`.
+Dokument se identifikuje po imenu fajla: isti naziv + nov sadržaj zamenjuje staru verziju,
+isti sadržaj se ne embeduje ponovo (ušteda na API pozivima).
+**Zašto:** vektori različitih modela nisu uporedivi — mešanje bi tiho vraćalo besmislene rezultate.
+Fake režim omogućava da se ceo tok (index → search) proba bez API ključa.
+**Ograničenje:** fake embeddings ne razumeju značenje ni prevod (SR pitanje neće naći DE odgovor).
+
+### ADR-014 · LLM sloj: kontekst u user poruci, citati se proveravaju, refusal fallback
+**Odluka:**
+- Sistemski prompt je fiksan (može da se kešira); dokumenti idu u user poruku kao
+  `<documents><document source=".." page="..">`, uz pravilo da su dokumenti podaci, ne instrukcije.
+- Citati `[fajl, str. N]` se parsiraju iz odgovora i proveravaju protiv pronađenih chunk-ova;
+  citat na stranu koja nije bila u kontekstu ide u `invalid_citations` (izmišljen izvor).
+  `Answer.found` = postoji bar jedan validan citat.
+- Prazan indeks / nema rezultata → odgovor "Nema toga..." bez poziva LLM-a (nema troška).
+- Claude: zvanični `anthropic` SDK, `max_tokens=16000`, adaptivno razmišljanje (podrazumevano
+  za model), `ANTHROPIC_EFFORT` opciono; server-side refusal fallback (`fallbacks="default"`,
+  beta `server-side-fallback-2026-07-01`) za sve osim Haiku modela.
+- OpenAI: Responses API, `store=False`; `OPENAI_MODEL` mora biti postavljen (bez pogađanja imena modela).
+- `LLM_PROVIDER=fake` — offline odgovor (prva rečenica najboljeg chunk-a + citat) za probu UI-ja bez ključa.
+**Zašto:** proverljivi citati su suština projekta; fiksni sistemski prompt smanjuje cenu;
+fake provajder omogućava razvoj i demo toka bez API kredita.

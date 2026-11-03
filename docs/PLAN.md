@@ -27,22 +27,23 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 
 ## Faza 2 — Indeks i pretraga (7–8. 11.)  · grana: `feat/retrieval`
 
-- [ ] 2.1 `Embedder` interfejs + `OpenAIEmbedder` + `FakeEmbedder` za testove
-- [ ] 2.2 `VectorStore` nad ChromaDB (persist u `data/index/`): add, search, delete po dokumentu
-- [ ] 2.3 `retrieve(question, k=5)` → chunk-ovi sa skorom
-- [ ] 2.4 CLI skripta: `uv run python -m docassist.cli index data/sample_docs` i `ask "pitanje"`
-- [ ] 2.5 Testovi (sa FakeEmbedder, bez mreže)
+- [x] 2.1 `Embedder` interfejs + `OpenAIEmbedder` + `FakeEmbedder` za testove
+- [x] 2.2 `VectorStore` nad ChromaDB (persist u `data/index/`): add, search, delete po dokumentu
+- [x] 2.3 `retrieve(question, k=5)` → chunk-ovi sa skorom
+- [x] 2.4 CLI skripta: `uv run python -m docassist.cli index data/sample_docs` i `search "pitanje"`
+      (+ `docs`, `delete`; `ask` sa LLM odgovorom dolazi u fazi 3)
+- [x] 2.5 Testovi (sa FakeEmbedder, bez mreže)
 
 **Gotovo kad:** iz terminala vidim relevantne chunk-ove za pitanje na srpskom o nemačkom dokumentu.
 
 ## Faza 3 — LLM sloj i odgovori sa citatima (9–10. 11.)  · grana: `feat/llm`
 
-- [ ] 3.1 `LLMProvider` interfejs + `ClaudeProvider` + `OpenAIProvider` + `FakeProvider`
-- [ ] 3.2 Sistemski prompt: odgovaraj samo iz konteksta, citiraj `[izvor, str. X]`,
+- [x] 3.1 `LLMProvider` interfejs + `ClaudeProvider` + `OpenAIProvider` + `FakeProvider`
+- [x] 3.2 Sistemski prompt: odgovaraj samo iz konteksta, citiraj `[izvor, str. X]`,
       odgovori na jeziku pitanja, reci "Nema toga u dokumentima" kad nema
-- [ ] 3.3 `answer(question)` → `Answer(text, citations, provider, latency, tokens)`
-- [ ] 3.4 Prekidač provajdera preko `.env` (`LLM_PROVIDER=claude|openai`)
-- [ ] 3.5 Testovi: format citata, "ne znam" ponašanje (sa FakeProvider)
+- [x] 3.3 `answer(question)` → `Answer(text, citations, provider, latency, tokens)`
+- [x] 3.4 Prekidač provajdera preko `.env` (`LLM_PROVIDER=claude|openai|fake`) i `ask --provider`
+- [x] 3.5 Testovi: format citata, "ne znam" ponašanje (sa FakeProvider)
 
 ## Faza 4 — Streamlit UI + deploy = **MVP** (11–14. 11.)  · grana: `feat/ui`
 
