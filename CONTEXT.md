@@ -26,23 +26,23 @@ ChromaDB · Streamlit (UI) · FastAPI (API, faza 5) · n8n (automatizacije) · r
 
 ## Trenutno stanje
 
-- **Faza:** 1 — Učitavanje dokumenata — **gotova** (grana `feat/ingest`, PR #1)
+- **Faza:** 2 — Indeks i pretraga — **gotova** (grana `feat/retrieval`, PR #2, nadovezan na PR #1)
 - **Urađeno:**
   - Faza 0: skelet, planski fajlovi, CI, GitHub repo `Strvina/doc-assistant`, `main` push-ovan.
-  - 1.1: 5 demo dokumenata izmišljene firme Panelvolt d.o.o. u `data/sample_docs/`
-    (2× PDF, 2× DOCX, 1× TXT; SR/DE/EN), generišu se skriptom `scripts/build_sample_docs.py`.
-  - 1.2: `docassist.ingest.load_document(path) -> list[Page]` za PDF, DOCX, TXT/MD.
-  - 1.3: `chunk_pages()` + `ingest(path) -> list[Chunk]` (800 znakova, preklapanje 150).
-  - 1.4: `tests/test_loaders.py`, `tests/test_chunker.py`.
+  - Faza 1 (PR #1): demo dokumenti, loader-i PDF/DOCX/TXT, chunking, `ingest(path)`.
+  - Faza 2 (PR #2): `Embedder` (`OpenAIEmbedder`, `FakeEmbedder`), `VectorStore` nad Chroma,
+    `retrieve()`, `factory.py`, CLI (`index`, `search`, `docs`, `delete`).
 - **U toku:** —
 - **Blokirano / ostalo iz faze 0:**
   - 0.5 zaštita grane `main` nije uključena (sekcija uklonjena iz `WORKFLOW.md` — odlučiti da li ostaje u planu).
-  - 0.6 lokalni `.env` sa API ključevima — potreban od faze 2 za pravo indeksiranje.
+  - 0.6 lokalni `.env` sa API ključevima — **bez njega ništa nije probano sa pravim OpenAI embeddings**.
 
 ## Sledeći korak
 
-1. Pregledati i spojiti PR #1 (`feat/ingest`).
-2. Faza 2 — `feat/retrieval`: `Embedder` + `FakeEmbedder`, Chroma `VectorStore`, `retrieve()`, CLI.
+1. Pregledati i spojiti PR #1, pa PR #2 (redom; PR #2 je napravljen na grani `feat/ingest`).
+2. Kad ključevi budu u `.env`: `uv run python -m docassist.cli index data/sample_docs --rebuild`
+   pa `search "Koliki je moment pritezanja za M8?"` → očekivano `montageanleitung_pv400.pdf`, str. 2.
+3. Faza 3 — `feat/llm`: `LLMProvider` (Claude, OpenAI, Fake), prompt, `answer()`.
 
 ## Napomene za sledeću sesiju
 
@@ -50,7 +50,9 @@ ChromaDB · Streamlit (UI) · FastAPI (API, faza 5) · n8n (automatizacije) · r
 - DOCX "strane" su delovi između eksplicitnih preloma strane (ADR-010); demo DOCX-ovi ih imaju.
 - PDF se čita po blokovima: jedan pasus / stavka liste / red tabele = jedan red (ADR-012).
 - Chunk-ovi ne prelaze granicu strane; `chunk_id` = `izvor::pN::i`, `doc_id` = hash sadržaja fajla.
-- `pymupdf` je namerno na 1.x (ADR-009).
+- Indeks pamti embedder; promena embedder-a traži `index --rebuild` (ADR-013).
+- `EMBEDDING_PROVIDER=fake` = rad bez ključa (samo poklapanje reči, bez prevoda SR↔DE).
+- `pymupdf` je namerno na 1.x (ADR-009). Lokalni venv je trenutno na Python 3.14, CI na 3.12.
 
 ## Otvorena pitanja
 
@@ -63,3 +65,4 @@ ChromaDB · Streamlit (UI) · FastAPI (API, faza 5) · n8n (automatizacije) · r
 |---|---|---|
 | 2026-11-03 | Ideja, plan, skelet repozitorijuma i CI | — |
 | 2026-11-03 | Faza 1: demo dokumenti (SR/DE/EN), loader-i PDF/DOCX/TXT, chunking, testovi; ADR-009–012 | #1 |
+| 2026-11-03 | Faza 2: embedder (OpenAI/Fake), Chroma store, retrieve, CLI; ADR-013 | #2 |

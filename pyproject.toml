@@ -5,6 +5,8 @@ description = "Internal AI assistant that answers questions from company documen
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "chromadb>=1.5.9",
+    "openai>=3.44.0",
     "pymupdf>=1.28.2,<2",
     "python-docx>=1.2.0",
     "python-dotenv>=1.2.4",

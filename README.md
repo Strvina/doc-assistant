@@ -27,6 +27,18 @@ cp .env.example .env    # add your API keys
 uv run pytest
 ```
 
+## Command line
+
+```bash
+uv run python -m docassist.cli index data/sample_docs        # load, chunk, embed, store
+uv run python -m docassist.cli search "Koliko traje godišnji odmor?"
+uv run python -m docassist.cli docs                          # list indexed documents
+uv run python -m docassist.cli delete <doc_id>
+```
+
+No API key yet? Set `EMBEDDING_PROVIDER=fake` in `.env` to try indexing and search offline
+(keyword-like matching only; switching back needs `index --rebuild`).
+
 ## Demo documents
 
 [`data/sample_docs/`](data/sample_docs/) contains documents of a **fictional** switchgear
