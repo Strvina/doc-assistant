@@ -9,8 +9,9 @@ from pathlib import Path
 
 import streamlit as st
 
+from docassist.agent import run_agent
 from docassist.config import Settings
-from docassist.factory import MissingAPIKeyError, build_llm, build_store
+from docassist.factory import MissingAPIKeyError, build_llm, build_store, build_tool_context
 from docassist.ingest import SUPPORTED_EXTENSIONS, DocumentLoadError, ingest
 from docassist.llm import LLMError
 from docassist.rag import Answer, answer
@@ -62,7 +63,7 @@ def add_files(store: VectorStore, paths: list[Path]) -> None:
             st.sidebar.info(f"{path.name}: already indexed")
 
 
-def sidebar(settings: Settings, store: VectorStore) -> tuple[str, int]:
+def sidebar(settings: Settings, store: VectorStore) -> tuple[str, int, bool]:
     st.sidebar.header("Model")
     options = list(PROVIDERS)
     default = options.index(settings.llm_provider)
@@ -76,6 +77,12 @@ def sidebar(settings: Settings, store: VectorStore) -> tuple[str, int]:
         key="provider",
     )
     top_k = st.sidebar.slider("Chunks given to the model", 1, 10, settings.top_k, key="top_k")
+    agent_mode = st.sidebar.toggle(
+        "Agent mode (tools)",
+        key="agent_mode",
+        help="The model decides itself when to search, read a whole document, "
+        "escalate a question to a person or draft a leave request.",
+    )
 
     st.sidebar.header("Documents")
     uploads = None
@@ -120,10 +127,16 @@ def sidebar(settings: Settings, store: VectorStore) -> tuple[str, int]:
                 uploaded.unlink()  # also remove our copy of the file
             st.rerun()
 
-    return provider, top_k
+    return provider, top_k, agent_mode
 
 
 def render_answer(result: Answer) -> None:
+    if result.tool_calls:
+        with st.expander(f"🛠 {len(result.tool_calls)} tool call(s)"):
+            for call in result.tool_calls:
+                icon = "⚠️" if call.is_error else "✅"
+                st.markdown(f"{icon} `{call.name}` {call.input}")
+                st.text(call.output[:1500])
     st.markdown(result.text)
     for citation in result.citations:
         with st.expander(f"📄 {citation.source} — str. {citation.page}"):
@@ -151,7 +164,7 @@ def main() -> None:
         st.error(str(exc))
         st.stop()
 
-    provider, top_k = sidebar(settings, store)
+    provider, top_k, agent_mode = sidebar(settings, store)
 
     st.title("📄 Doc Assistant")
     st.caption(
@@ -184,14 +197,15 @@ def main() -> None:
     with st.chat_message("assistant"):
         try:
             llm = build_llm(settings, provider)
-            with st.spinner("Searching the documents…"):
-                result = answer(
-                    question,
-                    store,
-                    llm,
-                    k=top_k,
-                    history=[(h.question, h.text) for h in history[-3:]],
-                )
+            recent = [(h.question, h.text) for h in history[-3:]]
+            if agent_mode:
+                with st.spinner("Working…"):
+                    ctx = build_tool_context(settings, store)
+                    ctx.top_k = top_k
+                    result = run_agent(question, ctx, llm, history=recent)
+            else:
+                with st.spinner("Searching the documents…"):
+                    result = answer(question, store, llm, k=top_k, history=recent)
         except (MissingAPIKeyError, LLMError) as exc:
             st.error(str(exc))
             return

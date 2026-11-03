@@ -1,0 +1,57 @@
+{
+  "name": "Doc Assistant - escalation to a person",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "doc-assistant-escalation",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "Escalation webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "00000000-0000-0000-0000-000000000065"
+    },
+    {
+      "parameters": {
+        "fromEmail": "doc-assistant@example.com",
+        "toEmail": "hr@example.com",
+        "subject": "=[Doc Assistant] Pitanje bez odgovora u dokumentima ({{ $json.body.id }})",
+        "emailFormat": "text",
+        "text": "=Zaposleni je postavio pitanje na koje dokumenti ne daju odgovor.\n\nPitanje: {{ $json.body.question }}\nRazlog: {{ $json.body.reason }}\nKontakt: {{ $json.body.contact }}\nVreme: {{ $json.body.created_at }}\nReferenca: {{ $json.body.id }}\n\nOdgovorite zaposlenom direktno, a ako odgovor treba da važi za sve, dopunite dokumente.",
+        "options": {}
+      },
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "Notify HR by e-mail",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        280,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Escalation webhook": {
+      "main": [
+        [
+          {
+            "node": "Notify HR by e-mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

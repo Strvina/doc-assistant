@@ -27,6 +27,9 @@ class Settings:
     index_dir: Path
     top_k: int
     allow_uploads: bool = True
+    escalation_webhook_url: str | None = None
+    outbox_dir: Path = Path("data/outbox")
+    api_token: str | None = None
     max_questions_per_session: int = 30
 
     @classmethod
@@ -60,6 +63,9 @@ class Settings:
             embedding_model=_env("EMBEDDING_MODEL", "text-embedding-3-small"),
             index_dir=Path(_env("INDEX_DIR", "data/index")),
             top_k=int(_env("TOP_K", "5")),
+            escalation_webhook_url=_env("ESCALATION_WEBHOOK_URL") or None,
+            outbox_dir=Path(_env("OUTBOX_DIR", "data/outbox")),
+            api_token=_env("API_TOKEN") or None,
             allow_uploads=_env("ALLOW_UPLOADS", "true").lower() in ("1", "true", "yes"),
             max_questions_per_session=int(_env("MAX_QUESTIONS_PER_SESSION", "30")),
         )

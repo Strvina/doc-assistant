@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from html import unescape
+from typing import TYPE_CHECKING, Any
 
-from docassist.llm.base import LLMResult, Message
+from docassist.llm.base import AgentRun, LLMResult, Message, ToolCall
 from docassist.llm.prompts import NOT_FOUND_SR
+
+if TYPE_CHECKING:
+    from docassist.agent.tools import Tool
 
 Responder = Callable[[str, list[Message]], str]
 
@@ -33,11 +37,18 @@ def quote_first_document(system: str, messages: list[Message]) -> str:
 class FakeProvider:
     """Returns canned answers and records every call. No network, no cost."""
 
-    def __init__(self, responder: Responder | str = quote_first_document) -> None:
+    def __init__(
+        self,
+        responder: Responder | str = quote_first_document,
+        tool_script: Sequence[tuple[str, dict[str, Any]]] | None = None,
+    ) -> None:
+        """`tool_script`: tool calls the fake agent makes, in order. Default: one
+        search_documents call with the user's question."""
         if isinstance(responder, str):
             fixed = responder
             responder = lambda system, messages: fixed  # noqa: E731
         self._responder = responder
+        self._tool_script = tool_script
         self.calls: list[tuple[str, list[Message]]] = []
 
     @property
@@ -54,4 +65,32 @@ class FakeProvider:
             input_tokens=prompt_chars // 4,  # rough token estimate, just for display
             output_tokens=len(text) // 4,
             stop_reason="end",
+        )
+
+    def run_agent(
+        self, system: str, messages: list[Message], tools: list[Tool], max_steps: int = 8
+    ) -> AgentRun:
+        from docassist.agent.tools import execute_tool
+
+        question = messages[-1]["content"]
+        script = self._tool_script
+        if script is None:
+            script = [("search_documents", {"query": question})]
+
+        calls: list[ToolCall] = []
+        for name, args in list(script)[:max_steps]:
+            output, is_error = execute_tool(tools, name, args)
+            calls.append(ToolCall(name, args, output, is_error))
+
+        # Answer from the last successful tool output, as if it were the document context.
+        context = next((c.output for c in reversed(calls) if not c.is_error), "")
+        result = self.complete(system, [{"role": "user", "content": context}])
+        return AgentRun(
+            result.text,
+            calls,
+            "fake",
+            result.input_tokens,
+            result.output_tokens,
+            "end",
+            len(calls) + 1,
         )

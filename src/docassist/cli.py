@@ -2,7 +2,7 @@
 
 uv run python -m docassist.cli index data/sample_docs
 uv run python -m docassist.cli search "Koliki je moment pritezanja za M8?"
-uv run python -m docassist.cli ask "Koliko dana godišnjeg odmora imam?" [--provider openai]
+uv run python -m docassist.cli ask "Koliko dana godišnjeg odmora imam?" [--provider X] [--agent]
 uv run python -m docassist.cli docs
 uv run python -m docassist.cli delete <doc_id>
 """
@@ -14,8 +14,9 @@ import sys
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 
+from docassist.agent import run_agent
 from docassist.config import Settings
-from docassist.factory import MissingAPIKeyError, build_llm, build_store
+from docassist.factory import MissingAPIKeyError, build_llm, build_store, build_tool_context
 from docassist.ingest import SUPPORTED_EXTENSIONS, DocumentLoadError, ingest
 from docassist.llm import LLMError
 from docassist.rag import answer
@@ -53,6 +54,7 @@ def _parser() -> argparse.ArgumentParser:
     ask.add_argument("question")
     ask.add_argument("-k", type=int, default=None, help="chunks given to the LLM (default TOP_K)")
     ask.add_argument("--provider", choices=["claude", "openai", "fake"], default=None)
+    ask.add_argument("--agent", action="store_true", help="let the model use tools")
     ask.set_defaults(handler=cmd_ask)
 
     docs = commands.add_parser("docs", help="list indexed documents")
@@ -96,7 +98,15 @@ def cmd_search(args: argparse.Namespace, settings: Settings) -> int:
 def cmd_ask(args: argparse.Namespace, settings: Settings) -> int:
     store = build_store(settings)
     llm = build_llm(settings, args.provider)
-    result = answer(args.question, store, llm, k=args.k or settings.top_k)
+    if args.agent:
+        result = run_agent(args.question, build_tool_context(settings, store), llm)
+        for call in result.tool_calls:
+            status = "error" if call.is_error else "ok"
+            print(f"  → {call.name}({call.input}) [{status}]")
+        if result.tool_calls:
+            print()
+    else:
+        result = answer(args.question, store, llm, k=args.k or settings.top_k)
 
     print(result.text)
     if result.citations:

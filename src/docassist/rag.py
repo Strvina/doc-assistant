@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from docassist.llm import NOT_FOUND_SR, SYSTEM_PROMPT, LLMProvider, Message, build_user_message
+from docassist.llm.base import ToolCall
 from docassist.models import Chunk
 from docassist.retrieval import SearchResult, VectorStore, retrieve
 
@@ -39,6 +40,7 @@ class Answer:
     output_tokens: int = 0
     stop_reason: str = "end"
     invalid_citations: list[str] = field(default_factory=list)
+    tool_calls: list[ToolCall] = field(default_factory=list)  # agent mode only
 
     @property
     def found(self) -> bool:

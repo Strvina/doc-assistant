@@ -90,3 +90,14 @@ def test_public_demo_mode(tmp_path, monkeypatch):
         assert "limit" in at.info[0].value
     finally:
         st.cache_resource.clear()
+
+
+def test_agent_mode_shows_tool_calls(app):
+    app.sidebar.button(key="load_demo").click().run()
+    app.sidebar.toggle(key="agent_mode").set_value(True).run()
+
+    app.chat_input[0].set_value("Kada radi kantina?").run()
+
+    assert not app.exception
+    assistant = app.chat_message[1]
+    assert assistant.expander[0].label == "🛠 1 tool call(s)"

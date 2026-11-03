@@ -19,6 +19,7 @@ htmlcov/
 # Local data (vector index, logs, uploads)
 data/index/
 data/uploads/
+data/outbox/
 logs/
 *.sqlite
 *.db

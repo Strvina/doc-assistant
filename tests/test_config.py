@@ -21,6 +21,9 @@ def clean_env(monkeypatch):
         "TOP_K",
         "ALLOW_UPLOADS",
         "MAX_QUESTIONS_PER_SESSION",
+        "ESCALATION_WEBHOOK_URL",
+        "OUTBOX_DIR",
+        "API_TOKEN",
     ):
         monkeypatch.delenv(var, raising=False)
     return monkeypatch

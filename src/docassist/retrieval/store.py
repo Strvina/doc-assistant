@@ -153,6 +153,17 @@ class VectorStore:
         ]
         return sorted(docs, key=lambda d: d.source.lower())
 
+    def document_chunks(self, source: str) -> list[Chunk]:
+        """All chunks of one document (by file name), in reading order."""
+        found = self._collection.get(where={"source": source}, include=["documents", "metadatas"])
+        chunks = [
+            Chunk(chunk_id, meta["doc_id"], meta["source"], int(meta["page"]), text)
+            for chunk_id, text, meta in zip(
+                found["ids"], found["documents"] or [], found["metadatas"] or [], strict=True
+            )
+        ]
+        return sorted(chunks, key=lambda c: (c.page, int(c.chunk_id.rsplit("::", 1)[-1])))
+
     def delete_document(self, doc_id: str) -> int:
         """Remove every chunk of a document. Returns the number of chunks removed."""
         ids = self._collection.get(where={"doc_id": doc_id})["ids"]

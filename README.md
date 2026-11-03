@@ -52,6 +52,28 @@ No API key yet? Set `EMBEDDING_PROVIDER=fake` and `LLM_PROVIDER=fake` in `.env` 
 whole flow offline (keyword-like matching and canned answers; switching embeddings back to
 OpenAI needs `index --rebuild`).
 
+## Agent mode
+
+With `--agent` (CLI), `"agent": true` (API) or the *Agent mode* toggle (UI) the model decides
+which tools to call: `search_documents`, `list_documents`, `summarize_document`,
+`escalate_to_human` (webhook, e.g. the [n8n workflow](automations/)) and
+`create_leave_request` (draft as JSON). The loop is written directly against the Claude and
+OpenAI tool-use APIs, without an agent framework.
+
+```bash
+uv run python -m docassist.cli ask "Napravi mi zahtev za godišnji od 21. do 24. decembra, Ana Jovanović" --agent
+```
+
+## REST API
+
+```bash
+uv run uvicorn docassist.api:app --reload      # docs at http://localhost:8000/docs
+curl -X POST localhost:8000/ask -H "Content-Type: application/json"      -d '{"question": "Koliki je moment pritezanja za M8?"}'
+```
+
+`GET /health`, `GET|POST /documents`, `DELETE /documents/{doc_id}`, `POST /ask`.
+Set `API_TOKEN` to require an `X-API-Key` header.
+
 ## Demo documents
 
 [`data/sample_docs/`](data/sample_docs/) contains documents of a **fictional** switchgear

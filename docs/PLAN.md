@@ -56,14 +56,14 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 
 ## Faza 5 — Agent i automatizacija (15–20. 11.)  · grana: `feat/agent`
 
-- [ ] 5.1 Tool use (native API, bez framework-a): agent bira između alata
-  - `search_documents` — postojeća pretraga
+- [x] 5.1 Tool use (native API, bez framework-a): agent bira između alata
+  - `search_documents` — postojeća pretraga (+ `list_documents`)
   - `summarize_document` — rezime celog dokumenta
   - `escalate_to_human` — kad nema odgovora: šalje pitanje nadležnom (webhook)
   - `create_leave_request` — iz razgovora popuni zahtev za godišnji odmor (JSON)
-- [ ] 5.2 FastAPI: `POST /ask`, `POST /documents`, `GET /health`
-- [ ] 5.3 n8n workflow: webhook → email/Slack obaveštenje (export JSON u `automations/`)
-- [ ] 5.4 Testovi agent petlje sa FakeProvider-om koji "bira" alat
+- [x] 5.2 FastAPI: `POST /ask`, `POST /documents`, `GET /health` (+ `GET/DELETE /documents`, `X-API-Key`)
+- [x] 5.3 n8n workflow: webhook → email/Slack obaveštenje (export JSON u `automations/`) — nije probano u živom n8n-u
+- [x] 5.4 Testovi agent petlje sa FakeProvider-om koji "bira" alat
 
 ## Faza 6 — Evaluacija i monitoring (21–25. 11.)  · grana: `feat/eval`
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from docassist.agent.tools import JsonlFile, ToolContext, WebhookEscalator
 from docassist.config import Settings
 from docassist.llm import FakeProvider, LLMProvider
 from docassist.retrieval import Embedder, FakeEmbedder, OpenAIEmbedder, VectorStore
@@ -50,3 +51,19 @@ def build_llm(settings: Settings, provider: str | None = None) -> LLMProvider:
 
         return OpenAIProvider(settings.openai_model, api_key=settings.openai_api_key)
     raise ValueError(f"Unknown LLM provider {provider!r}")
+
+
+def build_tool_context(settings: Settings, store: VectorStore) -> ToolContext:
+    """Agent tools: escalations go to the webhook if configured, otherwise to a local file."""
+    outbox = settings.outbox_dir
+    escalator = (
+        WebhookEscalator(settings.escalation_webhook_url)
+        if settings.escalation_webhook_url
+        else JsonlFile(outbox / "escalations.jsonl")
+    )
+    return ToolContext(
+        store=store,
+        escalator=escalator,
+        leave_requests=JsonlFile(outbox / "leave_requests.jsonl"),
+        top_k=settings.top_k,
+    )
