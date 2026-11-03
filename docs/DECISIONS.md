@@ -102,3 +102,13 @@ Fake režim omogućava da se ceo tok (index → search) proba bez API ključa.
 - `LLM_PROVIDER=fake` — offline odgovor (prva rečenica najboljeg chunk-a + citat) za probu UI-ja bez ključa.
 **Zašto:** proverljivi citati su suština projekta; fiksni sistemski prompt smanjuje cenu;
 fake provajder omogućava razvoj i demo toka bez API kredita.
+
+### ADR-015 · Streamlit UI i zaštite za javni demo
+**Odluka:** `app/streamlit_app.py` koristi isti core (`build_store`, `build_llm`, `answer`).
+Za javni demo: `ALLOW_UPLOADS=false` (fiksni demo dokumenti, auto-indeksiranje pri startu,
+bez upload-a i brisanja) i `MAX_QUESTIONS_PER_SESSION` + limit od 1000 znakova po pitanju.
+Upload se čuva u `data/uploads/` (nije u gitu) i briše zajedno sa dokumentom iz indeksa.
+Prazne vrednosti u `.env` (`TOP_K=`) znače "koristi podrazumevano".
+**Zašto:** javni link troši moj API kredit i deli isti indeks među svim posetiocima —
+bez ovih ograničenja svako bi mogao da ubaci proizvoljan sadržaj ili potroši kredit.
+**Alternativa:** login/korisnici (van opsega, vidi PLAN).
