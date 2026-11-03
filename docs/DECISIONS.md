@@ -20,7 +20,7 @@ Ako se odluka promeni, ne briši staru: označi je kao *Zamenjena sa ADR-XXX*.
 **Zašto:** bez servera i Docker-a za start, dovoljno za demo.
 **Alternativa:** Postgres + pgvector (produkcijski izbor; moguća migracija kasnije).
 
-### ADR-004 · OpenAI embeddings (iza interfejsa) — *zamenjena sa ADR-018*
+### ADR-004 · OpenAI embeddings (iza interfejsa) — *zamenjena sa ADR-019*
 **Odluka:** embeddings preko OpenAI API-ja; model se podešava u `.env`.
 **Zašto:** dobar kvalitet za više jezika (SR/DE/EN), jeftino, bez teških lokalnih zavisnosti (torch).
 **Alternativa:** lokalni višejezični model (npr. multilingual-e5) — razmotriti posle evaluacije.
@@ -143,3 +143,24 @@ Test proverava da je svaka očekivana činjenica stvarno na navedenoj strani (ne
 ostaje u kodu kao neobavezna opcija (vidljiv samo uz `OPENAI_API_KEY` + `OPENAI_MODEL`).
 Embeddings prelaze sa OpenAI na lokalni višejezični model (zaseban PR) — *menja ADR-004*.
 **Zašto:** jedan provajder = jedan račun i manji trošak; arhitektura i dalje pokazuje da podržava oba.
+
+### ADR-019 · Lokalni višejezični embeddings (fastembed) + chunk 500/100
+**Odluka:** podrazumevani embedder je `LocalEmbedder` (fastembed/ONNX) sa modelom
+`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` (~0,22 GB, preuzima se jednom u
+`data/models/`). Chunk-ovi su 500 znakova sa preklapanjem 100 (bilo 800/150). OpenAI embeddings
+ostaju kao opcija (`EMBEDDING_PROVIDER=openai`). Zamenjuje ADR-004; menja veličinu iz ADR-012.
+**Merenje** (`eval/questions.yaml`, 27 pitanja sa odgovorom, tačna strana među top-5 / na 1. mestu):
+
+| Embedder | Chunk | top-5 | top-1 | Upit |
+|---|---|---|---|---|
+| fake (heš reči) | 800 | 56 % | — | — |
+| potion-multilingual-128M (0,5 GB) | 800 | 78 % | 52 % | 4 ms |
+| MiniLM-L12 multilingual (0,22 GB) | 800 | 89 % | 74 % | 18 ms |
+| mpnet-base multilingual (1,0 GB) | 800 | 93 % | 74 % | 48 ms |
+| **MiniLM-L12 multilingual** | **500** | **100 %** | **85 %** | 16 ms |
+| mpnet-base multilingual | 500 | 100 % | 78 % | 48 ms |
+
+**Zašto:** samo Claude se plaća (ADR-018); dokumenti ne napuštaju server radi indeksiranja
+(argument za zaštitu podataka); radi preko jezika (SR pitanje → DE pasus). MiniLM čita ~128 tokena,
+zato manji chunk-ovi daju bolji rezultat. Mali model staje u memoriju besplatnog hostinga.
+**Cena:** ~220 MB preuzimanja pri prvom pokretanju; indeksiranje troši CPU umesto API-ja.

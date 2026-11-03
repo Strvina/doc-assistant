@@ -13,8 +13,9 @@ from collections.abc import Iterable
 
 from docassist.models import Chunk, Page
 
-DEFAULT_CHUNK_SIZE = 800
-DEFAULT_OVERLAP = 150
+# 500/100 measured best with the local embedding model, which reads ~128 tokens (ADR-019).
+DEFAULT_CHUNK_SIZE = 500
+DEFAULT_OVERLAP = 100
 
 _SEPARATORS = ("\n\n", "\n", ". ", " ")
 

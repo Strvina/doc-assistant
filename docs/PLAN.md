@@ -19,7 +19,7 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 - [x] 1.1 Demo dokumenti u `data/sample_docs/` (izmišljena firma; SR pravilnik o radu,
       DE uputstvo za montažu, EN procedura kontrole kvaliteta, SR bezbednost na radu, FAQ)
 - [x] 1.2 Loader-i: PDF (`pymupdf`), DOCX (`python-docx`), TXT/MD → lista `Page(source, page_no, text)`
-- [x] 1.3 Chunking: ~800 karaktera, preklapanje ~150, čuva `source`, `page`, `chunk_id`
+- [x] 1.3 Chunking: ~500 karaktera, preklapanje ~100 (ADR-019), čuva `source`, `page`, `chunk_id`
 - [x] 1.4 Testovi za loader-e i chunking (`tests/test_loaders.py`, `tests/test_chunker.py`;
       fixture fajlovi se prave u `tmp_path`, bez binarnih fajlova u `tests/fixtures/`)
 
@@ -27,7 +27,7 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 
 ## Faza 2 — Indeks i pretraga (7–8. 11.)  · grana: `feat/retrieval`
 
-- [x] 2.1 `Embedder` interfejs + `OpenAIEmbedder` + `FakeEmbedder` za testove
+- [x] 2.1 `Embedder` interfejs + `LocalEmbedder` (podrazumevan, ADR-019) + `OpenAIEmbedder` + `FakeEmbedder` za testove
 - [x] 2.2 `VectorStore` nad ChromaDB (persist u `data/index/`): add, search, delete po dokumentu
 - [x] 2.3 `retrieve(question, k=5)` → chunk-ovi sa skorom
 - [x] 2.4 CLI skripta: `uv run python -m docassist.cli index data/sample_docs` i `search "pitanje"`

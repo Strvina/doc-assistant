@@ -1,13 +1,17 @@
-"""Text → vector. One interface, a real (OpenAI) and an offline (fake) implementation."""
+"""Text → vector: local multilingual model (default), OpenAI (optional), fake (tests)."""
 
 from __future__ import annotations
 
 import hashlib
 import math
 import re
+from pathlib import Path
 from typing import Any, Protocol
 
 _WORD = re.compile(r"\w+", re.UNICODE)
+
+# Chosen by measurement on eval/questions.yaml (ADR-019): small (0.22 GB), fast, multilingual.
+DEFAULT_LOCAL_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
 
 class Embedder(Protocol):
@@ -16,7 +20,49 @@ class Embedder(Protocol):
         """Identifies the model; an index can only be searched with the embedder that built it."""
         ...
 
-    def embed(self, texts: list[str]) -> list[list[float]]: ...
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        """Vectors for document passages."""
+        ...
+
+    def embed_query(self, text: str) -> list[float]:
+        """Vector for a search query (some models encode queries differently)."""
+        ...
+
+
+class LocalEmbedder:
+    """Multilingual embedding model running locally through fastembed (ONNX, no API key).
+
+    The model is downloaded once (from Hugging Face) into `cache_dir`. Documents never leave
+    the machine for indexing.
+    """
+
+    def __init__(
+        self,
+        model: str = DEFAULT_LOCAL_MODEL,
+        cache_dir: str | Path | None = None,
+        *,
+        backend: Any = None,
+        batch_size: int = 32,
+    ) -> None:
+        if backend is None:
+            from fastembed import TextEmbedding  # heavy import, only when actually used
+
+            backend = TextEmbedding(model, cache_dir=str(cache_dir) if cache_dir else None)
+        self._backend = backend
+        self._model = model
+        self._batch_size = batch_size
+
+    @property
+    def name(self) -> str:
+        return f"local:{self._model}"
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        vectors = self._backend.passage_embed(texts, batch_size=self._batch_size)
+        return [[float(x) for x in vector] for vector in vectors]
+
+    def embed_query(self, text: str) -> list[float]:
+        [vector] = list(self._backend.query_embed([text]))
+        return [float(x) for x in vector]
 
 
 class OpenAIEmbedder:
@@ -50,6 +96,9 @@ class OpenAIEmbedder:
             vectors.extend(item.embedding for item in ordered)
         return vectors
 
+    def embed_query(self, text: str) -> list[float]:
+        return self.embed([text])[0]
+
 
 class FakeEmbedder:
     """Deterministic, offline "embedding": hashed bag of words and word trigrams.
@@ -68,6 +117,9 @@ class FakeEmbedder:
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         return [self._embed_one(text) for text in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._embed_one(text)
 
     def _embed_one(self, text: str) -> list[float]:
         vector = [0.0] * self._dimensions

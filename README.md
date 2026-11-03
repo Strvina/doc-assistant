@@ -10,20 +10,20 @@ An internal AI assistant that answers employees' questions **only from documents
 
 - Upload company documents in Serbian, German or English; ask questions in any of them
 - Answers with citations, grounded strictly in uploaded documents
-- Switchable LLM provider: **Claude** or **ChatGPT**
+- Answers by **Claude**; the provider interface also supports ChatGPT (optional)
 - Agent with tools: document summary, escalation to a human, leave-request drafting
 - Evaluation suite and usage monitoring (accuracy, latency, cost, user feedback)
 - REST API + n8n automation example
 
 ## Tech stack
 
-Python 3.12 · uv · Anthropic & OpenAI APIs · ChromaDB · Streamlit · FastAPI · n8n · GitHub Actions
+Python 3.12 · uv · Claude API · local multilingual embeddings (fastembed/ONNX) · ChromaDB · Streamlit · FastAPI · n8n · GitHub Actions
 
 ## Quick start
 
 ```bash
 uv sync
-cp .env.example .env    # add your API keys
+cp .env.example .env    # add ANTHROPIC_API_KEY (the only key needed)
 uv run pytest
 ```
 
@@ -48,9 +48,10 @@ uv run python -m docassist.cli docs                          # list indexed docu
 uv run python -m docassist.cli delete <doc_id>
 ```
 
-No API key yet? Set `EMBEDDING_PROVIDER=fake` and `LLM_PROVIDER=fake` in `.env` to try the
-whole flow offline (keyword-like matching and canned answers; switching embeddings back to
-OpenAI needs `index --rebuild`).
+Search runs on a local multilingual embedding model (downloaded once, ~220 MB), so documents
+are never sent anywhere for indexing and a Serbian question finds a German passage. Only answers
+use the Claude API. No key yet? `LLM_PROVIDER=fake` gives canned answers to try the UI.
+Changing the embedding model needs `index --rebuild`.
 
 ## Agent mode
 

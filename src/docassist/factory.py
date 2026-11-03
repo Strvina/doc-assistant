@@ -5,7 +5,7 @@ from __future__ import annotations
 from docassist.agent.tools import JsonlFile, ToolContext, WebhookEscalator
 from docassist.config import Settings
 from docassist.llm import FakeProvider, LLMProvider
-from docassist.retrieval import Embedder, FakeEmbedder, OpenAIEmbedder, VectorStore
+from docassist.retrieval import Embedder, FakeEmbedder, LocalEmbedder, OpenAIEmbedder, VectorStore
 
 
 class MissingAPIKeyError(RuntimeError):
@@ -15,10 +15,12 @@ class MissingAPIKeyError(RuntimeError):
 def build_embedder(settings: Settings) -> Embedder:
     if settings.embedding_provider == "fake":
         return FakeEmbedder()
+    if settings.embedding_provider == "local":
+        return LocalEmbedder(settings.embedding_model, cache_dir=settings.embedding_cache_dir)
     if not settings.openai_api_key:
         raise MissingAPIKeyError(
-            "OPENAI_API_KEY is not set (needed for embeddings). Add it to .env, "
-            "or set EMBEDDING_PROVIDER=fake to try the app offline."
+            "OPENAI_API_KEY is not set (needed for EMBEDDING_PROVIDER=openai). Add it to .env, "
+            "or use EMBEDDING_PROVIDER=local (default, no key needed)."
         )
     return OpenAIEmbedder(settings.embedding_model, api_key=settings.openai_api_key)
 

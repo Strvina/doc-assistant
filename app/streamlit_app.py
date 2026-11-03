@@ -76,8 +76,9 @@ def add_files(store: VectorStore, paths: list[Path]) -> None:
 
 def sidebar(settings: Settings, store: VectorStore) -> tuple[str, int, bool]:
     st.sidebar.header("Model")
-    options = list(PROVIDERS)
-    default = options.index(settings.llm_provider)
+    # ChatGPT is optional (ADR-018): only offered when an OpenAI key and model are configured.
+    options = [p for p in PROVIDERS if p != "openai" or provider_available(settings, p)]
+    default = options.index(settings.llm_provider) if settings.llm_provider in options else 0
     provider = st.sidebar.radio(
         "Answer with",
         options,
