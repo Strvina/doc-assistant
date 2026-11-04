@@ -51,7 +51,7 @@ GitHub Actions · Docker / Hugging Face Spaces
 
 ## Sledeći korak
 
-1. PR za `feat/gemini` (Gemini + Groq lanac, dugmad za timove) → merge.
+1. PR #12 (`feat/gemini`: Groq + Gemini lanac, dugmad za timove) → merge. U `.env`: `LLM_PROVIDER=groq`.
 2. Kvalitet pretrage (2 promašaja u evalu, vidi `docs/EVAL_RESULTS.md`): hibridna pretraga (ključne reči +
    embeddings) i chunking koji drži tabelu zajedno sa naslovom. Eval pokretati na indeksu samo sa demo
    dokumentima (korisnikov upload menja rezultate). Zatim `--agent` eval.
@@ -101,4 +101,4 @@ GitHub Actions · Docker / Hugging Face Spaces
 | 2026-11-04 | Svi PR-ovi spojeni u main; redizajn UI-ja + screenshot | #9 |
 | 2026-11-04 | Sopstveni web UI (3 kolone, pregled dokumenata sa highlight-om, praćenje + praznine), Library, limiti na serveru, HF Spaces deploy; ADR-020 | #10 |
 | 2026-11-04 | n8n + Mailpit jednom komandom (`scripts/setup_n8n.py`), preneseno na novi `main`, provereno uživo (n8n 2.46) | #11 |
-| 2026-11-04 | Besplatni modeli: Gemini, pa Groq + lanac rezervi (ADR-021, ADR-022), eval 93 %; dugmad za prosleđivanje pitanja timovima (n8n → mejl timu) | — |
+| 2026-11-04 | Besplatni modeli: Gemini, pa Groq + lanac rezervi (ADR-021, ADR-022), eval 93 %; dugmad za prosleđivanje pitanja timovima (n8n → mejl timu) | #12 |
