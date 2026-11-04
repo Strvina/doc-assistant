@@ -59,7 +59,9 @@ def _parser() -> argparse.ArgumentParser:
     ask = commands.add_parser("ask", help="answer a question from the documents, with citations")
     ask.add_argument("question")
     ask.add_argument("-k", type=int, default=None, help="chunks given to the LLM (default TOP_K)")
-    ask.add_argument("--provider", choices=["claude", "openai", "gemini", "fake"], default=None)
+    ask.add_argument(
+        "--provider", choices=["claude", "openai", "gemini", "groq", "fake"], default=None
+    )
     ask.add_argument("--agent", action="store_true", help="let the model use tools")
     ask.set_defaults(handler=cmd_ask)
 

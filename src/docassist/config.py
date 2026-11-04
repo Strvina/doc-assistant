@@ -8,7 +8,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-VALID_PROVIDERS = ("claude", "openai", "gemini", "fake")  # fake = offline canned answers
+VALID_PROVIDERS = ("claude", "openai", "gemini", "groq", "fake")  # fake = offline canned answers
 VALID_EFFORTS = ("", "low", "medium", "high", "xhigh", "max")
 # local = multilingual model on this machine (default, ADR-019); openai = optional API;
 # fake = hashing embedder for tests (keyword-like matching only)
@@ -24,6 +24,9 @@ DEFAULT_EMBEDDING_MODELS = {
 # newest model, which is often overloaded (HTTP 503) on the free tier.
 DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
 DEFAULT_GEMINI_FALLBACK_MODEL = "gemini-flash-lite-latest"
+# Groq free tier (ADR-022): fast open models, 1,000 requests/day and 8,000 tokens/min each.
+DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
+DEFAULT_GROQ_FALLBACK_MODEL = "openai/gpt-oss-20b"
 
 
 # Who an unanswered question can be forwarded to: "id:Label:e-mail" separated by commas.
@@ -89,6 +92,9 @@ class Settings:
     gemini_api_key: str | None = None
     gemini_model: str = DEFAULT_GEMINI_MODEL
     gemini_fallback_model: str = DEFAULT_GEMINI_FALLBACK_MODEL
+    groq_api_key: str | None = None
+    groq_model: str = DEFAULT_GROQ_MODEL
+    groq_fallback_model: str = DEFAULT_GROQ_FALLBACK_MODEL
     escalation_teams: tuple[Team, ...] = parse_teams(DEFAULT_ESCALATION_TEAMS)
 
     @classmethod
@@ -121,6 +127,9 @@ class Settings:
             gemini_api_key=_env("GEMINI_API_KEY") or None,
             gemini_model=_env("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
             gemini_fallback_model=_env("GEMINI_FALLBACK_MODEL", DEFAULT_GEMINI_FALLBACK_MODEL),
+            groq_api_key=_env("GROQ_API_KEY") or None,
+            groq_model=_env("GROQ_MODEL", DEFAULT_GROQ_MODEL),
+            groq_fallback_model=_env("GROQ_FALLBACK_MODEL", DEFAULT_GROQ_FALLBACK_MODEL),
             embedding_provider=embedding_provider,
             embedding_model=_env("EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODELS[embedding_provider]),
             embedding_cache_dir=Path(_env("EMBEDDING_CACHE_DIR", "data/models")),

@@ -21,6 +21,9 @@ def isolated_data(tmp_path, monkeypatch):
         "GEMINI_API_KEY",
         "GEMINI_MODEL",
         "GEMINI_FALLBACK_MODEL",
+        "GROQ_API_KEY",
+        "GROQ_MODEL",
+        "GROQ_FALLBACK_MODEL",
         "API_TOKEN",
         "ESCALATION_WEBHOOK_URL",
     ):

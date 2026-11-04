@@ -30,8 +30,46 @@ def build_store(settings: Settings, *, rebuild: bool = False) -> VectorStore:
     return VectorStore(settings.index_dir, build_embedder(settings), rebuild=rebuild)
 
 
+FREE_SERVICES = ("groq", "gemini")  # free tiers, OpenAI-compatible (ADR-021, ADR-022)
+_KEY_HELP = {
+    "gemini": "GEMINI_API_KEY is not set. Get a free key at https://aistudio.google.com",
+    "groq": "GROQ_API_KEY is not set. Get a free key at https://console.groq.com",
+}
+
+
+def build_free_llm(settings: Settings, service: str) -> LLMProvider:
+    """The chosen free service first, then the other one as a backup when it has a key."""
+    from docassist.llm.chat_completions import ChatCompletionsProvider, endpoint
+
+    models = {
+        "gemini": (
+            settings.gemini_api_key,
+            (settings.gemini_model, settings.gemini_fallback_model),
+            8192,  # thinking models spend part of it on reasoning
+        ),
+        "groq": (
+            settings.groq_api_key,
+            (settings.groq_model, settings.groq_fallback_model),
+            2048,  # counts against Groq's 8,000 tokens/minute per model
+        ),
+    }
+    if not models[service][0]:
+        raise MissingAPIKeyError(f"{_KEY_HELP[service]} and add it to .env.")
+    endpoints = []
+    for name in [service, *(s for s in FREE_SERVICES if s != service)]:
+        key, names, max_tokens = models[name]
+        if not key:
+            continue
+        client = None
+        for model in filter(None, names):
+            ep = endpoint(name, model, key, max_tokens=max_tokens, client=client)
+            client = ep.client  # one HTTP client per service
+            endpoints.append(ep)
+    return ChatCompletionsProvider(service, endpoints)
+
+
 def build_llm(settings: Settings, provider: str | None = None) -> LLMProvider:
-    """The configured LLM, or `provider` ("claude" | "openai" | "gemini" | "fake")."""
+    """The configured LLM, or `provider` ("claude" | "openai" | "gemini" | "groq" | "fake")."""
     provider = provider or settings.llm_provider
     if provider == "fake":
         return FakeProvider()
@@ -53,19 +91,8 @@ def build_llm(settings: Settings, provider: str | None = None) -> LLMProvider:
         from docassist.llm.openai_provider import OpenAIProvider
 
         return OpenAIProvider(settings.openai_model, api_key=settings.openai_api_key)
-    if provider == "gemini":
-        if not settings.gemini_api_key:
-            raise MissingAPIKeyError(
-                "GEMINI_API_KEY is not set. Get a free key at https://aistudio.google.com "
-                "and add it to .env."
-            )
-        from docassist.llm.gemini import GeminiProvider
-
-        return GeminiProvider(
-            settings.gemini_model,
-            api_key=settings.gemini_api_key,
-            fallback_models=(settings.gemini_fallback_model,),
-        )
+    if provider in FREE_SERVICES:
+        return build_free_llm(settings, provider)
     raise ValueError(f"Unknown LLM provider {provider!r}")
 
 

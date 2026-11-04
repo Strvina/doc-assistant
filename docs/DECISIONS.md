@@ -199,3 +199,20 @@ nemačkom.
 da ostane na niskim limitima pitanja. Google na besplatnom nivou sme da koristi sadržaj za
 poboljšanje svojih modela — prihvatljivo za izmišljene demo dokumente, **ne** za prave firmine
 dokumente (za njih: Claude ili plaćeni Gemini nivo).
+
+### ADR-022 · Groq (besplatan nivo) kao glavni model za demo; lanac besplatnih modela
+**Odluka:** dodat `LLM_PROVIDER=groq` (open-weight `openai/gpt-oss-120b`, rezerva
+`openai/gpt-oss-20b`). Gemini i Groq dele jedan provajder (`ChatCompletionsProvider`,
+`src/docassist/llm/chat_completions.py`; zamenjuje `GeminiProvider` iz ADR-021) koji prolazi kroz
+**lanac**: izabrani servis (glavni + rezervni model), pa drugi besplatni servis ako ima ključ.
+Kad model vrati 429 (limit), 5xx (preopterećen) ili 413 (zahtev prevelik za minutni limit),
+odmah se prelazi na sledeći; model sa potrošenim limitom se preskače dok se limit ne obnovi
+(`retry-after` / Google `retryDelay`). Poruke se šalju u obliku koji servis prihvata (Gemini
+dobija nazad svoje "thought signatures", ostali samo standardna polja).
+**Zašto:** izmereno 4. 11.: Gemini free tier — 20 zahteva dnevno za `gemini-3.5-flash`,
+Flash-Lite 15–20 s po pozivu (agent 80–110 s). Groq free tier — 0,2–1,5 s po pozivu,
+1.000 zahteva dnevno i 8.000 tokena u minuti po modelu; eval 93 % tačno, 0 izmišljenih citata
+(`docs/EVAL_RESULTS.md`). Lanac pokriva i dnevni i minutni limit.
+**Cena:** odgovor u jednom razgovoru može doći od različitih modela (UI prikazuje koji);
+gpt-oss je strožiji od Gemini-ja kad je kontekst iscepkan (vidi EVAL_RESULTS); besplatni nivoi
+nemaju garanciju dostupnosti. Za prave firmine dokumente i dalje: Claude ili plaćeni nivo.

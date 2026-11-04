@@ -74,12 +74,15 @@ def test_config(client):
 
 
 def test_config_lists_gemini_when_key_is_set(settings, tmp_path):
-    client = make_client(settings, tmp_path, gemini_api_key="g-key", gemini_model="gemini-x")
+    client = make_client(
+        settings, tmp_path, gemini_api_key="g-key", gemini_model="gemini-x", groq_api_key="gsk"
+    )
     body = client.get("/api/config").json()
 
     gemini = next(p for p in body["providers"] if p["id"] == "gemini")
     assert gemini == {"id": "gemini", "label": "Gemini", "available": True}
     assert body["models"]["gemini"] == "gemini-x"
+    assert [p["id"] for p in body["providers"]] == ["claude", "gemini", "groq", "fake"]
 
 
 def test_health_and_empty_index(client):

@@ -51,16 +51,17 @@ PROVIDER_LABELS = {
     "claude": "Claude",
     "openai": "ChatGPT",
     "gemini": "Gemini",
+    "groq": "Groq",
     "fake": "Offline demo",
 }
-OPTIONAL_PROVIDERS = ("openai", "gemini")  # listed only when configured (ADR-018, ADR-021)
+OPTIONAL_PROVIDERS = ("openai", "gemini", "groq")  # listed only when configured (ADR-018/21/22)
 
 # --- request / response models -----------------------------------------------------------
 
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
-    provider: str | None = Field(default=None, description="claude | openai | gemini | fake")
+    provider: str | None = Field(default=None, description="claude | openai | gemini | groq | fake")
     agent: bool = Field(default=False, description="Let the model use tools (search, escalate…)")
     top_k: int | None = Field(default=None, ge=1, le=10, description="Passages for the answer")
     history: list[tuple[str, str]] = Field(
@@ -252,6 +253,7 @@ def create_app(
             "claude": bool(settings.anthropic_api_key),
             "openai": bool(settings.openai_api_key and settings.openai_model),
             "gemini": bool(settings.gemini_api_key),
+            "groq": bool(settings.groq_api_key),
             "fake": True,
         }
         providers = [
@@ -267,6 +269,7 @@ def create_app(
                 "claude": settings.anthropic_model,
                 "openai": settings.openai_model,
                 "gemini": settings.gemini_model,
+                "groq": settings.groq_model,
             },
             "allow_uploads": settings.allow_uploads,
             "max_upload_mb": settings.max_upload_mb,

@@ -70,7 +70,7 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 
 - [x] 6.1 `eval/questions.yaml`: 25–30 pitanja + očekivani izvor + ključne činjenice
 - [x] 6.2 `uv run python -m docassist.eval` → tačnost izvora, "ne znam" tačnost, latencija, trošak
-- [ ] 6.3 Uporedni izveštaj Claude modela (Sonnet vs Haiku, RAG vs agent) u `docs/EVAL_RESULTS.md` — čeka API ključ (ADR-018)
+- [ ] 6.3 Uporedni izveštaj modela u `docs/EVAL_RESULTS.md` — Groq gpt-oss-120b RAG urađen (93 %); Claude čeka kredit, agent eval sledeći
 - [x] 6.4 Logovanje upita u SQLite (pitanje, odgovor, izvori, latencija, tokeni, ocena)
 - [x] 6.5 👍/👎 u UI + jednostavna statistika (+ `POST /feedback`, `GET /stats` u API-ju)
 
