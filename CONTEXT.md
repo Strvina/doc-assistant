@@ -62,9 +62,18 @@ GitHub Actions · Docker / Hugging Face Spaces
 Sve za Hugging Face je spremno (`docs/DEPLOY.md`: Groq/Gemini, `EMBED_ORIGINS`, LFS u workflow-u);
 deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljena.
 
-1. Korisnik je tražio sve: ✅ streaming; zatim pretraga i preimenovanje razgovora, izvoz razgovora
-   (PDF/Word), Excel i PowerPoint dokumenti (+ ispravka: citati iz slika `.png/.jpg` se ne prepoznaju u
-   `rag._CITATION` i `app.js CITATION`), AI model za fotografije/tabele u slikama (opt-in, Gemini).
+1. **Korisnik je tražio 5 stvari ("sve mi uradi"), radi se redom, svaka = jedan PR koji Claude spaja
+   posle zelenog CI-ja:**
+   - [x] Odgovor se ispisuje dok nastaje (#21).
+   - [~] Pretraga i preimenovanje razgovora — grana `feat/conversation-search`, PR otvoren, CI/merge
+     nisu završeni. **Prvo:** proveriti UI u browseru (polje "Pretraži razgovore…", olovka → Enter
+     čuva / Esc odustaje), pa spojiti PR.
+   - [ ] Izvoz razgovora u PDF i Word.
+   - [ ] Excel (`.xlsx`) i PowerPoint (`.pptx`) dokumenti (`uv add openpyxl python-pptx`) + **ispravka:**
+     citati iz slika/novih formata se ne prepoznaju (`rag._CITATION` i `CITATION` u `app.js` znaju samo
+     pdf|docx|txt|md) → izvesti listu ekstenzija iz `SUPPORTED_EXTENSIONS`.
+   - [ ] AI model za fotografije/tabele u slikama (Gemini vision), uključivo po dokumentu jer slike
+     tada odlaze Google-u.
 2. Eval uvek na čistom indeksu (samo demo dokumenti): `INDEX_DIR`/`DOCUMENTS_DIR`/`LOG_DB` u privremeni folder.
 3. Treniranje modela: korisnik je odložio (opcija A = dotreniranje embeddings modela, kad se vrati na to).
 4. Claude eval (6.3) kad bude moguće platiti kredit.
@@ -125,4 +134,5 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-04 | Brisanje pitanja iz praćenja (jedno ili sva; zaključano u demo režimu) | #18 |
 | 2026-11-04 | Odgovori: Markdown tabele, naslovi i `kod` se prikazuju formatirano | #19 |
 | 2026-11-04 | Priprema za HF Space (iframe/kolačić, LFS, DEPLOY za Groq); demo odložen | #20 |
-| 2026-11-04 | Odgovor se ispisuje dok nastaje (`/ask/stream`, NDJSON); Stop prekida i generisanje; ADR-026 | — |
+| 2026-11-04 | Odgovor se ispisuje dok nastaje (`/ask/stream`, NDJSON); Stop prekida i generisanje; ADR-026 | #21 |
+| 2026-11-04 | Pretraga (bez kvačica) i preimenovanje razgovora — kod + testovi gotovi, UI još nije proveren u browseru | (PR otvoren) |
