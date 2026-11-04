@@ -110,6 +110,10 @@ class AskResponse(BaseModel):
     cost_usd: float | None = None
 
 
+class RenameRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+
+
 class CancelRequest(BaseModel):
     request_id: str = Field(min_length=1, max_length=64)
 
@@ -572,9 +576,23 @@ def create_app(
     # --- saved conversations (ADR-025) ------------------------------------------------------
 
     @app.get("/conversations")
-    def list_conversations(who: OwnerDep, conversations: ConversationsDep) -> list[dict[str, Any]]:
+    def list_conversations(
+        who: OwnerDep,
+        conversations: ConversationsDep,
+        q: Annotated[
+            str, Query(max_length=200, description="Search titles, questions, answers")
+        ] = "",
+    ) -> list[dict[str, Any]]:
         """Your saved conversations, most recently used first."""
-        return conversations.list(who)
+        return conversations.list(who, query=q)
+
+    @app.patch("/conversations/{conversation_id}")
+    def rename_conversation(
+        conversation_id: str, body: RenameRequest, who: OwnerDep, conversations: ConversationsDep
+    ) -> dict[str, bool]:
+        if not conversations.rename(who, conversation_id, body.title):
+            raise HTTPException(404, f"No conversation {conversation_id!r}")
+        return {"ok": True}
 
     @app.get("/conversations/{conversation_id}")
     def get_conversation(

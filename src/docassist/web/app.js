@@ -24,6 +24,7 @@ const ICONS = {
   open: icon('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
   download: icon('<path d="M12 4v12M7 11l5 5 5-5M4 20h16"/>'),
   close: icon('<path d="M6 6l12 12M18 6L6 18"/>'),
+  pencil: icon('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>'),
   trash: icon('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>'),
   copy: icon('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>'),
   up: icon('<path d="M7 10v10H4V10zM7 10l4-7c1.7 0 2.5 1 2.2 2.6L12.6 9H19a2 2 0 0 1 2 2.3l-1.2 7A2 2 0 0 1 17.8 20H7"/>'),
@@ -614,11 +615,13 @@ function setSideTab(tab) {
 }
 
 async function loadConversations() {
+  const query = $("#conv-filter").value.trim();
   try {
-    state.conversations = await api("/conversations");
+    state.conversations = await api(`/conversations${query ? `?q=${encodeURIComponent(query)}` : ""}`);
   } catch {
     return;
   }
+  state.conversationQuery = query;
   renderConversations();
 }
 
@@ -634,12 +637,20 @@ function when(iso) {
 
 function renderConversations() {
   const list = $("#conv-list");
-  $("#conv-count").textContent = state.conversations.length;
-  $("#conv-empty").hidden = state.conversations.length > 0;
+  if (!state.conversationQuery) $("#conv-count").textContent = state.conversations.length;
+  const empty = $("#conv-empty");
+  empty.hidden = state.conversations.length > 0;
+  empty.innerHTML = state.conversationQuery
+    ? "Nijedan razgovor ne sadrži tu reč."
+    : "Još nema sačuvanih razgovora.<br>Svako pitanje se čuva automatski.";
   list.replaceChildren(...state.conversations.map((c) => {
-    const remove = el("button", { class: "icon-btn conv-delete", type: "button", title: "Obriši razgovor",
-      "aria-label": `Obriši razgovor: ${c.title}`, html: ICONS.trash,
-      onclick: (event) => { event.stopPropagation(); deleteConversation(c); } });
+    const remove = el("span", { class: "conv-actions" },
+      el("button", { class: "icon-btn conv-edit", type: "button", title: "Preimenuj",
+        "aria-label": `Preimenuj razgovor: ${c.title}`, html: ICONS.pencil,
+        onclick: (event) => { event.stopPropagation(); startRename(event.currentTarget.closest(".conv"), c); } }),
+      el("button", { class: "icon-btn conv-delete", type: "button", title: "Obriši razgovor",
+        "aria-label": `Obriši razgovor: ${c.title}`, html: ICONS.trash,
+        onclick: (event) => { event.stopPropagation(); deleteConversation(c); } }));
     const item = el("li", { class: `conv${c.id === state.conversationId ? " active" : ""}`, tabindex: "0",
       title: c.title, onclick: () => openConversation(c.id),
       onkeydown: (event) => { if (event.key === "Enter") openConversation(c.id); } },
@@ -648,6 +659,41 @@ function renderConversations() {
       remove);
     return item;
   }));
+}
+
+// Rename in place: the title becomes an input; Enter saves, Esc or leaving the field cancels.
+function startRename(item, conversation) {
+  const title = item.querySelector(".conv-title");
+  const input = el("input", { class: "conv-rename", value: conversation.title, maxlength: "200",
+    "aria-label": "Novi naziv razgovora" });
+  let done = false;
+  const finish = async (save) => {
+    if (done) return;
+    done = true;
+    const value = input.value.trim();
+    if (save && value && value !== conversation.title) {
+      try {
+        await api(`/conversations/${encodeURIComponent(conversation.id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: value }),
+        });
+      } catch (error) {
+        toast(`Preimenovanje nije uspelo: ${error.message}`, "error");
+      }
+    }
+    await loadConversations();
+  };
+  input.addEventListener("click", (event) => event.stopPropagation());
+  input.addEventListener("keydown", (event) => {
+    event.stopPropagation();
+    if (event.key === "Enter") { event.preventDefault(); finish(true); }
+    if (event.key === "Escape") finish(false);
+  });
+  input.addEventListener("blur", () => finish(true));
+  title.replaceWith(input);
+  input.focus();
+  input.select();
 }
 
 function clearThread() {
@@ -830,6 +876,11 @@ function bindEvents() {
   $("#tab-docs").addEventListener("click", () => setSideTab("docs"));
   $("#tab-convs").addEventListener("click", () => setSideTab("convs"));
   $("#new-chat").addEventListener("click", newConversation);
+  let searchTimer;
+  $("#conv-filter").addEventListener("input", () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(loadConversations, 250);  // search while typing, not on every key
+  });
   $("#new-chat-top").addEventListener("click", newConversation);
   $("#viewer-close").addEventListener("click", closeViewer);
   $("#load-demo").addEventListener("click", loadDemo);

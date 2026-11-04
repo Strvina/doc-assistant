@@ -147,3 +147,39 @@ def test_session_cookie_is_long_lived(settings, tmp_path):
     client = TestClient(create_app(settings=settings, store=store))
     header = client.get("/").headers["set-cookie"]
     assert "Max-Age=31536000" in header and "HttpOnly" in header
+
+
+# --- search and rename ---------------------------------------------------------------------
+
+
+def test_search_finds_titles_questions_and_answers_without_diacritics(tmp_path):
+    store = ConversationStore(tmp_path / "log.sqlite")
+    canteen = store.create("a", "Kada radi kantina?")
+    store.add_turn("a", canteen, "Kada radi kantina?", "rag", {"answer": "Od 10:30 do 13:30."})
+    store.add_turn("a", canteen, "A čaj?", "rag", {"answer": "Čaj je besplatan."})
+    leave = store.create("a", "Godišnji odmor")
+    store.add_turn("a", leave, "Godišnji odmor", "rag", {"answer": "Najmanje 20 radnih dana."})
+
+    def ids(query):
+        return [c["id"] for c in store.list("a", query=query)]
+
+    assert ids("KANTINA") == [canteen]
+    assert ids("caj besplatan") == [canteen]  # words from a later turn, without diacritics
+    assert ids("godisnji 20") == [leave]
+    assert ids("parking") == []
+    assert len(ids("")) == 2
+    assert store.list("b", query="kantina") == []
+
+
+def test_rename_a_conversation(settings, tmp_path):
+    alice = browser(settings, tmp_path)
+    bob = browser(settings, tmp_path)
+    cid = ask(alice, "Kada radi kantina?")["conversation_id"]
+
+    renamed = alice.patch(f"/conversations/{cid}", json={"title": "  Kantina\n i ručak  "})
+    assert renamed.json() == {"ok": True}
+    assert alice.get("/conversations").json()[0]["title"] == "Kantina i ručak"
+    assert alice.get("/conversations", params={"q": "rucak"}).json()[0]["id"] == cid
+
+    assert bob.patch(f"/conversations/{cid}", json={"title": "Moje"}).status_code == 404
+    assert alice.patch(f"/conversations/{cid}", json={"title": ""}).status_code == 422

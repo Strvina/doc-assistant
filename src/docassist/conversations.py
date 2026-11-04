@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import secrets
 import sqlite3
+import unicodedata
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
@@ -49,6 +50,12 @@ TITLE_LENGTH = 70
 
 def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def fold(text: str) -> str:
+    """Lower case without diacritics, for search: "Česta Pitanja" -> "cesta pitanja"."""
+    plain = unicodedata.normalize("NFKD", text.casefold())
+    return "".join(ch for ch in plain if not unicodedata.combining(ch)).replace("đ", "dj")
 
 
 def make_title(question: str) -> str:
@@ -122,18 +129,43 @@ class ConversationStore:
             )
         return True
 
-    def list(self, owner: str, limit: int = 100) -> list[dict[str, Any]]:
-        """The owner's conversations, most recently used first."""
+    def list(self, owner: str, limit: int = 100, query: str = "") -> list[dict[str, Any]]:
+        """The owner's conversations, most recently used first.
+
+        `query` keeps the conversations whose title, questions or answers contain every word
+        of it, ignoring case and diacritics ("cesta" finds "česta"). Done in Python: SQLite's
+        LIKE only folds ASCII letters, and one person's conversations are few.
+        """
+        words = fold(query).split()
         with closing(self._connect()) as db:
             db.row_factory = sqlite3.Row
             rows = db.execute(
-                "SELECT c.id, c.title, c.created_at, c.updated_at, COUNT(t.id) AS turns"
+                "SELECT c.id, c.title, c.created_at, c.updated_at, COUNT(t.id) AS turns,"
+                " GROUP_CONCAT(t.question || ' ' || json_extract(t.response, '$.answer'), ' ')"
+                " AS content"
                 " FROM conversations c LEFT JOIN turns t ON t.conversation_id = c.id"
-                " WHERE c.owner = ? GROUP BY c.id ORDER BY c.updated_at DESC, c.rowid DESC"
-                " LIMIT ?",
-                (owner, limit),
+                " WHERE c.owner = ? GROUP BY c.id ORDER BY c.updated_at DESC, c.rowid DESC",
+                (owner,),
             ).fetchall()
-        return [dict(row) for row in rows]
+        found = []
+        for row in rows:
+            text = fold(f"{row['title']} {row['content'] or ''}")
+            if all(word in text for word in words):
+                found.append(
+                    {k: row[k] for k in ("id", "title", "created_at", "updated_at", "turns")}
+                )
+            if len(found) == limit:
+                break
+        return found
+
+    def rename(self, owner: str, conversation_id: str, title: str) -> bool:
+        """Give a conversation a new title. False if it is not the owner's."""
+        with closing(self._connect()) as db, db:
+            renamed = db.execute(
+                "UPDATE conversations SET title = ? WHERE id = ? AND owner = ?",
+                (make_title(title), conversation_id, owner),
+            ).rowcount
+        return renamed == 1
 
     def get(self, owner: str, conversation_id: str) -> dict[str, Any] | None:
         """A conversation with all its turns, or None (unknown, or someone else's)."""

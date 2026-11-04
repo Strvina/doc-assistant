@@ -220,9 +220,28 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .new-chat { width: 100%; }
 [data-theme="dark"] .new-chat { background: var(--amber); border-color: var(--amber); color: var(--navy-900); }
 .new-chat svg { width: 16px; height: 16px; }
+.conv-search { padding: 0 14px 6px; }
+.conv-search input {
+  width: 100%; height: 36px; padding: 0 12px;
+  border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2);
+}
+.conv .conv-actions {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: flex; gap: 2px;
+  opacity: 0; transition: opacity .15s;
+}
+.conv:hover .conv-actions, .conv:focus-within .conv-actions, .conv.active .conv-actions { opacity: 1; }
+.conv .conv-actions .icon-btn { width: 30px; height: 30px; color: var(--muted); }
+.conv .conv-actions .icon-btn:hover { color: var(--ink); }
+.conv .conv-actions .conv-delete:hover { color: var(--bad); }
+.conv .conv-actions svg { width: 16px; height: 16px; }
+.conv-rename {
+  width: 100%; height: 32px; padding: 0 8px; font: inherit; font-weight: 600; font-size: 13.5px;
+  border: 1px solid var(--amber); border-radius: 8px; background: var(--surface); color: var(--ink);
+}
+@media (hover: none) { .conv .conv-actions { opacity: 1; } }
 .conv-list { list-style: none; margin: 0; padding: 4px 10px; overflow-y: auto; flex: 1; }
 .conv {
-  position: relative; display: grid; gap: 3px; padding: 10px 44px 10px 12px;
+  position: relative; display: grid; gap: 3px; padding: 10px 76px 10px 12px;
   border-radius: 11px; cursor: pointer; border: 1px solid transparent;
 }
 .conv:hover { background: var(--surface-2); border-color: var(--line); }
@@ -232,15 +251,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .conv-meta { font-size: 12px; color: var(--muted); }
-.conv .conv-delete {
-  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
-  width: 32px; height: 32px; color: var(--muted); opacity: 0; transition: opacity .15s;
-}
-.conv:hover .conv-delete, .conv:focus-within .conv-delete, .conv.active .conv-delete { opacity: 1; }
-.conv .conv-delete:hover { color: var(--bad); }
-.conv .conv-delete svg { width: 17px; height: 17px; }
 .conv-empty { margin: 0; padding: 24px 18px; text-align: center; font-size: 13px; line-height: 1.6; color: var(--muted); }
-@media (hover: none) { .conv .conv-delete { opacity: 1; } }
 
 .library-empty { padding: 20px 18px; text-align: center; display: grid; gap: 10px; color: var(--muted); }
 .library-empty p { margin: 0; color: var(--ink-2); font-weight: 600; }
