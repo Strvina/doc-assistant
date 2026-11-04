@@ -242,7 +242,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(prog="docassist.eval", description="Evaluate answers.")
-    parser.add_argument("--provider", choices=["claude", "openai", "fake"], default=None)
+    parser.add_argument("--provider", choices=["claude", "openai", "gemini", "fake"], default=None)
     parser.add_argument("--agent", action="store_true", help="evaluate the tool-using agent")
     parser.add_argument("--retrieval-only", action="store_true", help="no LLM calls")
     parser.add_argument("--limit", type=int, default=None, help="only the first N questions")
@@ -268,9 +268,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         label, model = "retrieval", ""
     else:
         label = llm.name + ("-agent" if args.agent else "")
-        model = {"claude": settings.anthropic_model, "openai": settings.openai_model}.get(
-            llm.name, llm.name
-        )
+        model = {
+            "claude": settings.anthropic_model,
+            "openai": settings.openai_model,
+            "gemini": settings.gemini_model,
+        }.get(llm.name, llm.name)
     summary = summarize(results, model)
     embeddings = settings.embedding_model if settings.embedding_provider == "openai" else "fake"
     title = f"{label} · {model or '-'} · embeddings {embeddings} · {datetime.now():%Y-%m-%d %H:%M}"

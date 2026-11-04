@@ -8,7 +8,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-VALID_PROVIDERS = ("claude", "openai", "fake")  # fake = offline canned answers
+VALID_PROVIDERS = ("claude", "openai", "gemini", "fake")  # fake = offline canned answers
 VALID_EFFORTS = ("", "low", "medium", "high", "xhigh", "max")
 # local = multilingual model on this machine (default, ADR-019); openai = optional API;
 # fake = hashing embedder for tests (keyword-like matching only)
@@ -18,6 +18,12 @@ DEFAULT_EMBEDDING_MODELS = {
     "openai": "text-embedding-3-small",
     "fake": "hashing",
 }
+
+
+# Free tier of the Gemini API (ADR-021). A pinned model: the "-latest" alias points to the
+# newest model, which is often overloaded (HTTP 503) on the free tier.
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
+DEFAULT_GEMINI_FALLBACK_MODEL = "gemini-flash-lite-latest"
 
 
 @dataclass(frozen=True)
@@ -42,6 +48,9 @@ class Settings:
     max_questions_per_ip_hour: int = 120
     documents_dir: Path = Path("data/documents")
     max_upload_mb: int = 20
+    gemini_api_key: str | None = None
+    gemini_model: str = DEFAULT_GEMINI_MODEL
+    gemini_fallback_model: str = DEFAULT_GEMINI_FALLBACK_MODEL
 
     @classmethod
     def from_env(cls, load_dotenv_file: bool = True) -> Settings:
@@ -70,6 +79,9 @@ class Settings:
             anthropic_effort=effort or None,
             openai_api_key=_env("OPENAI_API_KEY") or None,
             openai_model=_env("OPENAI_MODEL", ""),
+            gemini_api_key=_env("GEMINI_API_KEY") or None,
+            gemini_model=_env("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
+            gemini_fallback_model=_env("GEMINI_FALLBACK_MODEL", DEFAULT_GEMINI_FALLBACK_MODEL),
             embedding_provider=embedding_provider,
             embedding_model=_env("EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODELS[embedding_provider]),
             embedding_cache_dir=Path(_env("EMBEDDING_CACHE_DIR", "data/models")),

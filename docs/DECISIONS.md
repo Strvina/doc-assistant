@@ -181,3 +181,21 @@ povratna informacija je bila da izgleda previše osnovno. Jedan proces (UI + API
 za deploy, a zaštite u Streamlit-u su bile samo u UI-ju (zaobilazile su se preko API-ja).
 **Cena:** frontend se ne testira automatski u CI-ju (testiran je API koji koristi; UI je proveren
 screenshot-ovima u Edge-u, desktop/mobilni/tamna tema).
+
+### ADR-021 · Google Gemini (besplatan nivo) kao provajder za demo bez plaćenih kredita
+**Odluka:** dodat `LLM_PROVIDER=gemini` (`GeminiProvider`, `src/docassist/llm/gemini.py`).
+Poziva Gemini preko njegovog OpenAI-kompatibilnog Chat Completions endpointa, kroz postojeći
+`openai` SDK (bez nove zavisnosti); radi i običan odgovor i agent sa alatima. Model je
+`GEMINI_MODEL` (podrazumevano `gemini-3.5-flash`), a kad je preopterećen (HTTP 429/5xx)
+automatski se prelazi na `GEMINI_FALLBACK_MODEL` (podrazumevano `gemini-flash-lite-latest`).
+Alias `gemini-flash-latest` se ne koristi jer pokazuje na najnoviji model, koji je na besplatnom
+nivou često vraćao 503. Claude ostaje podržan i dokumentovan kao
+produkcijska opcija; Gemini se u UI-ju prikazuje samo ako je postavljen `GEMINI_API_KEY`.
+*Dopunjuje ADR-018 (do sada: samo Claude).*
+**Zašto:** uplata Claude API kredita trenutno nije moguća (banka odbija karticu), a javni demo
+mora da daje prave odgovore. Gemini API ima besplatan nivo bez kartice i dobar je na srpskom i
+nemačkom.
+**Cena:** limiti besplatnog nivoa (broj zahteva u minuti/danu; vide se u AI Studio-u), pa demo mora
+da ostane na niskim limitima pitanja. Google na besplatnom nivou sme da koristi sadržaj za
+poboljšanje svojih modela — prihvatljivo za izmišljene demo dokumente, **ne** za prave firmine
+dokumente (za njih: Claude ili plaćeni Gemini nivo).

@@ -85,7 +85,7 @@ async function loadConfig() {
   const select = $("#provider-select");
   select.replaceChildren(
     ...state.config.providers.map((p) =>
-      el("option", { value: p.id }, p.id === "claude" ? `Claude · ${shortModel(state.config.models.claude)}` : p.label + (p.available ? "" : " (nema ključa)")),
+      el("option", { value: p.id }, p.available && state.config.models[p.id] ? `${p.label} · ${shortModel(state.config.models[p.id])}` : p.label + (p.available || p.id === "fake" ? "" : " (nema ključa)")),
     ),
   );
   const preferred = state.config.providers.find((p) => p.id === state.config.default_provider);

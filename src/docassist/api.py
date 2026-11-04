@@ -39,14 +39,20 @@ from docassist.viewer import pdf_with_highlights, render_html
 WEB_DIR = Path(__file__).parent / "web"
 SAMPLE_DOCS = Path(__file__).resolve().parents[2] / "data" / "sample_docs"
 SESSION_COOKIE = "da_session"
-PROVIDER_LABELS = {"claude": "Claude", "openai": "ChatGPT", "fake": "Offline demo"}
+PROVIDER_LABELS = {
+    "claude": "Claude",
+    "openai": "ChatGPT",
+    "gemini": "Gemini",
+    "fake": "Offline demo",
+}
+OPTIONAL_PROVIDERS = ("openai", "gemini")  # listed only when configured (ADR-018, ADR-021)
 
 # --- request / response models -----------------------------------------------------------
 
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
-    provider: str | None = Field(default=None, description="claude | openai | fake")
+    provider: str | None = Field(default=None, description="claude | openai | gemini | fake")
     agent: bool = Field(default=False, description="Let the model use tools (search, escalate…)")
     top_k: int | None = Field(default=None, ge=1, le=10, description="Passages for the answer")
     history: list[tuple[str, str]] = Field(
@@ -225,18 +231,23 @@ def create_app(
         available = {
             "claude": bool(settings.anthropic_api_key),
             "openai": bool(settings.openai_api_key and settings.openai_model),
+            "gemini": bool(settings.gemini_api_key),
             "fake": True,
         }
         providers = [
             {"id": p, "label": PROVIDER_LABELS[p], "available": available[p]}
-            for p in ("claude", "openai", "fake")
-            if p != "openai" or available["openai"]  # ChatGPT is optional (ADR-018)
+            for p in PROVIDER_LABELS
+            if p not in OPTIONAL_PROVIDERS or available[p]
         ]
         return {
             "version": __version__,
             "providers": providers,
             "default_provider": settings.llm_provider,
-            "models": {"claude": settings.anthropic_model, "openai": settings.openai_model},
+            "models": {
+                "claude": settings.anthropic_model,
+                "openai": settings.openai_model,
+                "gemini": settings.gemini_model,
+            },
             "allow_uploads": settings.allow_uploads,
             "max_upload_mb": settings.max_upload_mb,
             "max_questions_per_session": settings.max_questions_per_session,

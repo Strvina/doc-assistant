@@ -31,7 +31,7 @@ def build_store(settings: Settings, *, rebuild: bool = False) -> VectorStore:
 
 
 def build_llm(settings: Settings, provider: str | None = None) -> LLMProvider:
-    """The configured LLM, or `provider` ("claude" | "openai" | "fake") to override it."""
+    """The configured LLM, or `provider` ("claude" | "openai" | "gemini" | "fake")."""
     provider = provider or settings.llm_provider
     if provider == "fake":
         return FakeProvider()
@@ -53,6 +53,19 @@ def build_llm(settings: Settings, provider: str | None = None) -> LLMProvider:
         from docassist.llm.openai_provider import OpenAIProvider
 
         return OpenAIProvider(settings.openai_model, api_key=settings.openai_api_key)
+    if provider == "gemini":
+        if not settings.gemini_api_key:
+            raise MissingAPIKeyError(
+                "GEMINI_API_KEY is not set. Get a free key at https://aistudio.google.com "
+                "and add it to .env."
+            )
+        from docassist.llm.gemini import GeminiProvider
+
+        return GeminiProvider(
+            settings.gemini_model,
+            api_key=settings.gemini_api_key,
+            fallback_models=(settings.gemini_fallback_model,),
+        )
     raise ValueError(f"Unknown LLM provider {provider!r}")
 
 

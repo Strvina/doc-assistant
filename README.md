@@ -6,7 +6,7 @@ Click a citation and the original opens at that page with the passage highlighte
 When the answer is not in the documents, it says so instead of guessing.
 
 [![CI](https://github.com/Strvina/doc-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/Strvina/doc-assistant/actions/workflows/ci.yml)
-· Python 3.12 · Claude API · FastAPI · ChromaDB · local multilingual embeddings · n8n
+· Python 3.12 · Claude API (Gemini free tier for the demo) · FastAPI · ChromaDB · local multilingual embeddings · n8n
 
 ![Answer with a highlighted source page](docs/images/answer-viewer.png)
 
@@ -52,7 +52,8 @@ Code map: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ```bash
 uv sync
-cp .env.example .env                       # add ANTHROPIC_API_KEY — the only key needed
+cp .env.example .env                       # add ANTHROPIC_API_KEY, or a free GEMINI_API_KEY
+                                           # with LLM_PROVIDER=gemini (ADR-021)
 uv run uvicorn docassist.api:app --reload  # → http://localhost:8000
 ```
 
@@ -140,6 +141,8 @@ Generated from `scripts/sample_docs_src/` by `uv run python scripts/build_sample
   computed by a local model.
 - **Model training:** under Anthropic's commercial API terms, inputs and outputs are not used for
   training by default; check the current terms and retention policy before production use.
+  The public demo runs on the **Gemini API free tier**, where Google may use content to improve
+  its models — fine for the fictional demo documents, not for real company documents (ADR-021).
 - **Deleting data:** deleting a document (UI, API or CLI) removes its chunks and the stored original.
   The query log is one SQLite file: delete it, or rows older than your retention period.
 - **Access:** no user accounts yet (out of scope) — run it on an internal network, or set
