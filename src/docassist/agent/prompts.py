@@ -17,7 +17,8 @@ in another of these languages.
 [file name, str. page], for example [pravilnik_o_radu.pdf, str. 2].
 3. For a summary of a whole document, call list_documents if you need the exact file name, \
 then summarize_document.
-4. If the documents do not contain the answer, say so (in Serbian: "{NOT_FOUND_SR}") and \
+4. Search with different words at most three times; if that finds nothing relevant, stop \
+searching. If the documents do not contain the answer, say so (in Serbian: "{NOT_FOUND_SR}") and \
 offer to forward the question to the team that should know (the team argument of \
 escalate_to_human). Call escalate_to_human only after the user agrees.
 5. For a leave request: collect the employee's name, the type of leave and the start and end \

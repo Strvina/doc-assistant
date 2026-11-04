@@ -185,16 +185,41 @@ def test_quota_pauses_an_endpoint_and_the_next_one_answers():
     assert paused["gemini/g"] - time.monotonic() > 67000
 
 
-def test_retry_after_header_sets_the_pause():
-    groq = FakeService(q=[status_error(429, headers={"retry-after": "7"})], r=[response("ok")])
+def test_long_retry_after_pauses_the_endpoint():
+    groq = FakeService(q=[status_error(429, headers={"retry-after": "60"})], r=[response("ok")])
     paused = {}
     llm = provider(
         Endpoint("groq", "q", client(groq)), Endpoint("groq", "r", client(groq)), paused=paused
     )
 
-    llm.complete("s", MESSAGES)
+    assert llm.complete("s", MESSAGES).text == "ok"
+    assert 50 < paused["groq/q"] - time.monotonic() <= 60
 
-    assert 0 < paused["groq/q"] - time.monotonic() <= 7
+
+def test_short_per_minute_limit_is_waited_out_on_the_same_endpoint(monkeypatch):
+    waits = []
+    monkeypatch.setattr(time, "sleep", waits.append)
+    groq = FakeService(
+        q=[status_error(429, headers={"retry-after": "8"}), response("ok")], r=[response("no")]
+    )
+    llm = provider(Endpoint("groq", "q", client(groq)), Endpoint("groq", "r", client(groq)))
+
+    assert llm.complete("s", MESSAGES).text == "ok"
+    assert waits == [8.0]
+    assert [c["model"] for c in groq.calls] == ["q", "q"]
+
+
+def test_gemini_gets_a_placeholder_signature_for_calls_from_another_model():
+    call = {"id": "c1", "type": "function", "function": {"name": "t", "arguments": "{}"}}
+    groq_turn = {"role": "assistant", "tool_calls": [call], "reasoning": "hidden"}
+    gemini = FakeService(g=[response("ok")])
+    llm = provider(Endpoint("gemini", "g", client(gemini)))
+
+    llm._create([*MESSAGES, groq_turn, {"role": "tool", "tool_call_id": "c1", "content": "x"}])
+
+    sent = gemini.calls[0]["messages"][1]
+    assert "reasoning" not in sent
+    assert sent["tool_calls"][0]["extra_content"]["google"]["thought_signature"]
 
 
 def test_too_large_request_tries_the_next_endpoint_without_pausing():
@@ -241,3 +266,22 @@ def test_factory_builds_the_free_chain(monkeypatch):
     ]
     assert build_llm(both, "gemini")._endpoints[0].key == "gemini/gemini-3.5-flash"
     assert len(build_llm(replace(settings, groq_api_key="gsk"), "groq")._endpoints) == 2
+
+
+def test_last_agent_step_has_no_tools_so_the_model_must_answer():
+    call = {
+        "id": "c1",
+        "type": "function",
+        "function": {"name": "search_documents", "arguments": '{"query": "x"}'},
+        "name": "search_documents",
+        "arguments": '{"query": "x"}',
+    }
+    loop = [response(tool_calls=[call], finish="tool_calls")] * 2
+    service = FakeService(**{"m-1": [*loop, response("Nema toga u ubačenim dokumentima.")]})
+    llm = provider(Endpoint("groq", "m-1", client(service)))
+
+    run = llm.run_agent("s", MESSAGES, [search_tool([])], max_steps=3)
+
+    assert "tools" in service.calls[0] and "tools" not in service.calls[2]
+    assert run.text == "Nema toga u ubačenim dokumentima."
+    assert run.steps == 3

@@ -50,7 +50,7 @@ def build_free_llm(settings: Settings, service: str) -> LLMProvider:
         "groq": (
             settings.groq_api_key,
             (settings.groq_model, settings.groq_fallback_model),
-            2048,  # counts against Groq's 8,000 tokens/minute per model
+            1536,  # input + this count against Groq's 8,000 tokens/minute per model
         ),
     }
     if not models[service][0]:

@@ -27,6 +27,12 @@ OVERLOADED_STATUS = (500, 502, 503, 504)
 TOO_LARGE_STATUS = 413  # Groq: request is over the per-minute token limit of this model
 OVERLOADED_PAUSE_S = 60  # skip an overloaded endpoint this long before trying it again
 MAX_PAUSE_S = 24 * 3600
+# A per-minute limit that frees up within this many seconds is waited out on the same endpoint:
+# faster than a slower fallback, and the conversation stays with one service.
+SHORT_WAIT_S = 15
+# Gemini rejects tool calls made by another model without a thought signature; this value is
+# Google's documented placeholder for such calls.
+FOREIGN_CALL_SIGNATURE = "skip_thought_signature_validator"
 
 # "service/model" -> time.monotonic() until which it is skipped. Module level because a new
 # provider is built per request; a used-up daily quota would otherwise cost a failed call,
@@ -112,7 +118,9 @@ class ChatCompletionsProvider:
         model = self._endpoints[0].model
 
         for step in range(1, max_steps + 1):
-            response = self._create(history, tools=tool_defs)
+            # Last step: no tools, so the model has to answer with what it found so far.
+            final = step == max_steps
+            response = self._create(history, **({} if final else {"tools": tool_defs}))
             used_in, used_out = _usage(response)
             input_tokens += used_in
             output_tokens += used_out
@@ -120,7 +128,7 @@ class ChatCompletionsProvider:
             choice = response.choices[0]
             message = choice.message
 
-            if not message.tool_calls:
+            if not message.tool_calls or final:
                 stop = _stop_reason(choice.finish_reason)
                 text = _clean(message.content)
                 return AgentRun(text, calls, model, input_tokens, output_tokens, stop, step)
@@ -162,8 +170,18 @@ class ChatCompletionsProvider:
         chain = ready or [self._endpoints[-1]]
         for index, ep in enumerate(chain):
             last = index == len(chain) - 1
+            retries = None if last else 0
             try:
-                return self._call(ep, _for(ep, messages), retries=None if last else 0, **request)
+                try:
+                    return self._call(ep, _for(ep, messages), retries=retries, **request)
+                except LLMError as exc:
+                    pause = _pause_after(exc.__cause__)
+                    if not (isinstance(exc.__cause__, openai.RateLimitError) and pause):
+                        raise
+                    if pause > SHORT_WAIT_S:
+                        raise
+                    time.sleep(pause)  # tokens-per-minute limit: frees up in a few seconds
+                    return self._call(ep, _for(ep, messages), retries=retries, **request)
             except LLMError as exc:
                 pause = _pause_after(exc.__cause__)
                 if pause is None:
@@ -223,29 +241,28 @@ _STANDARD_CALL_FIELDS = ("id", "type", "function")
 
 
 def _for(ep: Endpoint, messages: list[Any]) -> list[Any]:
-    """Messages in the form `ep` accepts: Gemini gets its own fields back, others get only
-    the standard ones (an agent run can move between services when one hits its limit)."""
-    if ep.service == "gemini":
-        return messages
+    """Messages in the form `ep` accepts. An agent run can move between services when one
+    hits its limit: assistant turns keep only the standard fields; Gemini also gets its own
+    thought signatures back, and a placeholder for tool calls another model made."""
+    gemini = ep.service == "gemini"
     cleaned = []
     for message in messages:
         if isinstance(message, dict) and message.get("role") == "assistant":
-            message = {
-                "role": "assistant",
-                "content": message.get("content") or "",
-                **(
-                    {
-                        "tool_calls": [
-                            {k: call[k] for k in _STANDARD_CALL_FIELDS if k in call}
-                            for call in message["tool_calls"]
-                        ]
-                    }
-                    if message.get("tool_calls")
-                    else {}
-                ),
-            }
+            out: dict[str, Any] = {"role": "assistant", "content": message.get("content") or ""}
+            if message.get("tool_calls"):
+                out["tool_calls"] = [_call_for(call, gemini) for call in message["tool_calls"]]
+            message = out
         cleaned.append(message)
     return cleaned
+
+
+def _call_for(call: dict[str, Any], gemini: bool) -> dict[str, Any]:
+    out = {k: call[k] for k in _STANDARD_CALL_FIELDS if k in call}
+    if gemini:
+        out["extra_content"] = call.get("extra_content") or {
+            "google": {"thought_signature": FOREIGN_CALL_SIGNATURE}
+        }
+    return out
 
 
 def _as_dict(message: Any) -> Any:
