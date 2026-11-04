@@ -39,6 +39,9 @@ class Settings:
     api_token: str | None = None
     log_db: Path = Path("data/logs.sqlite")
     max_questions_per_session: int = 30
+    max_questions_per_ip_hour: int = 120
+    documents_dir: Path = Path("data/documents")
+    max_upload_mb: int = 20
 
     @classmethod
     def from_env(cls, load_dotenv_file: bool = True) -> Settings:
@@ -78,6 +81,9 @@ class Settings:
             log_db=Path(_env("LOG_DB", "data/logs.sqlite")),
             allow_uploads=_env("ALLOW_UPLOADS", "true").lower() in ("1", "true", "yes"),
             max_questions_per_session=int(_env("MAX_QUESTIONS_PER_SESSION", "30")),
+            max_questions_per_ip_hour=int(_env("MAX_QUESTIONS_PER_IP_HOUR", "120")),
+            documents_dir=Path(_env("DOCUMENTS_DIR", "data/documents")),
+            max_upload_mb=int(_env("MAX_UPLOAD_MB", "20")),
         )
 
 

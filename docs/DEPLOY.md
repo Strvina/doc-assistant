@@ -1,40 +1,46 @@
-# DEPLOY — javni demo (Streamlit Community Cloud)
+# DEPLOY — javni demo (Hugging Face Spaces, Docker)
 
-Besplatno, direktno iz GitHub repoa. Radi se **posle** spajanja PR-ova u `main` i kad API ključevi rade lokalno.
+Besplatno (CPU Basic: 2 vCPU, 16 GB RAM), pokreće isti Docker image kao lokalno.
+Radi se kad Claude ključ radi lokalno.
 
 ## 1. Provera lokalno
 
 ```bash
-cp .env.example .env          # upiši ANTHROPIC_API_KEY (jedini potreban ključ)
-uv run python -m docassist.cli index data/sample_docs --rebuild
-uv run python -m docassist.cli ask "Koliki je moment pritezanja za M8?"
-uv run streamlit run app/streamlit_app.py
+cp .env.example .env                     # upiši ANTHROPIC_API_KEY (jedini potreban ključ)
+uv run uvicorn docassist.api:app --reload
+# → http://localhost:8000  — učitaj demo dokumente, postavi pitanje, otvori izvor
 ```
 
-## 2. Deploy
+Sa Docker-om: `docker compose up --build` → <http://localhost:8000>.
 
-1. <https://share.streamlit.io> → prijava preko GitHub-a → **Create app** → *Deploy a public app from GitHub*.
-2. Repository `Strvina/doc-assistant`, branch `main`, main file `app/streamlit_app.py`.
-3. **Advanced settings** → Python **3.12** → **Secrets** (TOML; svaka vrednost postaje env promenljiva):
+## 2. Jednokratno podešavanje
 
-   ```toml
-   ANTHROPIC_API_KEY = "sk-ant-..."
-   LLM_PROVIDER = "claude"
-   EMBEDDING_PROVIDER = "local"
-   ALLOW_UPLOADS = "false"           # javni demo: fiksni demo dokumenti, bez upload-a/brisanja
-   MAX_QUESTIONS_PER_SESSION = "10"  # štiti API kredit
-   ANTHROPIC_EFFORT = "low"          # brži i jeftiniji odgovori (opciono)
-   ```
+1. Nalog na <https://huggingface.co> → **New Space** → ime `doc-assistant`, SDK **Docker** (*Blank*),
+   hardware **CPU basic (free)**, vidljivost *Public*.
+2. Space → **Settings → Variables and secrets**:
 
-4. **Deploy**. Pri prvom pokretanju aplikacija preuzme lokalni embedding model (~220 MB) i sama
-   indeksira `data/sample_docs/` (~50 chunk-ova, nekoliko sekundi, bez troška). Disk na Community
-   Cloud-u nije trajan, pa se to ponavlja posle svakog restarta (prvo učitavanje traje ~1 min).
+   | Tip | Ime | Vrednost |
+   |---|---|---|
+   | Secret | `ANTHROPIC_API_KEY` | `sk-ant-…` |
+   | Secret | `API_TOKEN` | nasumičan string (štiti API od skripti; UI radi preko sesije) |
+   | Variable | `PORT` | `7860` (port koji Space očekuje) |
+   | Variable | `ALLOW_UPLOADS` | `false` — fiksni demo dokumenti, bez upload-a/brisanja |
+   | Variable | `MAX_QUESTIONS_PER_SESSION` | `10` |
+   | Variable | `MAX_QUESTIONS_PER_IP_HOUR` | `30` |
+   | Variable | `ANTHROPIC_EFFORT` | `low` (opciono — brže i jeftinije) |
 
-> Ako platforma ne prepozna `pyproject.toml`/`uv.lock`, napravi `requirements.txt`:
-> `uv export --no-dev --no-hashes --no-emit-project -o requirements.txt`, dodaj red `.` na kraj
-> (instalira i sam paket `docassist`), commit kroz PR.
+3. <https://huggingface.co/settings/tokens> → novi token sa **write** pravom.
+4. GitHub repo → **Settings → Secrets and variables → Actions**:
+   - *Secret* `HF_TOKEN` = taj token
+   - *Variable* `HF_SPACE` = `<tvoj-hf-username>/doc-assistant`
+5. GitHub → **Actions → Deploy demo → Run workflow** (ili samo spoji sledeći PR u `main`).
+
+Workflow (`.github/workflows/deploy-space.yml`) objavljuje `main` u Space: README zamenjuje sa
+`deploy/space_readme.md` (Space podešavanja: `sdk: docker`, `app_port: 7860`). Space sam
+build-uje image (~5–8 min prvi put). Pri prvom pokretanju aplikacija indeksira demo dokumente.
 
 ## 3. Posle deploy-a
 
-- Link upiši u `README.md` (zadatak 4.4) i napravi screenshot za README (4.5).
+- Link (`https://<user>-doc-assistant.hf.space`) upiši u `README.md` (zadatak 4.4).
 - Na console.anthropic.com postavi **mesečni limit potrošnje** za ključ koji koristi demo.
+- Disk Space-a nije trajan: posle restarta indeks i log kreću ispočetka (za demo je to u redu).

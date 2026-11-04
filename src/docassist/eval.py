@@ -23,9 +23,9 @@ import yaml
 
 from docassist.agent import run_agent
 from docassist.config import Settings
-from docassist.factory import MissingAPIKeyError, build_llm, build_store, build_tool_context
-from docassist.ingest import ingest
+from docassist.factory import MissingAPIKeyError, build_library, build_llm, build_tool_context
 from docassist.llm import LLMError, LLMProvider
+from docassist.pricing import PRICES
 from docassist.rag import Answer, answer
 from docassist.retrieval import EmbedderMismatchError, VectorStore, retrieve
 
@@ -33,13 +33,6 @@ ROOT = Path(__file__).resolve().parents[2]
 QUESTIONS = ROOT / "eval" / "questions.yaml"
 RESULTS_DIR = ROOT / "eval" / "results"
 SAMPLE_DOCS = ROOT / "data" / "sample_docs"
-
-# USD per million tokens (input, output). Check current prices before quoting the numbers.
-PRICES: dict[str, tuple[float, float]] = {
-    "claude-opus-5-5": (4.00, 20.00),
-    "claude-sonnet-5-5": (2.00, 10.00),
-    "claude-haiku-5-5": (0.10, 0.50),
-}
 
 
 @dataclass(frozen=True)
@@ -259,9 +252,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     settings = Settings.from_env()
     try:
-        store = build_store(settings)
+        library = build_library(settings)
         for path in sorted(SAMPLE_DOCS.iterdir()):  # no-op for documents already indexed
-            store.add_document(ingest(path))
+            library.add_file(path)
+        store = library.store
         llm = None if args.retrieval_only else build_llm(settings, args.provider)
     except (MissingAPIKeyError, EmbedderMismatchError) as exc:
         print(f"error: {exc}", file=sys.stderr)

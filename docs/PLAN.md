@@ -45,13 +45,14 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 - [x] 3.4 Prekidač provajdera preko `.env` (`LLM_PROVIDER=claude|openai|fake`) i `ask --provider`
 - [x] 3.5 Testovi: format citata, "ne znam" ponašanje (sa FakeProvider)
 
-## Faza 4 — Streamlit UI + deploy = **MVP** (11–14. 11.)  · grana: `feat/ui`
+## Faza 4 — Web UI + deploy = **MVP** (11–14. 11.)  · grana: `feat/ui` → `feat/web-ui` (ADR-020)
 
 - [x] 4.1 Upload dokumenata, lista ubačenih dokumenata, brisanje dokumenta
 - [x] 4.2 Chat sa istorijom; citati prikazani ispod odgovora (klik → tekst chunk-a)
 - [x] 4.3 Izbor modela u sidebar-u (Claude / ChatGPT)
-- [ ] 4.4 Deploy online demo + link u README — uputstvo spremno u `docs/DEPLOY.md`
+- [ ] 4.4 Deploy online demo + link u README — Hugging Face Space + GitHub Action spremni (`docs/DEPLOY.md`)
 - [x] 4.5 README: opis, screenshot, kako pokrenuti
+- [x] 4.7 Sopstveni web UI: pregled originala sa označenim citatom, preuzimanje, panel za praćenje (ADR-020)
 - [ ] **4.6 PRIJAVA NA OGLAS** (CV na srpskom + link na demo i GitHub)
 
 ## Faza 5 — Agent i automatizacija (15–20. 11.)  · grana: `feat/agent`
@@ -76,7 +77,7 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 ## Faza 7 — Završna obrada (26–30. 11.)  · grana: `chore/polish`
 
 - [x] 7.1 Dockerfile + `docker compose up` pokreće sve — `compose config` proveren, build nije pokrenut (Docker Desktop nije radio)
-- [ ] 7.2 README na engleskom: arhitektura (dijagram), odluke, rezultati evaluacije — dijagram i odluke urađeni; fale rezultati evaluacije (6.3)
+- [ ] 7.2 README na engleskom: arhitektura (dijagram), odluke, rezultati evaluacije — urađeno osim rezultata sa Claude-om (6.3)
 - [ ] 7.3 Demo video 2–3 min
 - [x] 7.4 Sekcija "Data protection": gde su podaci, brisanje, bez treniranja na podacima
 

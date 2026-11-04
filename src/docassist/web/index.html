@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="sr" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Doc Assistant</title>
+  <meta name="description" content="Interni AI asistent koji odgovara iz dokumenata firme, uz izvor za svaku tvrdnju.">
+  <link rel="icon" href="/static/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/app.css">
+  <script>
+    // Apply the saved/system theme before first paint (no flash).
+    try {
+      const saved = localStorage.getItem("da-theme");
+      const dark = saved ? saved === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+    } catch (e) {}
+  </script>
+</head>
+<body>
+  <a class="skip" href="#composer-input">Preskoči na unos pitanja</a>
+
+  <header class="topbar">
+    <button class="icon-btn only-mobile" id="library-toggle" aria-label="Biblioteka dokumenata">
+      <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+    </button>
+    <a class="brand" href="/" aria-label="Doc Assistant — početna">
+      <img src="/static/logo.svg" alt="" width="32" height="32">
+      <span class="brand-text">
+        <strong>Doc Assistant</strong>
+        <small>Panelvolt · interna dokumentacija</small>
+      </span>
+    </a>
+
+    <div class="mode-switch" role="radiogroup" aria-label="Način rada">
+      <button role="radio" aria-checked="true" data-mode="rag" title="Odgovor iz pronađenih pasusa">
+        Odgovor
+      </button>
+      <button role="radio" aria-checked="false" data-mode="agent"
+              title="Agent sam bira alate: pretraga, ceo dokument, eskalacija, zahtev za odmor">
+        Agent
+      </button>
+    </div>
+
+    <div class="topbar-actions">
+      <label class="model-select" title="Model koji piše odgovor">
+        <span class="dot" id="model-dot"></span>
+        <select id="provider-select" aria-label="Model"></select>
+      </label>
+      <button class="icon-btn" id="insights-open" aria-label="Praćenje i statistika" title="Praćenje">
+        <svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+      </button>
+      <button class="icon-btn" id="theme-toggle" aria-label="Promeni temu" title="Svetla / tamna tema">
+        <svg viewBox="0 0 24 24" class="sun"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg viewBox="0 0 24 24" class="moon"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="layout" id="layout">
+    <!-- Library -->
+    <aside class="library" id="library" aria-label="Biblioteka dokumenata">
+      <div class="library-head">
+        <h2>Biblioteka <span class="count" id="doc-count">0</span></h2>
+        <input type="search" id="doc-filter" placeholder="Filtriraj dokumente…" aria-label="Filtriraj dokumente">
+      </div>
+      <div class="dropzone" id="dropzone" hidden>
+        <input type="file" id="file-input" multiple accept=".pdf,.docx,.txt,.md" hidden>
+        <svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+        <div><strong>Prevuci fajlove</strong> ili <button class="link" id="browse">izaberi</button></div>
+        <small id="dropzone-hint">PDF, Word, TXT, MD</small>
+      </div>
+      <ul class="doc-list" id="doc-list"></ul>
+      <div class="library-empty" id="library-empty" hidden>
+        <p>Biblioteka je prazna.</p>
+        <button class="btn primary" id="load-demo">Učitaj demo dokumente</button>
+        <small>5 dokumenata izmišljene firme Panelvolt — srpski, nemački, engleski.</small>
+      </div>
+      <footer class="library-foot">
+        <span class="lock">🔒</span> Pretraga radi lokalno — dokumenti se ne šalju na indeksiranje.
+      </footer>
+    </aside>
+
+    <!-- Chat -->
+    <main class="chat" id="chat">
+      <div class="thread" id="thread" aria-live="polite">
+        <section class="welcome" id="welcome">
+          <div class="welcome-grid" aria-hidden="true"></div>
+          <p class="eyebrow">Interni asistent · SR · DE · EN</p>
+          <h1>Pitaj bilo šta iz dokumentacije firme.</h1>
+          <p class="lead">Odgovor stiže samo iz ubačenih dokumenata, uz izvor — dokument i stranu — za svaku tvrdnju.
+            Klikni izvor i otvoriće se original sa označenim pasusom.</p>
+          <div class="features">
+            <div><span class="feat-ico">⌕</span><strong>Pretraga preko jezika</strong><small>Pitanje na srpskom nalazi odgovor u nemačkom uputstvu.</small></div>
+            <div><span class="feat-ico">§</span><strong>Proverljivi citati</strong><small>Izmišljen izvor se otkriva i označava.</small></div>
+            <div><span class="feat-ico">⚡</span><strong>Agent</strong><small>Prosleđuje pitanje nadležnom ili pravi nacrt zahteva za odmor.</small></div>
+          </div>
+          <p class="examples-title">Probaj:</p>
+          <div class="examples" id="examples"></div>
+        </section>
+      </div>
+
+      <form class="composer" id="composer" autocomplete="off">
+        <div class="composer-box">
+          <textarea id="composer-input" rows="1" maxlength="1000"
+                    placeholder="Postavi pitanje o dokumentima…" aria-label="Pitanje"></textarea>
+          <button class="send" type="submit" id="send" aria-label="Pošalji">
+            <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+        <div class="composer-hint">
+          <span id="mode-hint">Odgovor iz pronađenih pasusa</span>
+          <span><kbd>Enter</kbd> pošalji · <kbd>Shift</kbd>+<kbd>Enter</kbd> novi red · <kbd>/</kbd> fokus</span>
+        </div>
+      </form>
+    </main>
+
+    <!-- Document viewer -->
+    <aside class="viewer" id="viewer" aria-label="Pregled dokumenta" hidden>
+      <div class="viewer-head">
+        <div class="viewer-title">
+          <span class="file-badge" id="viewer-badge">PDF</span>
+          <div>
+            <strong id="viewer-name"></strong>
+            <small id="viewer-page"></small>
+          </div>
+        </div>
+        <div class="viewer-actions">
+          <a class="icon-btn" id="viewer-newtab" target="_blank" rel="noopener" aria-label="Otvori u novom tabu" title="Otvori u novom tabu">
+            <svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>
+          </a>
+          <a class="icon-btn" id="viewer-download" aria-label="Preuzmi original" title="Preuzmi original">
+            <svg viewBox="0 0 24 24"><path d="M12 4v12M7 11l5 5 5-5M4 20h16"/></svg>
+          </a>
+          <button class="icon-btn" id="viewer-close" aria-label="Zatvori pregled" title="Zatvori (Esc)">
+            <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+      </div>
+      <iframe id="viewer-frame" title="Pregled dokumenta"></iframe>
+    </aside>
+  </div>
+
+  <!-- Insights -->
+  <div class="modal" id="insights" role="dialog" aria-modal="true" aria-labelledby="insights-title" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">Praćenje</p>
+          <h2 id="insights-title">Kako se asistent koristi</h2>
+        </div>
+        <button class="icon-btn" id="insights-close" aria-label="Zatvori">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <div class="stat-grid" id="stat-grid"></div>
+      <div class="insight-cols">
+        <section>
+          <h3>Praznine u dokumentaciji</h3>
+          <p class="muted">Pitanja na koja dokumenti nemaju odgovor ili ocenjena sa 👎 — lista za dopunu dokumenata.</p>
+          <ul class="q-list" id="gaps"></ul>
+        </section>
+        <section>
+          <h3>Poslednja pitanja</h3>
+          <ul class="q-list" id="recent"></ul>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <div class="scrim" id="scrim" hidden></div>
+
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>

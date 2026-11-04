@@ -22,63 +22,55 @@ Ako odgovor nije u dokumentima, bot to kaže umesto da izmišlja.
 ## Stack (detalji u `docs/DECISIONS.md`)
 
 Python 3.12 · uv · Claude API (OpenAI opciono, ADR-018) · lokalni višejezični embeddings
-(fastembed, ADR-019) · ChromaDB · Streamlit (UI) · FastAPI · n8n · ruff + pytest · GitHub Actions
+(fastembed, ADR-019) · ChromaDB · FastAPI + sopstveni web UI (ADR-020) · n8n · ruff + pytest ·
+GitHub Actions · Docker / Hugging Face Spaces
 
 ## Trenutno stanje
 
-- **Faza:** sve faze urađene do nivoa koji ne traži API ključ (PR #1–#8, nadovezani). Čeka: ključ → provera sa Claude-om, 6.3 eval, deploy (4.4), screenshot (4.5), video (7.3), **prijava (4.6)**
-- **Urađeno:**
-  - Faza 0: skelet, planski fajlovi, CI, GitHub repo `Strvina/doc-assistant`, `main` push-ovan.
-  - Faza 1 (PR #1): demo dokumenti, loader-i PDF/DOCX/TXT, chunking, `ingest(path)`.
-  - Faza 2 (PR #2): `Embedder` (`OpenAIEmbedder`, `FakeEmbedder`), `VectorStore` nad Chroma,
-    `retrieve()`, `factory.py`, CLI (`index`, `search`, `docs`, `delete`).
-  - Faza 3 (PR #3): `LLMProvider` (`ClaudeProvider`, `OpenAIProvider`, `FakeProvider`),
-    sistemski prompt, `rag.answer()` sa proverom citata, CLI `ask`.
-  - Faza 4 (PR #4): `app/streamlit_app.py` — upload/lista/brisanje dokumenata, chat sa istorijom,
-    citati u expander-ima, izbor modela, zaštite za javni demo; `docs/DEPLOY.md`.
-  - Faza 5 (PR #5): agent sa 5 alata (nativne petlje za Claude i OpenAI), FastAPI (`docassist.api`),
-    n8n workflow za eskalaciju (`automations/`), agent režim u CLI (`--agent`) i UI.
-  - Faza 6 (PR #6): `eval/questions.yaml` (30 pitanja), `python -m docassist.eval`, SQLite log + 👍/👎 + statistika.
-- **Odluka 2026-11-04:** koristimo **samo Claude** (ADR-018). OpenAI ostaje opciono u kodu.
-  - PR #7: pretraga na lokalnom višejezičnom modelu (ADR-019) — jedini potreban ključ je `ANTHROPIC_API_KEY`.
-    Eval pretrage: tačna strana među top-5 u 100 % pitanja (fake: 56 %).
-- Redizajn UI-ja (PR #9): srpski interfejs, tema, početni ekran sa primerima, citati kao oznake, izvori kao jedan
-  pasus (bez preklapanja, `Citation.passage`), koraci agenta rečima, uredan sidebar; screenshot u README-u.
-- Faza 7 (PR #8): Dockerfile + `compose.yaml` (ui, api, opciono n8n), README: dijagram, Docker, Data protection.
-- **U toku:** —
-- **Blokirano / ostalo iz faze 0:**
-  - 0.5 zaštita grane `main` nije uključena (sekcija uklonjena iz `WORKFLOW.md` — odlučiti da li ostaje u planu).
-  - 0.6 lokalni `.env` sa API ključevima — **bez njega ništa nije probano sa pravim OpenAI embeddings**.
+- **Sve što ne traži API ključ je urađeno i spojeno u `main`** (faze 0–7, osim stavki koje traže ključ/nalog).
+- **Aplikacija:** `uv run uvicorn docassist.api:app --reload` → <http://localhost:8000>
+  - tri kolone: biblioteka (upload, jezik dokumenta, otvori/preuzmi/obriši) · razgovor (Odgovor/Agent) ·
+    pregled dokumenta (PDF na tačnoj strani sa **highlight-om** citiranog teksta; DOCX/TXT kao HTML strane);
+  - panel *Praćenje*: pitanja, % odgovoreno, vreme, trošak, 👍/👎, **praznine u dokumentaciji**;
+  - tamna tema, mobilni prikaz; zaštite na serveru (sesija/API ključ, limiti po sesiji i IP, demo režim).
+- **Pretraga:** lokalni model `paraphrase-multilingual-MiniLM-L12-v2`, chunk 500/100 → tačna strana u top-5
+  za 27/27 eval pitanja (`docs/EVAL_RESULTS.md`).
+- **Testovi:** svi bez mreže (fake modeli, lažni SDK klijenti); `tests/conftest.py` sve putanje preusmerava u tmp.
+- **Nije provereno uživo (čeka ključ / Docker):** pravi Claude odgovori i agent, n8n workflow, Docker image build.
+- **Blokirano:**
+  - Docker Desktop ne može da se pokrene ("unable to start") posle punog diska — popraviti u Docker Desktop-u.
+  - 0.5 zaštita grane `main` — nije uključena (sekcija uklonjena iz `WORKFLOW.md`).
 
 ## Sledeći korak
 
-1. Pregledati i spojiti PR-ove redom: #1 → #2 → … → #8 (svaki je napravljen na grani prethodnog).
-2. Upisati `ANTHROPIC_API_KEY` u `.env` (kopija `.env.example`): `uv run python -m docassist.cli index data/sample_docs --rebuild`,
-   pa `ask "Koliki je moment pritezanja za M8?"` → očekivano 20 Nm, `montageanleitung_pv400.pdf`, str. 2;
-   zatim `ask ... --agent` i `python -m docassist.eval` (6.3, rezultate u `docs/EVAL_RESULTS.md`).
-3. `uv run streamlit run app/streamlit_app.py` → proba u browseru; zatim deploy po `docs/DEPLOY.md` (4.4),
-   screenshot u README (4.5) i **prijava na oglas (4.6)**.
+1. `.env` sa `ANTHROPIC_API_KEY` → `uv run python -m docassist.cli index data/sample_docs --rebuild` →
+   web UI: pitanja iz primera; proveriti jezik odgovora, citate, highlight, agent (`Agent` prekidač).
+2. `uv run python -m docassist.eval` (+ `--agent`, + `ANTHROPIC_MODEL=claude-haiku-5-5`) → tabela u
+   `docs/EVAL_RESULTS.md` i README (6.3, 7.2).
+3. Docker: popraviti Docker Desktop → `docker compose up --build`; n8n: `uv run python scripts/setup_n8n.py`
+   (grana `feat/n8n-local`, PR još nije otvoren — prvo proveriti uživo).
+4. Deploy po `docs/DEPLOY.md` (Hugging Face Space + GitHub Action) → link u README (4.4) → **prijava (4.6)**.
+5. Screenshot-ove u README zameniti verzijom sa pravim Claude odgovorom.
 
 ## Napomene za sledeću sesiju
 
 - `Page.page_no` je pozicija u originalu; prazne strane se preskaču bez pomeranja numeracije.
 - DOCX "strane" su delovi između eksplicitnih preloma strane (ADR-010); demo DOCX-ovi ih imaju.
-- PDF se čita po blokovima: jedan pasus / stavka liste / red tabele = jedan red (ADR-012).
+- PDF se čita po blokovima (`pdf_page_blocks`) — iste blokove koristi viewer za highlight (ADR-012).
+- PDF se otvara iz memorije: na Windows-u neuspelo otvaranje sa diska zaključava fajl.
 - Chunk-ovi ne prelaze granicu strane; `chunk_id` = `izvor::pN::i`, `doc_id` = hash sadržaja fajla.
-- Indeks pamti embedder; promena embedder-a traži `index --rebuild` (ADR-013).
-- Bez ključa: `LLM_PROVIDER=fake` ("odgovor" = citat prve rečenice); pretraga je i tada prava (lokalni model).
-- Lokalni model se kešira u `data/models/` (nije u gitu); promena modela traži `index --rebuild`.
-- Agent petlje (Claude/OpenAI) su testirane samo sa lažnim klijentima — prvo pravo pokretanje
-  `ask --agent` sa ključem je važna provera (posebno OpenAI `include=reasoning.encrypted_content`).
-- n8n workflow nije importovan u živi n8n — proveriti po `automations/README.md`.
-- Docker image nije build-ovan (Docker Desktop nije radio) — pokrenuti `docker compose up --build`.
-- Claude ide preko zvaničnog SDK-a sa refusal fallback-om; `ANTHROPIC_EFFORT` (npr. `low`) je poluga za cenu/brzinu (ADR-014).
-- `pymupdf` je namerno na 1.x (ADR-009). Lokalni venv je trenutno na Python 3.14, CI na 3.12.
+- Indeks pamti embedder; promena embedder-a/modela traži `index --rebuild` (ADR-013).
+- Bez ključa: `LLM_PROVIDER=fake` ("odgovor" = prva rečenica najboljeg pasusa); pretraga je i tada prava.
+- Originali dokumenata se čuvaju u `DOCUMENTS_DIR` (`Library`); dokumenti indeksirani pre toga nemaju
+  original → `index --rebuild` ili ponovni upload.
+- Claude: zvanični SDK, refusal fallback, `ANTHROPIC_EFFORT` (npr. `low`) je poluga za cenu/brzinu (ADR-014).
+- Frontend (`src/docassist/web/`) nema build korak; menja se direktno, server servira statiku.
+- `pymupdf` je namerno na 1.x (ADR-009). Lokalni venv je na Python 3.14, CI i Docker na 3.12.
 
 ## Otvorena pitanja
 
-- Koji hosting za demo (Streamlit Community Cloud / Render / Hugging Face Spaces)? Odlučiti u fazi 4.
-- Embeddings: ostati na OpenAI ili dodati lokalni višejezični model? Odlučiti posle evaluacije (faza 6).
+- Da li uključiti zaštitu grane `main` (0.5)?
+- Posle evaluacije sa Claude-om: Sonnet ili Haiku za javni demo (cena vs kvalitet)?
 
 ## Dnevnik sesija
 
@@ -94,3 +86,4 @@ Python 3.12 · uv · Claude API (OpenAI opciono, ADR-018) · lokalni višejezič
 | 2026-11-04 | Lokalni višejezični embeddings (izmereno: 100 % top-5), chunk 500/100; ADR-019 | #7 |
 | 2026-11-04 | Faza 7 (delimično): Docker, README dijagram + Data protection | #8 |
 | 2026-11-04 | Svi PR-ovi spojeni u main; redizajn UI-ja + screenshot | #9 |
+| 2026-11-04 | Sopstveni web UI (3 kolone, pregled dokumenata sa highlight-om, praćenje + praznine), Library, limiti na serveru, HF Spaces deploy; ADR-020 | #10 |

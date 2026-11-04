@@ -1,4 +1,4 @@
-"""Query log in SQLite: every answer, its sources, latency, tokens and user feedback."""
+"""Query log in SQLite: every answer, its sources, latency, tokens, cost and user feedback."""
 
 from __future__ import annotations
 
@@ -9,13 +9,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from docassist.pricing import cost_usd
 from docassist.rag import Answer
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS queries (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     created_at    TEXT    NOT NULL,
-    channel       TEXT    NOT NULL,          -- ui | api | cli
+    channel       TEXT    NOT NULL,          -- web | ui | api | cli
     mode          TEXT    NOT NULL,          -- rag | agent
     provider      TEXT    NOT NULL,
     model         TEXT    NOT NULL,
@@ -27,9 +28,13 @@ CREATE TABLE IF NOT EXISTS queries (
     latency_ms    INTEGER NOT NULL,
     input_tokens  INTEGER NOT NULL,
     output_tokens INTEGER NOT NULL,
-    feedback      INTEGER                    -- 1 = 👍, -1 = 👎, NULL = none
+    feedback      INTEGER,                   -- 1 = 👍, -1 = 👎, NULL = none
+    cost_usd      REAL                       -- NULL when the model price is unknown
 );
 """
+
+# Columns added after the first version; older log files get them on first use.
+_MIGRATIONS = {"cost_usd": "ALTER TABLE queries ADD COLUMN cost_usd REAL"}
 
 
 @dataclass(frozen=True)
@@ -41,6 +46,7 @@ class UsageStats:
     output_tokens: int
     thumbs_up: int
     thumbs_down: int
+    cost_usd: float = 0.0
 
 
 class QueryLog:
@@ -52,6 +58,10 @@ class QueryLog:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         db = sqlite3.connect(self._path)
         db.executescript(_SCHEMA)
+        columns = {row[1] for row in db.execute("PRAGMA table_info(queries)")}
+        for column, statement in _MIGRATIONS.items():
+            if column not in columns:
+                db.execute(statement)
         return db
 
     def log(self, result: Answer, *, channel: str, mode: str = "rag") -> int:
@@ -69,12 +79,13 @@ class QueryLog:
             round(result.latency_s * 1000),
             result.input_tokens,
             result.output_tokens,
+            cost_usd(result.model, result.input_tokens, result.output_tokens),
         )
         with closing(self._connect()) as db, db:
             cursor = db.execute(
                 "INSERT INTO queries (created_at, channel, mode, provider, model, question,"
-                " answer, found, citations, tool_calls, latency_ms, input_tokens, output_tokens)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " answer, found, citations, tool_calls, latency_ms, input_tokens, output_tokens,"
+                " cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 row,
             )
             return int(cursor.lastrowid)
@@ -92,9 +103,9 @@ class QueryLog:
             row = db.execute(
                 "SELECT COUNT(*), AVG(found), AVG(latency_ms), COALESCE(SUM(input_tokens), 0),"
                 " COALESCE(SUM(output_tokens), 0), COALESCE(SUM(feedback = 1), 0),"
-                " COALESCE(SUM(feedback = -1), 0) FROM queries"
+                " COALESCE(SUM(feedback = -1), 0), COALESCE(SUM(cost_usd), 0) FROM queries"
             ).fetchone()
-        count, found, latency, tokens_in, tokens_out, up, down = row
+        count, found, latency, tokens_in, tokens_out, up, down, cost = row
         return UsageStats(
             queries=count,
             found_rate=round(found, 3) if found is not None else None,
@@ -103,10 +114,23 @@ class QueryLog:
             output_tokens=tokens_out,
             thumbs_up=up,
             thumbs_down=down,
+            cost_usd=round(cost, 4),
         )
 
     def recent(self, limit: int = 20) -> list[dict[str, object]]:
+        return self._select("SELECT * FROM queries ORDER BY id DESC LIMIT ?", limit)
+
+    def gaps(self, limit: int = 20) -> list[dict[str, object]]:
+        """Questions the documents did not answer, or answers users rated 👎.
+
+        This is the to-do list for whoever maintains the documents.
+        """
+        return self._select(
+            "SELECT * FROM queries WHERE found = 0 OR feedback = -1 ORDER BY id DESC LIMIT ?",
+            limit,
+        )
+
+    def _select(self, sql: str, *params: object) -> list[dict[str, object]]:
         with closing(self._connect()) as db:
             db.row_factory = sqlite3.Row
-            rows = db.execute("SELECT * FROM queries ORDER BY id DESC LIMIT ?", (limit,))
-            return [dict(row) for row in rows]
+            return [dict(row) for row in db.execute(sql, params)]

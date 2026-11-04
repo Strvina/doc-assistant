@@ -15,7 +15,6 @@ dependencies = [
     "python-dotenv>=1.2.4",
     "python-multipart>=0.0.33",
     "pyyaml>=6.0.3",
-    "streamlit>=1.66.1",
     "uvicorn>=0.54.0",
 ]
 

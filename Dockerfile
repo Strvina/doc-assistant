@@ -1,4 +1,4 @@
-# Doc Assistant: one image for the Streamlit UI (default) and the REST API.
+# Doc Assistant: one image serves the web UI and the REST API (FastAPI + uvicorn).
 FROM python:3.12-slim
 
 COPY --from=ghcr.io/astral-sh/uv:0.13.0 /uv /uvx /bin/
@@ -9,8 +9,10 @@ ENV UV_COMPILE_BYTECODE=1 \
     PATH="/app/.venv/bin:$PATH" \
     EMBEDDING_CACHE_DIR=/app/models \
     INDEX_DIR=/state/index \
+    DOCUMENTS_DIR=/state/documents \
     LOG_DB=/state/logs.sqlite \
-    OUTBOX_DIR=/state/outbox
+    OUTBOX_DIR=/state/outbox \
+    PORT=8000
 
 WORKDIR /app
 
@@ -19,7 +21,6 @@ COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --locked --no-dev --no-install-project
 
 COPY src ./src
-COPY app ./app
 COPY eval ./eval
 COPY data/sample_docs ./data/sample_docs
 RUN uv sync --locked --no-dev
@@ -27,11 +28,13 @@ RUN uv sync --locked --no-dev
 # Bake the embedding model into the image: containers start fast and work offline.
 RUN python -c "from docassist.retrieval import LocalEmbedder; LocalEmbedder(cache_dir='/app/models')"
 
-RUN useradd --create-home app \
-    && mkdir -p /state /app/data/uploads \
+RUN useradd --create-home --uid 1000 app \
+    && mkdir -p /state \
     && chown -R app /state /app/data
 USER app
 
-EXPOSE 8501 8000
-CMD ["streamlit", "run", "app/streamlit_app.py", \
-     "--server.address=0.0.0.0", "--server.headless=true", "--browser.gatherUsageStats=false"]
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s \
+    CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ[\"PORT\"]}/health', timeout=4)"
+# PORT is configurable because some hosts (e.g. Hugging Face Spaces: 7860) choose it.
+CMD ["sh", "-c", "uvicorn docassist.api:app --host 0.0.0.0 --port ${PORT} --proxy-headers --forwarded-allow-ips='*'"]
