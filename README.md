@@ -23,6 +23,7 @@ When the answer is not in the documents, it says so instead of guessing.
 | **Agent with tools** | Native Claude tool use, no framework: search, read a whole document, escalate an unanswered question to a person (n8n → e-mail), draft a leave request. |
 | **Measured, monitored** | 30-question evaluation set and runner; every answer logged with latency, tokens, cost and 👍/👎; a dashboard lists the **gaps in the documentation** (questions the documents could not answer). |
 | **Reads scans and images** | Scanned PDFs, screenshots pasted into PDFs and uploaded photos (PNG/JPG/TIFF) are read with local OCR (Tesseract; Serbian Latin and Cyrillic, German, English). The viewer highlights the cited passage on the scan too — measured: 100 % correct answers with the demo PDFs replaced by image-only scans. |
+| **Saved conversations** | Every question is saved in a conversation you can reopen (answers shown exactly as they were) or delete; a question can be stopped while it is being answered and comes back into the input to be corrected. Conversations belong to the browser session — visitors of the public demo never see each other's. |
 | **Privacy-minded** | Documents are indexed locally; only the question and a few retrieved passages go to the model. Demo mode with upload lock and per-session / per-IP limits. |
 
 ![Welcome screen](docs/images/welcome.png)
@@ -151,7 +152,8 @@ Generated from `scripts/sample_docs_src/` by `uv run python scripts/build_sample
   improve their services — fine for the fictional demo documents, not for real company documents
   (ADR-021, ADR-022).
 - **Deleting data:** deleting a document (UI, API or CLI) removes its chunks and the stored original.
-  The query log is one SQLite file: delete it, or rows older than your retention period.
+  Deleting a conversation removes it and its answers from the server. The query log (with the
+  saved conversations) is one SQLite file: delete it, or rows older than your retention period.
 - **Access:** no user accounts yet (out of scope) — run it on an internal network, or set
   `API_TOKEN`. The public demo uses fictional documents, uploads disabled (`ALLOW_UPLOADS=false`)
   and per-session / per-IP question limits.

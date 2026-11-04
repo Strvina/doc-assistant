@@ -28,6 +28,7 @@ from docassist import __version__
 from docassist.agent import run_agent
 from docassist.agent.tools import ToolError, new_escalation
 from docassist.config import Settings
+from docassist.conversations import ConversationStore
 from docassist.factory import (
     MissingAPIKeyError,
     build_escalator,
@@ -68,6 +69,13 @@ class AskRequest(BaseModel):
     history: list[tuple[str, str]] = Field(
         default_factory=list, description="Earlier (question, answer) pairs", max_length=10
     )
+    conversation_id: str | None = Field(
+        default=None,
+        description="Continue a saved conversation; empty starts a new one (see /conversations)",
+    )
+    request_id: str | None = Field(
+        default=None, max_length=64, description="Client id for POST /ask/cancel"
+    )
 
 
 class CitationOut(BaseModel):
@@ -87,6 +95,7 @@ class ToolCallOut(BaseModel):
 
 class AskResponse(BaseModel):
     log_id: int | None = None
+    conversation_id: str | None = None
     answer: str
     found: bool
     citations: list[CitationOut]
@@ -98,6 +107,10 @@ class AskResponse(BaseModel):
     input_tokens: int
     output_tokens: int
     cost_usd: float | None = None
+
+
+class CancelRequest(BaseModel):
+    request_id: str = Field(min_length=1, max_length=64)
 
 
 class FeedbackRequest(BaseModel):
@@ -183,6 +196,16 @@ def get_log(request: Request, settings: SettingsDep) -> QueryLog:
 LogDep = Annotated[QueryLog, Depends(get_log)]
 
 
+def get_conversations(request: Request, settings: SettingsDep) -> ConversationStore:
+    state = request.app.state
+    if state.conversations is None:
+        state.conversations = ConversationStore(settings.log_db)
+    return state.conversations
+
+
+ConversationsDep = Annotated[ConversationStore, Depends(get_conversations)]
+
+
 def client_kind(
     request: Request, settings: SettingsDep, x_api_key: Annotated[str | None, Header()] = None
 ) -> str:
@@ -198,6 +221,16 @@ def client_kind(
 
 
 ClientDep = Annotated[str, Depends(client_kind)]
+
+
+def owner(request: Request, kind: ClientDep) -> str:
+    """Whose conversations: the browser session, or one shared owner for API clients."""
+    if kind == "web":
+        return f"session:{request.cookies[SESSION_COOKIE]}"
+    return kind  # "api" (valid X-API-Key) or "open" (no API_TOKEN configured)
+
+
+OwnerDep = Annotated[str, Depends(owner)]
 
 
 def require_uploads(settings: SettingsDep) -> None:
@@ -223,7 +256,9 @@ def create_app(
     app.state.store = store
     app.state.library = None
     app.state.log = None
+    app.state.conversations = None
     app.state.sessions = {}  # session id -> questions asked
+    app.state.cancelled = set()  # request ids of questions the user cancelled
     app.state.ip_hits = defaultdict(deque)  # client ip -> timestamps of recent questions
     access = [Depends(client_kind)]
     uploads = [Depends(client_kind), Depends(require_uploads)]
@@ -239,17 +274,22 @@ def create_app(
     # --- web UI ---------------------------------------------------------------------------
 
     @app.get("/", include_in_schema=False)
-    def index(request: Request) -> Response:
+    def index(request: Request, conversations: ConversationsDep) -> Response:
         response = HTMLResponse(_index_html(), headers={"Cache-Control": "no-cache"})
-        _ensure_session(request, response)
+        _ensure_session(request, response, conversations)
         return response
 
     app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
     @app.get("/api/config")
-    def config(request: Request, response: Response, settings: SettingsDep) -> dict[str, Any]:
+    def config(
+        request: Request,
+        response: Response,
+        settings: SettingsDep,
+        conversations: ConversationsDep,
+    ) -> dict[str, Any]:
         """What the web UI needs to know: available models, limits, demo mode."""
-        _ensure_session(request, response)
+        _ensure_session(request, response, conversations)
         available = {
             "claude": bool(settings.anthropic_api_key),
             "openai": bool(settings.openai_api_key and settings.openai_model),
@@ -389,31 +429,81 @@ def create_app(
         body: AskRequest,
         request: Request,
         kind: ClientDep,
+        who: OwnerDep,
         settings: SettingsDep,
         store: StoreDep,
         log: LogDep,
+        conversations: ConversationsDep,
     ) -> AskResponse:
+        if body.conversation_id and not conversations.exists(who, body.conversation_id):
+            raise HTTPException(404, f"No conversation {body.conversation_id!r}")
         if kind != "api":
             _check_limits(request, settings)
+        history = body.history
+        if body.conversation_id and not history:  # follow-ups use the saved conversation
+            history = conversations.history(who, body.conversation_id)
         try:
             llm = llm_factory(settings, body.provider)
             top_k = body.top_k or settings.top_k
             if body.agent:
                 ctx = build_tool_context(settings, store)
                 ctx.top_k = top_k
-                result = run_agent(body.question, ctx, llm, history=body.history)
+                result = run_agent(body.question, ctx, llm, history=history)
             else:
-                result = answer(body.question, store, llm, k=top_k, history=body.history)
+                result = answer(body.question, store, llm, k=top_k, history=history)
         except ValueError as exc:  # unknown provider name
             raise HTTPException(422, str(exc)) from exc
         except MissingAPIKeyError as exc:
             raise HTTPException(503, str(exc)) from exc
         except LLMError as exc:
             raise HTTPException(502, str(exc)) from exc
+        if body.request_id and body.request_id in request.app.state.cancelled:
+            # Cancelled while the model was answering: nothing is saved or logged.
+            request.app.state.cancelled.discard(body.request_id)
+            raise HTTPException(409, "The question was cancelled")
         response = to_response(result)
         channel = "web" if kind == "web" else "api"
-        response.log_id = log.log(result, channel=channel, mode="agent" if body.agent else "rag")
+        mode = "agent" if body.agent else "rag"
+        response.log_id = log.log(result, channel=channel, mode=mode)
+        conversation_id = body.conversation_id or conversations.create(who, body.question)
+        response.conversation_id = conversation_id
+        conversations.add_turn(
+            who, conversation_id, body.question, mode, response.model_dump(mode="json")
+        )
         return response
+
+    @app.post("/ask/cancel", dependencies=access)
+    def cancel(body: CancelRequest, request: Request) -> dict[str, bool]:
+        """Cancel a question that is still being answered (its answer is then not saved)."""
+        cancelled = request.app.state.cancelled
+        if len(cancelled) > 1000:  # ids of requests that ended before the cancel arrived
+            cancelled.clear()
+        cancelled.add(body.request_id)
+        return {"ok": True}
+
+    # --- saved conversations (ADR-025) ------------------------------------------------------
+
+    @app.get("/conversations")
+    def list_conversations(who: OwnerDep, conversations: ConversationsDep) -> list[dict[str, Any]]:
+        """Your saved conversations, most recently used first."""
+        return conversations.list(who)
+
+    @app.get("/conversations/{conversation_id}")
+    def get_conversation(
+        conversation_id: str, who: OwnerDep, conversations: ConversationsDep
+    ) -> dict[str, Any]:
+        found = conversations.get(who, conversation_id)
+        if found is None:
+            raise HTTPException(404, f"No conversation {conversation_id!r}")
+        return found
+
+    @app.delete("/conversations/{conversation_id}")
+    def delete_conversation(
+        conversation_id: str, who: OwnerDep, conversations: ConversationsDep
+    ) -> dict[str, bool]:
+        if not conversations.delete(who, conversation_id):
+            raise HTTPException(404, f"No conversation {conversation_id!r}")
+        return {"ok": True}
 
     @app.post("/feedback", dependencies=access)
     def feedback(body: FeedbackRequest, log: LogDep) -> dict[str, bool]:
@@ -475,13 +565,29 @@ def create_app(
 # --- helpers -----------------------------------------------------------------------------
 
 
-def _ensure_session(request: Request, response: Response) -> None:
+SESSION_MAX_AGE_S = 365 * 24 * 3600  # saved conversations belong to the session
+
+
+def _ensure_session(request: Request, response: Response, conversations: ConversationStore) -> None:
+    """Give the browser a session; a known session survives a server restart (it is stored
+    with the conversations), so the user keeps their saved conversations."""
     sessions = request.app.state.sessions
-    if request.cookies.get(SESSION_COOKIE) in sessions:
+    cookie = request.cookies.get(SESSION_COOKIE)
+    if cookie in sessions:
+        return
+    if cookie and conversations.has_session(cookie):
+        sessions[cookie] = 0  # question limits restart, the conversations stay
         return
     session_id = secrets.token_urlsafe(24)
     sessions[session_id] = 0
-    response.set_cookie(SESSION_COOKIE, session_id, httponly=True, samesite="strict")
+    conversations.add_session(session_id)
+    response.set_cookie(
+        SESSION_COOKIE,
+        session_id,
+        max_age=SESSION_MAX_AGE_S,
+        httponly=True,
+        samesite="strict",
+    )
 
 
 def _index_html() -> str:
