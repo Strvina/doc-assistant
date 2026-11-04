@@ -23,6 +23,7 @@ const icon = (path) => `<svg viewBox="0 0 24 24">${path}</svg>`;
 const ICONS = {
   open: icon('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
   download: icon('<path d="M12 4v12M7 11l5 5 5-5M4 20h16"/>'),
+  close: icon('<path d="M6 6l12 12M18 6L6 18"/>'),
   trash: icon('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>'),
   copy: icon('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>'),
   up: icon('<path d="M7 10v10H4V10zM7 10l4-7c1.7 0 2.5 1 2.2 2.6L12.6 9H19a2 2 0 0 1 2 2.3l-1.2 7A2 2 0 0 1 17.8 20H7"/>'),
@@ -50,6 +51,9 @@ const state = {
   config: null,
   documents: [],
   history: [], // { question, answer }
+  conversationId: null, // saved conversation the next question continues (null = new)
+  conversations: [],
+  pending: null, // { controller, requestId, question } while a question is being answered
   mode: "rag",
   provider: null,
   busy: false,
@@ -437,20 +441,23 @@ function scrollToBottom() {
 
 async function ask(question) {
   question = question.trim();
-  if (!question || state.busy) return;
+  if (!question || state.pending) return;
   if (!state.documents.length) {
     toast("Prvo dodaj dokumente u biblioteku (ili učitaj demo dokumente).", "error");
     return;
   }
-  state.busy = true;
-  $("#send").disabled = true;
+  const requestId = window.crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+  const pending = { controller: new AbortController(), requestId, question };
+  state.pending = pending;
+  setBusy(true);
   $("#welcome").hidden = true;
   const thread = $("#thread");
   const message = el("div", { class: "msg" }, el("div", { class: "msg-user" }, question));
   const mode = state.mode;
   const waiting = el("div", { class: "answer thinking" },
     el("span", { class: "pulse", "aria-hidden": "true" }, el("i"), el("i"), el("i")),
-    el("span", {}, mode === "agent" ? "Agent bira korake i pretražuje dokumente…" : "Pretražujem dokumente i pišem odgovor…"));
+    el("span", {}, mode === "agent" ? "Agent bira korake i pretražuje dokumente…" : "Pretražujem dokumente i pišem odgovor…"),
+    el("button", { class: "link cancel-link", type: "button", onclick: cancelAsk }, "Zaustavi"));
   message.append(waiting);
   thread.append(message);
   scrollToBottom();
@@ -459,24 +466,162 @@ async function ask(question) {
     const data = await api("/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: pending.controller.signal,
       body: JSON.stringify({
         question,
         provider: state.provider,
         agent: mode === "agent",
+        conversation_id: state.conversationId,
+        request_id: requestId,
         history: state.history.slice(-3).map((h) => [h.question, h.answer]),
       }),
     });
     waiting.replaceWith(renderAnswer(question, data, mode));
     state.history.push({ question, answer: data.answer });
+    state.conversationId = data.conversation_id;
+    loadConversations();
   } catch (error) {
-    const text = error.status === 429 ? "Dostignut je limit pitanja. Pokušaj kasnije." :
-      error.status === 503 ? `Model nije dostupan: ${error.message}` : `Greška: ${error.message}`;
-    waiting.replaceWith(el("div", { class: "msg-error" }, text));
+    if (error.name === "AbortError" || error.status === 409) {
+      // Cancelled: the question disappears and comes back into the input to be corrected.
+      message.remove();
+      if (!$("#thread .msg")) $("#welcome").hidden = false;
+      const input = $("#composer-input");
+      if (!input.value.trim()) { input.value = question; autosize(input); }
+      input.focus();
+      toast("Pitanje je zaustavljeno — ispravi ga i pošalji ponovo.");
+    } else {
+      const text = error.status === 429 ? "Dostignut je limit pitanja. Pokušaj kasnije." :
+        error.status === 503 ? `Model nije dostupan: ${error.message}` : `Greška: ${error.message}`;
+      waiting.replaceWith(el("div", { class: "msg-error" }, text));
+    }
   } finally {
-    state.busy = false;
-    $("#send").disabled = false;
+    if (state.pending === pending) state.pending = null;
+    setBusy(false);
     scrollToBottom();
   }
+}
+
+function setBusy(busy) {
+  const send = $("#send");
+  send.classList.toggle("stop", busy);
+  send.setAttribute("aria-label", busy ? "Zaustavi" : "Pošalji");
+  send.title = busy ? "Zaustavi pitanje (Esc)" : "Pošalji";
+}
+
+function cancelAsk() {
+  const pending = state.pending;
+  if (!pending) return;
+  // Tell the server first, so the answer that may still arrive is not saved; then stop waiting.
+  api("/ask/cancel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ request_id: pending.requestId }),
+  }).catch(() => {});
+  pending.controller.abort();
+}
+
+// --- saved conversations ----------------------------------------------------------------
+
+function setSideTab(tab) {
+  const convs = tab === "convs";
+  $("#tab-docs").setAttribute("aria-selected", String(!convs));
+  $("#tab-convs").setAttribute("aria-selected", String(convs));
+  $("#docs-panel").hidden = convs;
+  $("#conv-panel").hidden = !convs;
+  try { localStorage.setItem("da-side-tab", tab); } catch {}
+}
+
+async function loadConversations() {
+  try {
+    state.conversations = await api("/conversations");
+  } catch {
+    return;
+  }
+  renderConversations();
+}
+
+function when(iso) {
+  const date = new Date(iso);
+  const now = new Date();
+  const time = date.toLocaleTimeString("sr-RS", { hour: "2-digit", minute: "2-digit" });
+  const days = Math.round((new Date(now.toDateString()) - new Date(date.toDateString())) / 86400000);
+  if (days === 0) return `danas ${time}`;
+  if (days === 1) return `juče ${time}`;
+  return date.toLocaleDateString("sr-RS", { day: "numeric", month: "numeric", year: days > 300 ? "numeric" : undefined });
+}
+
+function renderConversations() {
+  const list = $("#conv-list");
+  $("#conv-count").textContent = state.conversations.length;
+  $("#conv-empty").hidden = state.conversations.length > 0;
+  list.replaceChildren(...state.conversations.map((c) => {
+    const remove = el("button", { class: "icon-btn conv-delete", type: "button", title: "Obriši razgovor",
+      "aria-label": `Obriši razgovor: ${c.title}`, html: ICONS.trash,
+      onclick: (event) => { event.stopPropagation(); deleteConversation(c); } });
+    const item = el("li", { class: `conv${c.id === state.conversationId ? " active" : ""}`, tabindex: "0",
+      title: c.title, onclick: () => openConversation(c.id),
+      onkeydown: (event) => { if (event.key === "Enter") openConversation(c.id); } },
+      el("span", { class: "conv-title" }, c.title),
+      el("span", { class: "conv-meta" }, `${when(c.updated_at)} · ${c.turns} ${c.turns === 1 ? "pitanje" : "pitanja"}`),
+      remove);
+    return item;
+  }));
+}
+
+function clearThread() {
+  for (const node of [...$("#thread").querySelectorAll(".msg")]) node.remove();
+}
+
+function newConversation() {
+  if (state.pending) cancelAsk();
+  state.conversationId = null;
+  state.history = [];
+  clearThread();
+  $("#welcome").hidden = false;
+  renderConversations();
+  closeLibraryDrawer();
+  $("#composer-input").focus();
+}
+
+async function openConversation(id) {
+  if (state.pending) {
+    toast("Sačekaj odgovor ili ga zaustavi, pa otvori drugi razgovor.", "error");
+    return;
+  }
+  let conversation;
+  try {
+    conversation = await api(`/conversations/${encodeURIComponent(id)}`);
+  } catch (error) {
+    toast(`Razgovor nije otvoren: ${error.message}`, "error");
+    await loadConversations();
+    return;
+  }
+  clearThread();
+  $("#welcome").hidden = conversation.turns.length > 0;
+  const thread = $("#thread");
+  for (const turn of conversation.turns) {
+    thread.append(el("div", { class: "msg" },
+      el("div", { class: "msg-user" }, turn.question),
+      renderAnswer(turn.question, turn.response, turn.mode)));
+  }
+  state.conversationId = conversation.id;
+  state.history = conversation.turns.map((t) => ({ question: t.question, answer: t.response.answer }));
+  renderConversations();
+  closeLibraryDrawer();
+  scrollToBottom();
+}
+
+async function deleteConversation(conversation) {
+  if (!confirm(`Obrisati razgovor „${conversation.title}“? Ovo ne može da se vrati.`)) return;
+  try {
+    await api(`/conversations/${encodeURIComponent(conversation.id)}`, { method: "DELETE" });
+  } catch (error) {
+    toast(`Brisanje nije uspelo: ${error.message}`, "error");
+    return;
+  }
+  if (conversation.id === state.conversationId) newConversation();
+  toast("Razgovor je obrisan.");
+  await loadConversations();
 }
 
 // --- insights ---------------------------------------------------------------------------
@@ -540,6 +685,10 @@ function bindEvents() {
   const input = $("#composer-input");
   $("#composer").addEventListener("submit", (event) => {
     event.preventDefault();
+    if (state.pending) {  // the send button is a stop button while waiting
+      cancelAsk();
+      return;
+    }
     const text = input.value;
     input.value = "";
     autosize(input);
@@ -554,7 +703,8 @@ function bindEvents() {
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
-      if (!$("#insights").hidden) $("#insights").hidden = true;
+      if (state.pending) cancelAsk();
+      else if (!$("#insights").hidden) $("#insights").hidden = true;
       else if (!$("#viewer").hidden) closeViewer();
       else closeLibraryDrawer();
     }
@@ -568,6 +718,10 @@ function bindEvents() {
     button.addEventListener("click", () => setMode(button.dataset.mode));
   }
   $("#doc-filter").addEventListener("input", renderDocuments);
+  $("#tab-docs").addEventListener("click", () => setSideTab("docs"));
+  $("#tab-convs").addEventListener("click", () => setSideTab("convs"));
+  $("#new-chat").addEventListener("click", newConversation);
+  $("#new-chat-top").addEventListener("click", newConversation);
   $("#viewer-close").addEventListener("click", closeViewer);
   $("#load-demo").addEventListener("click", loadDemo);
   $("#insights-open").addEventListener("click", openInsights);
@@ -601,9 +755,11 @@ async function main() {
   bindEvents();
   renderExamples();
   setMode("rag");
+  try { setSideTab(localStorage.getItem("da-side-tab") === "convs" ? "convs" : "docs"); } catch { setSideTab("docs"); }
   try {
     await loadConfig();
     await loadDocuments();
+    await loadConversations();
   } catch (error) {
     toast(`Server nije dostupan: ${error.message}`, "error");
   }

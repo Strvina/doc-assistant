@@ -39,6 +39,8 @@ GitHub Actions · Docker / Hugging Face Spaces
 - **OCR (ADR-024, grana `feat/ocr`):** skenovi, slike u PDF-u i upload slika (PNG/JPG/TIFF/BMP) se čitaju
   Tesseract-om lokalno (srp latinica+ćirilica, deu, eng); pregled označava citat i na skenu. Eval sa
   skeniranim demo PDF-ovima: 100 %. Fotografije proizvoda (Lavazza) daju delimičan tekst.
+- **Razgovori (ADR-025):** kartica *Razgovori* levo — svako pitanje se čuva, stari razgovor se otvara ili
+  briše; dugme za slanje je *Stop* dok se čeka (i `Esc`), zaustavljeno pitanje se ne čuva i vraća se u polje.
 - **Testovi:** svi bez mreže (fake modeli, lažni SDK klijenti); `tests/conftest.py` sve putanje preusmerava u tmp.
 - **n8n eskalacija provereno uživo:** `uv run python scripts/setup_n8n.py` → webhook → n8n → mejl u Mailpit
   (<http://localhost:8025>); radi i iz koda aplikacije (`WebhookEscalator`).
@@ -80,6 +82,8 @@ GitHub Actions · Docker / Hugging Face Spaces
 - Claude: zvanični SDK, refusal fallback, `ANTHROPIC_EFFORT` (npr. `low`) je poluga za cenu/brzinu (ADR-014).
 - Frontend (`src/docassist/web/`) nema build korak; menja se direktno, server servira statiku.
 - n8n 2.x: posle `update:workflow --active=true` treba restart; webhook se registruje par sekundi posle `/healthz`.
+- Sesije su u SQLite (`sessions`), kolačić 1 godina → razgovori preživljavaju restart; vlasnik razgovora
+  je `session:<id>` ili `api`/`open`.
 - OCR strane idu paralelno (`ocr.run_jobs`, CPU-1 Tesseract procesa, `OMP_THREAD_LIMIT=1`): sken od 96 strana
   ~2 min (ranije ~6,5). UI prati `GET /documents/progress` i pokazuje "Čitam skenirane strane: 23 / 96".
 - Tesseract se zove direktno (`ingest/ocr.py`, TSV); PyMuPDF-ov OCR je preskakao tabele. Windows: traži se
@@ -114,4 +118,5 @@ GitHub Actions · Docker / Hugging Face Spaces
 | 2026-11-04 | Besplatni modeli: Gemini, pa Groq + lanac rezervi (ADR-021, ADR-022), eval 93 %; dugmad za prosleđivanje pitanja timovima (n8n → mejl timu) | #12 |
 | 2026-11-04 | Hibridna pretraga (+1 BM25 pogodak) i podela po odeljcima; eval: činjenice 96→100 %, odgovori 93→100 %, agent 100 %; ADR-023 | #13 |
 | 2026-11-04 | OCR (Tesseract) za skenove i slike, upload slika; eval sa skenovima 100 %; ADR-024 | #15 (#14 greškom spojen u `feat/hybrid-search`) |
-| 2026-11-04 | OCR paralelno (~3× brže) + prikaz napretka pri uploadu skena | — |
+| 2026-11-04 | OCR paralelno (~3× brže) + prikaz napretka pri uploadu skena | #16 |
+| 2026-11-04 | Sačuvani razgovori (otvori/obriši) i zaustavljanje pitanja; ADR-025 | — |

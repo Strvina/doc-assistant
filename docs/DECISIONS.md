@@ -260,3 +260,21 @@ pregledu); Docker slika veća za ~40 MB. Fotografije proizvoda, logotipi i slož
 fotografijama daju nepouzdan tekst (Lavazza cenovnik: nazivi i cene delimično) — za to je
 sledeći korak opcioni AI model koji čita slike (npr. Gemini), uz svestan izbor jer slike tada
 napuštaju server.
+
+### ADR-025 · Sačuvani razgovori po sesiji i zaustavljanje pitanja
+**Odluka:** svako pitanje se čuva u razgovoru (`conversations.py`, isti SQLite fajl kao log
+pitanja: tabele `sessions`, `conversations`, `turns`). Odgovor se čuva ceo, kako ga je API
+vratio (citati, koraci agenta), pa se stari razgovor prikazuje isto kao kad je nastao; naslov je
+prvo pitanje. API: `POST /ask` sa `conversation_id` nastavlja razgovor (bez njega počinje novi),
+`GET /conversations`, `GET/DELETE /conversations/{id}`. Razgovor pripada vlasniku — browser
+sesiji, ili "api" za integracije — i samo ga vlasnik vidi, otvara i briše.
+Sesija se čuva u bazi i kolačić traje godinu dana, pa razgovori preživljavaju restart servera.
+**Zaustavljanje:** UI šalje `request_id`; dugme za slanje postaje "Stop" (i `Esc`). Klik javlja
+serveru `POST /ask/cancel` i prekida čekanje; ako odgovor ipak stigne, server ga ne čuva i ne
+loguje (vraća 409). Pitanje se vraća u polje za unos da se ispravi.
+**Zašto:** korisnik hoće da se vrati na stare razgovore i da ih briše; i da prekine pogrešno
+postavljeno pitanje. Na serveru (ne u `localStorage`) — radi i za API, brisanje je stvarno
+brisanje sa servera, a na javnom demou posetioci ne vide tuđe razgovore.
+**Cena:** model ipak završi zaustavljeni odgovor u pozadini (troši limit, ne i vreme korisnika);
+razgovori su vezani za browser — drugi browser ili obrisani kolačići = nova, prazna lista
+(nema korisničkih naloga). Brisanje razgovora ne briše red iz loga pitanja (monitoring).

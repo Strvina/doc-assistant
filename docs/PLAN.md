@@ -79,6 +79,11 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 - [x] OCR za skenirane PDF-ove i tekst na slikama, upload slika (ADR-024)
 - [ ] Opcioni AI model za fotografije i tabele u slikama
 
+## Dodatno — razgovori
+
+- [x] Sačuvani razgovori: lista, otvaranje, brisanje (ADR-025)
+- [x] Zaustavljanje pitanja dok se odgovara
+
 ## Faza 7 — Završna obrada (26–30. 11.)  · grana: `chore/polish`
 
 - [x] 7.1 Dockerfile + `docker compose up` pokreće sve — `compose config` proveren, build nije pokrenut (Docker Desktop nije radio)
