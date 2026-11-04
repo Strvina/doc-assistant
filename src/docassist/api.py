@@ -234,8 +234,9 @@ OwnerDep = Annotated[str, Depends(owner)]
 
 
 def require_uploads(settings: SettingsDep) -> None:
+    """Changing shared data (documents, the question log) is off in the public demo."""
     if not settings.allow_uploads:
-        raise HTTPException(403, "Uploading and deleting documents is disabled in this demo")
+        raise HTTPException(403, "Uploading and deleting is disabled in this demo")
 
 
 # --- app ---------------------------------------------------------------------------------
@@ -543,6 +544,18 @@ def create_app(
     @app.get("/stats", dependencies=access)
     def stats(log: LogDep) -> dict[str, Any]:
         return vars_of(log.stats())
+
+    @app.delete("/queries/{query_id}", dependencies=uploads)
+    def delete_query(query_id: int, log: LogDep) -> dict[str, bool]:
+        """Remove one question from the log (monitoring lists and statistics)."""
+        if not log.delete(query_id):
+            raise HTTPException(404, f"No query with log_id {query_id}")
+        return {"ok": True}
+
+    @app.delete("/queries", dependencies=uploads)
+    def clear_queries(log: LogDep) -> dict[str, int]:
+        """Remove every question from the log. Saved conversations are kept."""
+        return {"deleted": log.clear()}
 
     @app.get("/insights", dependencies=access)
     def insights(log: LogDep) -> dict[str, Any]:

@@ -41,6 +41,8 @@ GitHub Actions · Docker / Hugging Face Spaces
   skeniranim demo PDF-ovima: 100 %. Fotografije proizvoda (Lavazza) daju delimičan tekst.
 - **Razgovori (ADR-025):** kartica *Razgovori* levo — svako pitanje se čuva, stari razgovor se otvara ili
   briše; dugme za slanje je *Stop* dok se čeka (i `Esc`), zaustavljeno pitanje se ne čuva i vraća se u polje.
+- **Praćenje:** pitanja iz loga se brišu pojedinačno (×) ili sva (`DELETE /queries`); zaključano kad je
+  `ALLOW_UPLOADS=false` (javni demo). Razgovori ostaju.
 - **Testovi:** svi bez mreže (fake modeli, lažni SDK klijenti); `tests/conftest.py` sve putanje preusmerava u tmp.
 - **n8n eskalacija provereno uživo:** `uv run python scripts/setup_n8n.py` → webhook → n8n → mejl u Mailpit
   (<http://localhost:8025>); radi i iz koda aplikacije (`WebhookEscalator`).
@@ -119,4 +121,5 @@ GitHub Actions · Docker / Hugging Face Spaces
 | 2026-11-04 | Hibridna pretraga (+1 BM25 pogodak) i podela po odeljcima; eval: činjenice 96→100 %, odgovori 93→100 %, agent 100 %; ADR-023 | #13 |
 | 2026-11-04 | OCR (Tesseract) za skenove i slike, upload slika; eval sa skenovima 100 %; ADR-024 | #15 (#14 greškom spojen u `feat/hybrid-search`) |
 | 2026-11-04 | OCR paralelno (~3× brže) + prikaz napretka pri uploadu skena | #16 |
-| 2026-11-04 | Sačuvani razgovori (otvori/obriši) i zaustavljanje pitanja; ADR-025 | — |
+| 2026-11-04 | Sačuvani razgovori (otvori/obriši) i zaustavljanje pitanja; ADR-025 | #17 |
+| 2026-11-04 | Brisanje pitanja iz praćenja (jedno ili sva; zaključano u demo režimu) | — |
