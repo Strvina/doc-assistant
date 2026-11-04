@@ -80,6 +80,8 @@ GitHub Actions · Docker / Hugging Face Spaces
 - Claude: zvanični SDK, refusal fallback, `ANTHROPIC_EFFORT` (npr. `low`) je poluga za cenu/brzinu (ADR-014).
 - Frontend (`src/docassist/web/`) nema build korak; menja se direktno, server servira statiku.
 - n8n 2.x: posle `update:workflow --active=true` treba restart; webhook se registruje par sekundi posle `/healthz`.
+- OCR strane idu paralelno (`ocr.run_jobs`, CPU-1 Tesseract procesa, `OMP_THREAD_LIMIT=1`): sken od 96 strana
+  ~2 min (ranije ~6,5). UI prati `GET /documents/progress` i pokazuje "Čitam skenirane strane: 23 / 96".
 - Tesseract se zove direktno (`ingest/ocr.py`, TSV); PyMuPDF-ov OCR je preskakao tabele. Windows: traži se
   u `C:/Program Files/Tesseract-OCR`. OCR strane u pregledu se radi ponovo (~1,5 s).
 - Indeks pamti embedder i verziju podele (`CHUNKING` u `ingest/chunker.py`); promena → `--rebuild`.
@@ -112,3 +114,4 @@ GitHub Actions · Docker / Hugging Face Spaces
 | 2026-11-04 | Besplatni modeli: Gemini, pa Groq + lanac rezervi (ADR-021, ADR-022), eval 93 %; dugmad za prosleđivanje pitanja timovima (n8n → mejl timu) | #12 |
 | 2026-11-04 | Hibridna pretraga (+1 BM25 pogodak) i podela po odeljcima; eval: činjenice 96→100 %, odgovori 93→100 %, agent 100 %; ADR-023 | #13 |
 | 2026-11-04 | OCR (Tesseract) za skenove i slike, upload slika; eval sa skenovima 100 %; ADR-024 | #15 (#14 greškom spojen u `feat/hybrid-search`) |
+| 2026-11-04 | OCR paralelno (~3× brže) + prikaz napretka pri uploadu skena | — |

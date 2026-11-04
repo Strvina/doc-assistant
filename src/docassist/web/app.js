@@ -179,7 +179,20 @@ async function uploadFiles(files) {
   if (!files.length) return;
   const form = new FormData();
   for (const file of files) form.append("files", file);
-  toast(`Indeksiram ${files.length} ${files.length === 1 ? "dokument" : "dokumenta"}…`);
+  const count = `${files.length} ${files.length === 1 ? "dokument" : "dokumenta"}`;
+  // A status that stays until the upload is done: scans are read page by page (OCR).
+  const status = el("div", { class: "toast info progress", role: "status" }, `Indeksiram ${count}…`);
+  $("#toasts").append(status);
+  const poll = setInterval(async () => {
+    try {
+      const running = await api("/documents/progress");
+      if (running.length) {
+        status.textContent = running
+          .map((p) => `Čitam skenirane strane (OCR): ${p.source} — ${p.done} / ${p.total}`)
+          .join(" · ");
+      }
+    } catch {}
+  }, 1000);
   try {
     const results = await api("/documents", { method: "POST", body: form });
     for (const r of results) {
@@ -188,6 +201,9 @@ async function uploadFiles(files) {
     }
   } catch (error) {
     toast(`Upload nije uspeo: ${error.message}`, "error");
+  } finally {
+    clearInterval(poll);
+    status.remove();
   }
   await loadDocuments();
 }
