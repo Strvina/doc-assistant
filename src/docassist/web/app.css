@@ -312,6 +312,17 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .answer-body { padding: 16px 18px 8px; }
 .answer-body p { margin: 0 0 10px; }
 .answer-body ul, .answer-body ol { margin: 0 0 10px; padding-left: 22px; }
+.answer-body h4 { margin: 14px 0 6px; font-size: 15px; }
+.answer-body code { font: 600 .9em var(--mono); padding: 1px 5px; border-radius: 5px; background: var(--surface-2); border: 1px solid var(--line); }
+/* Tables from the model: scroll sideways on a phone instead of squeezing the columns. */
+.table-wrap { overflow-x: auto; margin: 4px 0 12px; border: 1px solid var(--line); border-radius: 10px; }
+.answer-body table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.45; }
+.answer-body th, .answer-body td { padding: 9px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+.answer-body th { background: var(--surface-2); font-size: 12.5px; font-weight: 700; color: var(--ink-2); white-space: nowrap; }
+.answer-body tbody tr:last-child td { border-bottom: 0; }
+.answer-body tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
+.answer-body td .cite { white-space: nowrap; }
+@media (max-width: 860px) { .answer-body td { min-width: 140px; } }
 .answer-label {
   display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
   font: 600 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted);

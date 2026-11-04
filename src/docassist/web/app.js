@@ -279,6 +279,7 @@ function renderAnswerText(text, citations, invalid) {
   const inline = (line) =>
     escapeHtml(line)
       .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
       .replace(CITATION, (match, source, page) => {
         const citation = byKey.get(`${source.trim().toLowerCase()}|${Number(page)}`);
         if (!citation) {
@@ -288,10 +289,33 @@ function renderAnswerText(text, citations, invalid) {
         return `<button class="cite" type="button" data-doc="${citation.doc_id}" data-page="${citation.page}" data-key="${escapeHtml(source.trim().toLowerCase())}|${citation.page}" title="Otvori ${escapeHtml(citation.source)}, strana ${citation.page}">${escapeHtml(citation.source.replace(/\.[^.]+$/, ""))} · ${citation.page}</button>`;
       });
 
+  // Markdown that models use in answers: tables, headings, lists, **bold**, `code`.
   const blocks = [];
   let list = null;
+  let table = null;
+  const cells = (line) => line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => inline(c.trim()));
   for (const raw of text.split("\n")) {
     const line = raw.trimEnd();
+    if (/^\s*\|.*\|\s*$/.test(line)) {
+      list = null;
+      if (/^\s*\|?[\s:|-]+\|?\s*$/.test(line) && line.includes("-")) {  // |---|:---:| separator
+        if (table && table.rows.length === 1 && !table.head) table.head = table.rows.pop();
+        continue;
+      }
+      if (!table) {
+        table = { head: null, rows: [] };
+        blocks.push(table);
+      }
+      table.rows.push(cells(line));
+      continue;
+    }
+    table = null;
+    const heading = line.match(/^\s*(#{1,4})\s+(.*)$/);
+    if (heading) {
+      list = null;
+      blocks.push({ h: inline(heading[2].replace(/\s*#+\s*$/, "")) });
+      continue;
+    }
     const bullet = line.match(/^\s*(?:[-*•]|\d+[.)])\s+(.*)$/);
     if (bullet) {
       const ordered = /^\s*\d/.test(line);
@@ -305,8 +329,19 @@ function renderAnswerText(text, citations, invalid) {
     list = null;
     if (line.trim()) blocks.push({ p: inline(line) });
   }
+  const renderTable = (t) => {
+    const width = Math.max(...[t.head || [], ...t.rows].map((r) => r.length));
+    const row = (r, tag) => `<tr>${Array.from({ length: width }, (_, i) => `<${tag}>${r[i] ?? ""}</${tag}>`).join("")}</tr>`;
+    const head = t.head ? `<thead>${row(t.head, "th")}</thead>` : "";
+    return `<div class="table-wrap"><table>${head}<tbody>${t.rows.map((r) => row(r, "td")).join("")}</tbody></table></div>`;
+  };
   return blocks
-    .map((b) => (b.items ? `<${b.ordered ? "ol" : "ul"}>${b.items.map((i) => `<li>${i}</li>`).join("")}</${b.ordered ? "ol" : "ul"}>` : `<p>${b.p}</p>`))
+    .map((b) => {
+      if (b.rows) return renderTable(b);
+      if (b.h) return `<h4>${b.h}</h4>`;
+      if (b.items) return `<${b.ordered ? "ol" : "ul"}>${b.items.map((i) => `<li>${i}</li>`).join("")}</${b.ordered ? "ol" : "ul"}>`;
+      return `<p>${b.p}</p>`;
+    })
     .join("");
 }
 
