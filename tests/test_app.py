@@ -26,10 +26,10 @@ def app(tmp_path, monkeypatch):
 
 def test_starts_empty(app):
     assert not app.exception
-    assert app.title[0].value == "📄 Doc Assistant"
-    assert any("No documents yet" in c.value for c in app.sidebar.caption)
+    assert any("Doc Assistant" in m.value for m in app.markdown)
+    assert any("Još nema dokumenata" in c.value for c in app.sidebar.caption)
     labels = app.sidebar.radio(key="provider").options
-    assert labels[0].endswith("— no key")  # Claude without a key
+    assert labels[0].endswith("— nema ključa")  # Claude without a key
     assert not any("ChatGPT" in label for label in labels)  # optional, hidden without a key
     assert app.sidebar.radio(key="provider").value == "fake"
 
@@ -44,9 +44,12 @@ def test_load_demo_and_ask(app):
     assert not app.exception
     assert app.chat_message[0].name == "user"
     assistant = app.chat_message[1]
-    assert "[pravilnik_o_radu.pdf, str. 2]" in assistant.markdown[0].value
-    assert assistant.expander[0].label == "📄 pravilnik_o_radu.pdf — str. 2"
-    assert "Offline demo" in assistant.caption[0].value
+    # Citations are shown as inline chips, sources as expandable cards with the passage.
+    assert (
+        '<span class="da-cite">pravilnik_o_radu.pdf · str. 2</span>' in assistant.markdown[0].value
+    )
+    assert assistant.expander[0].label == "📕 pravilnik_o_radu.pdf — str. 2"
+    assert any("Offline demo" in m.value for m in assistant.markdown)
 
 
 def test_delete_document(app):
@@ -103,4 +106,30 @@ def test_agent_mode_shows_tool_calls(app):
 
     assert not app.exception
     assistant = app.chat_message[1]
-    assert assistant.expander[0].label == "🛠 1 tool call(s)"
+    assert assistant.expander[0].label == "🛠 Koraci agenta (1)"
+    assert "Pretraga dokumenata" in assistant.expander[0].markdown[0].value
+
+
+def test_example_question_button(app):
+    app.sidebar.button(key="load_demo").click().run()
+
+    app.button(key="example_0").click().run()
+
+    assert not app.exception
+    assert app.chat_message[0].markdown[0].value == "Koliko dana godišnjeg odmora imam?"
+    assert not any(b.key.startswith("example_") for b in app.button)  # welcome card is gone
+
+
+def test_new_conversation_clears_history(app):
+    app.sidebar.button(key="load_demo").click().run()
+    app.chat_input[0].set_value("Kada radi kantina?").run()
+
+    app.sidebar.button(key="new_chat").click().run()
+
+    assert len(app.chat_message) == 0
+
+
+def test_question_without_documents_warns(app):
+    app.chat_input[0].set_value("Pitanje?").run()
+
+    assert "Prvo dodaj dokumente" in app.warning[0].value

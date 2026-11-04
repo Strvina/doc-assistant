@@ -6,6 +6,8 @@ An internal AI assistant that answers employees' questions **only from documents
 
 > 🚧 Work in progress — see [`docs/PLAN.md`](docs/PLAN.md) for the roadmap.
 
+![Doc Assistant UI](docs/images/ui-welcome.png)
+
 ## Planned features
 
 - Upload company documents in Serbian, German or English; ask questions in any of them

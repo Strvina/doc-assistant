@@ -42,6 +42,8 @@ Python 3.12 · uv · Claude API (OpenAI opciono, ADR-018) · lokalni višejezič
 - **Odluka 2026-11-04:** koristimo **samo Claude** (ADR-018). OpenAI ostaje opciono u kodu.
   - PR #7: pretraga na lokalnom višejezičnom modelu (ADR-019) — jedini potreban ključ je `ANTHROPIC_API_KEY`.
     Eval pretrage: tačna strana među top-5 u 100 % pitanja (fake: 56 %).
+- Redizajn UI-ja (PR #9): srpski interfejs, tema, početni ekran sa primerima, citati kao oznake, izvori kao jedan
+  pasus (bez preklapanja, `Citation.passage`), koraci agenta rečima, uredan sidebar; screenshot u README-u.
 - Faza 7 (PR #8): Dockerfile + `compose.yaml` (ui, api, opciono n8n), README: dijagram, Docker, Data protection.
 - **U toku:** —
 - **Blokirano / ostalo iz faze 0:**
@@ -91,3 +93,4 @@ Python 3.12 · uv · Claude API (OpenAI opciono, ADR-018) · lokalni višejezič
 | 2026-11-04 | Faza 6: eval skup + alat, SQLite log, 👍/👎; odluka samo Claude; ADR-017, ADR-018 | #6 |
 | 2026-11-04 | Lokalni višejezični embeddings (izmereno: 100 % top-5), chunk 500/100; ADR-019 | #7 |
 | 2026-11-04 | Faza 7 (delimično): Docker, README dijagram + Data protection | #8 |
+| 2026-11-04 | Svi PR-ovi spojeni u main; redizajn UI-ja + screenshot | #9 |
