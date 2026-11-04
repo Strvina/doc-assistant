@@ -97,6 +97,8 @@ class Settings:
     groq_fallback_model: str = DEFAULT_GROQ_FALLBACK_MODEL
     escalation_teams: tuple[Team, ...] = parse_teams(DEFAULT_ESCALATION_TEAMS)
     hybrid_search: bool = True  # embeddings + keywords (ADR-023); false = embeddings only
+    # Sites allowed to show the app in an iframe, e.g. https://huggingface.co for a Space.
+    embed_origins: tuple[str, ...] = ()
 
     @classmethod
     def from_env(cls, load_dotenv_file: bool = True) -> Settings:
@@ -137,6 +139,7 @@ class Settings:
             index_dir=Path(_env("INDEX_DIR", "data/index")),
             top_k=int(_env("TOP_K", "5")),
             hybrid_search=_env("HYBRID_SEARCH", "true").lower() in ("1", "true", "yes"),
+            embed_origins=tuple(o for o in _env("EMBED_ORIGINS").replace(",", " ").split() if o),
             escalation_webhook_url=_env("ESCALATION_WEBHOOK_URL") or None,
             escalation_teams=parse_teams(_env("ESCALATION_TEAMS", DEFAULT_ESCALATION_TEAMS)),
             outbox_dir=Path(_env("OUTBOX_DIR", "data/outbox")),
