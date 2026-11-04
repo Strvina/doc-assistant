@@ -1,6 +1,7 @@
 """GeminiProvider with a fake OpenAI-compatible client (no network)."""
 
 import json
+import time
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -50,7 +51,7 @@ class Scripted:
 
 def provider(completions):
     client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
-    return GeminiProvider("gemini-test", client=client)
+    return GeminiProvider("gemini-test", client=client, paused_until={})
 
 
 def test_complete_sends_system_message_and_maps_result():
@@ -132,29 +133,35 @@ def test_factory_needs_a_key(monkeypatch):
     assert llm.name == "gemini"
 
 
-def status_error(code):
+def status_error(code, body=None):
     request = httpx2.Request("POST", "https://generativelanguage.googleapis.com")
-    return openai.APIStatusError("busy", response=httpx2.Response(code, request=request), body=None)
+    response = httpx2.Response(code, request=request)
+    if code == 429:
+        return openai.RateLimitError("quota", response=response, body=body)
+    return openai.APIStatusError("busy", response=response, body=body)
 
 
 class Overloaded:
     """Fails with `code` for the main model, answers with any other model."""
 
-    def __init__(self, code):
+    def __init__(self, code, body=None):
         self.code = code
+        self.body = body
         self.models = []
 
     def create(self, **request):
         self.models.append(request["model"])
         if request["model"] == "gemini-test":
-            raise status_error(self.code)
+            raise status_error(self.code, self.body)
         return response("odgovor")
 
 
 def test_falls_back_when_the_main_model_is_overloaded():
     completions = Overloaded(503)
     client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
-    llm = GeminiProvider("gemini-test", fallback_models=("gemini-lite",), client=client)
+    llm = GeminiProvider(
+        "gemini-test", fallback_models=("gemini-lite",), client=client, paused_until={}
+    )
 
     assert llm.complete("s", MESSAGES).text == "odgovor"
     assert completions.models == ["gemini-test", "gemini-lite"]
@@ -163,8 +170,44 @@ def test_falls_back_when_the_main_model_is_overloaded():
 def test_no_fallback_for_other_errors():
     completions = Overloaded(400)
     client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
-    llm = GeminiProvider("gemini-test", fallback_models=("gemini-lite",), client=client)
+    llm = GeminiProvider(
+        "gemini-test", fallback_models=("gemini-lite",), client=client, paused_until={}
+    )
 
     with pytest.raises(LLMError, match="400"):
         llm.complete("s", MESSAGES)
     assert completions.models == ["gemini-test"]
+
+
+def test_used_up_daily_quota_skips_the_model_until_it_resets():
+    body = [
+        {
+            "error": {
+                "code": 429,
+                "details": [
+                    {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "67913s"}
+                ],
+            }
+        }
+    ]
+    completions = Overloaded(429, body)
+    client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    paused = {}
+    llm = GeminiProvider(
+        "gemini-test", fallback_models=("gemini-lite",), client=client, paused_until=paused
+    )
+
+    llm.complete("s", MESSAGES)
+    llm.complete("s", MESSAGES)
+
+    assert completions.models == ["gemini-test", "gemini-lite", "gemini-lite"]
+    assert paused["gemini-test"] - time.monotonic() > 67000
+
+
+def test_last_model_is_tried_even_when_paused():
+    completions = Scripted(response("odgovor"))
+    client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    paused = {"gemini-test": time.monotonic() + 100}
+    llm = GeminiProvider("gemini-test", client=client, paused_until=paused)
+
+    assert llm.complete("s", MESSAGES).text == "odgovor"

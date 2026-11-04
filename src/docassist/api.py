@@ -25,8 +25,15 @@ from pydantic import BaseModel, Field
 
 from docassist import __version__
 from docassist.agent import run_agent
+from docassist.agent.tools import ToolError, new_escalation
 from docassist.config import Settings
-from docassist.factory import MissingAPIKeyError, build_llm, build_store, build_tool_context
+from docassist.factory import (
+    MissingAPIKeyError,
+    build_escalator,
+    build_llm,
+    build_store,
+    build_tool_context,
+)
 from docassist.ingest import DocumentLoadError
 from docassist.library import Library
 from docassist.llm import LLMError, LLMProvider
@@ -93,6 +100,16 @@ class AskResponse(BaseModel):
 class FeedbackRequest(BaseModel):
     log_id: int
     rating: int = Field(description="1 = helpful, -1 = not helpful, 0 = clear")
+
+
+class EscalateRequest(BaseModel):
+    log_id: int
+    contact: str = Field(default="", max_length=200, description="How to reach the person asking")
+
+
+class EscalateResponse(BaseModel):
+    reference: str
+    already_sent: bool = False
 
 
 class DocumentOut(BaseModel):
@@ -387,6 +404,27 @@ def create_app(
         if not log.set_feedback(body.log_id, body.rating or None):
             raise HTTPException(404, f"No query with log_id {body.log_id}")
         return {"ok": True}
+
+    @app.post("/escalate", dependencies=access)
+    def escalate(body: EscalateRequest, settings: SettingsDep, log: LogDep) -> EscalateResponse:
+        """Forward an unanswered question to a person (n8n webhook or the local outbox)."""
+        query = log.get(body.log_id)
+        if query is None:
+            raise HTTPException(404, f"No query with log_id {body.log_id}")
+        if query["escalation"]:  # one e-mail per question, however often the button is clicked
+            return EscalateResponse(reference=str(query["escalation"]), already_sent=True)
+        reason = (
+            "The documents have no answer to this question."
+            if not query["found"]
+            else "The user found the answer insufficient."
+        )
+        payload = new_escalation(str(query["question"]), reason, body.contact or "unknown")
+        try:
+            reference = build_escalator(settings).escalate(payload)
+        except (ToolError, OSError) as exc:  # webhook unreachable, outbox not writable
+            raise HTTPException(502, f"Could not forward the question: {exc}") from exc
+        log.set_escalation(body.log_id, reference)
+        return EscalateResponse(reference=reference)
 
     @app.get("/stats", dependencies=access)
     def stats(log: LogDep) -> dict[str, Any]:

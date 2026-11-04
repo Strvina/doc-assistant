@@ -111,6 +111,17 @@ class Recorder:
         return request["id"]
 
 
+def new_escalation(question: str, reason: str, contact: str) -> dict[str, Any]:
+    """The payload the n8n workflow expects (automations/escalation_workflow.json)."""
+    return {
+        "id": _new_id("ESC"),
+        "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "question": question,
+        "reason": reason,
+        "contact": contact,
+    }
+
+
 # --- tools -------------------------------------------------------------------------------
 
 
@@ -148,13 +159,7 @@ def build_tools(ctx: ToolContext) -> list[Tool]:
         return _document_text(chunks)
 
     def escalate_to_human(args: dict[str, Any]) -> str:
-        payload = {
-            "id": _new_id("ESC"),
-            "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
-            "question": args["question"],
-            "reason": args["reason"],
-            "contact": args["contact"],
-        }
+        payload = new_escalation(args["question"], args["reason"], args["contact"])
         reference = ctx.escalator.escalate(payload)
         return f"Escalated to a person, reference {reference}."
 

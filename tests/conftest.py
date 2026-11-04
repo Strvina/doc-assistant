@@ -22,6 +22,7 @@ def isolated_data(tmp_path, monkeypatch):
         "GEMINI_MODEL",
         "GEMINI_FALLBACK_MODEL",
         "API_TOKEN",
+        "ESCALATION_WEBHOOK_URL",
     ):
         monkeypatch.setenv(key, "")  # empty beats a value load_dotenv() would add
     return tmp_path

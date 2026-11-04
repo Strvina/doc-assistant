@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from docassist.agent.tools import JsonlFile, ToolContext, WebhookEscalator
+from docassist.agent.tools import Escalator, JsonlFile, ToolContext, WebhookEscalator
 from docassist.config import Settings
 from docassist.library import Library
 from docassist.llm import FakeProvider, LLMProvider
@@ -69,18 +69,19 @@ def build_llm(settings: Settings, provider: str | None = None) -> LLMProvider:
     raise ValueError(f"Unknown LLM provider {provider!r}")
 
 
+def build_escalator(settings: Settings) -> Escalator:
+    """Escalations go to the webhook (n8n) if configured, otherwise to a local file."""
+    if settings.escalation_webhook_url:
+        return WebhookEscalator(settings.escalation_webhook_url)
+    return JsonlFile(settings.outbox_dir / "escalations.jsonl")
+
+
 def build_tool_context(settings: Settings, store: VectorStore) -> ToolContext:
-    """Agent tools: escalations go to the webhook if configured, otherwise to a local file."""
-    outbox = settings.outbox_dir
-    escalator = (
-        WebhookEscalator(settings.escalation_webhook_url)
-        if settings.escalation_webhook_url
-        else JsonlFile(outbox / "escalations.jsonl")
-    )
+    """Everything the agent tools need."""
     return ToolContext(
         store=store,
-        escalator=escalator,
-        leave_requests=JsonlFile(outbox / "leave_requests.jsonl"),
+        escalator=build_escalator(settings),
+        leave_requests=JsonlFile(settings.outbox_dir / "leave_requests.jsonl"),
         top_k=settings.top_k,
     )
 

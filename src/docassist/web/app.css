@@ -329,6 +329,14 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .answer-foot .icon-btn.on { color: var(--navy-500); background: var(--amber-soft); }
 [data-theme="dark"] .answer-foot .icon-btn.on { color: var(--amber); }
 .answer-foot svg { width: 17px; height: 17px; }
+.escalate {
+  margin: 0 18px 12px; padding: 10px 12px; border-radius: 10px; font-size: 13px;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--surface-2); border: 1px solid var(--line);
+}
+.escalate-text { flex: 1 1 220px; }
+.escalate.sent { background: var(--ok-soft); border-color: transparent; color: var(--ok); }
+.btn.small { height: 32px; padding: 0 12px; font-size: 13px; }
 .warning { margin: 0 18px 12px; padding: 9px 12px; border-radius: 10px; font-size: 13px; background: var(--bad-soft); color: var(--bad); }
 
 .thinking { display: flex; align-items: center; gap: 12px; padding: 16px 18px; color: var(--muted); font-size: 14px; }

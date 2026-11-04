@@ -1,3 +1,4 @@
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -192,6 +193,28 @@ def test_ask_agent_mode_reports_tool_calls(client):
 
     assert [c["name"] for c in body["tool_calls"]] == ["search_documents"]
     assert body["found"] is True
+
+
+def test_escalate_unanswered_question_once(client, settings):
+    body = client.post("/ask", json={"question": "Koja je cena akcija na berzi?"}).json()
+    assert body["found"] is False
+
+    first = client.post("/escalate", json={"log_id": body["log_id"]})
+    again = client.post("/escalate", json={"log_id": body["log_id"]})
+
+    assert first.status_code == 200
+    reference = first.json()["reference"]
+    assert reference.startswith("ESC-")
+    assert again.json() == {"reference": reference, "already_sent": True}
+    lines = (settings.outbox_dir / "escalations.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1  # the second click did not send a second e-mail
+    record = json.loads(lines[0])
+    assert record["question"] == "Koja je cena akcija na berzi?"
+    assert record["id"] == reference
+
+
+def test_escalate_unknown_log_id(client):
+    assert client.post("/escalate", json={"log_id": 999}).status_code == 404
 
 
 @pytest.mark.parametrize(("provider", "status"), [("claude", 503), ("broken", 502)])

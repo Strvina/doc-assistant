@@ -288,6 +288,28 @@ function renderAnswerText(text, citations, invalid) {
     .join("");
 }
 
+// An unanswered question can go to a person with one click (n8n → e-mail to HR).
+function escalateBox(logId) {
+  const status = el("span", { class: "escalate-text" }, "Odgovor nije u dokumentima. Prosledite pitanje nadležnoj osobi?");
+  const button = el("button", { class: "btn primary small", type: "button" }, "Prosledi HR-u");
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    button.textContent = "Šaljem…";
+    try {
+      const result = await api("/escalate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ log_id: logId }) });
+      box.classList.add("sent");
+      status.textContent = `Pitanje je prosleđeno (referenca ${result.reference}). Javiće vam se nadležna osoba.`;
+      button.remove();
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = "Prosledi HR-u";
+      toast(`Pitanje nije prosleđeno: ${error.message}`, "error");
+    }
+  });
+  const box = el("div", { class: "escalate" }, status, button);
+  return box;
+}
+
 function renderAnswer(question, data, mode) {
   const card = el("article", { class: "answer" });
   const label = el("div", { class: "answer-label" },
@@ -315,6 +337,9 @@ function renderAnswer(question, data, mode) {
   if (data.invalid_citations.length) {
     card.append(el("div", { class: "warning" }, `Odgovor navodi izvore koji nisu među pronađenim pasusima: ${data.invalid_citations.join(", ")}`));
   }
+
+  const agentEscalated = data.tool_calls.some((c) => c.name === "escalate_to_human" && !c.is_error);
+  if (!data.found && data.log_id && !agentEscalated) card.append(escalateBox(data.log_id));
 
   if (data.citations.length) {
     card.append(el("div", { class: "sources" },
