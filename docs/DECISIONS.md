@@ -292,3 +292,17 @@ kartica sa izvorima zamenjuje tekst na kraju. Stop prekida tok: server zatvara s
 pitanje ide POST-om sa telom, a `fetch` čita tok direktno.
 **Cena:** i dalje se čeka pretraga i prvi token modela; besplatni Gemini nekad šalje odgovor u
 jednom komadu.
+
+### ADR-027 · Izvoz razgovora u PDF i Word
+**Odluka:** `GET /conversations/{id}/export?format=pdf|docx` (samo vlasnik razgovora) vraća fajl:
+naslov, pa za svako pitanje odgovor i "Izvori" (dokument, strana, citirani pasus skraćen na 300
+znakova). Odgovor se čita kao isti Markdown podskup koji prikazuje UI (naslovi, liste, tabele,
+**bold**, `kod`) — `export.parse_markdown` pa dva renderera: Word preko python-docx, PDF preko
+PyMuPDF-ovog HTML rasporeda (`Story`) sa brojevima strana. U UI-ju dugme za preuzimanje u listi
+razgovora otvara meni PDF / Word; ime fajla je naslov razgovora (ASCII rezerva za stare klijente).
+**Zašto:** obe biblioteke već čitaju dokumente — nema nove zavisnosti ni spoljnog servisa
+(wkhtmltopdf, LibreOffice); PyMuPDF-ovi ugrađeni fontovi pokrivaju srpsku latinicu i ćirilicu i
+nemačka slova. Izvoz na serveru (a ne `window.print`) daje isti fajl i za API integracije.
+**Cena:** Markdown parser postoji dvaput (app.js i Python) — promena u jednom traži promenu u
+drugom. Vreme u fajlu je lokalno vreme servera (na HF Space-u UTC). Koraci agenta (alati) se ne
+izvoze, samo konačni odgovor.

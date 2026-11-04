@@ -41,7 +41,8 @@ GitHub Actions · Docker / Hugging Face Spaces
   skeniranim demo PDF-ovima: 100 %. Fotografije proizvoda (Lavazza) daju delimičan tekst.
 - **Razgovori (ADR-025):** kartica *Razgovori* levo — svako pitanje se čuva, stari razgovor se otvara ili
   briše; dugme za slanje je *Stop* dok se čeka (i `Esc`), zaustavljeno pitanje se ne čuva i vraća se u polje.
-  Pretraga razgovora (naslov/pitanja/odgovori, bez obzira na kvačice) i preimenovanje olovkom.
+  Pretraga razgovora (naslov/pitanja/odgovori, bez obzira na kvačice), preimenovanje olovkom i
+  **izvoz u PDF / Word** (dugme za preuzimanje → meni; ADR-027, `export.py`).
 - **Praćenje:** pitanja iz loga se brišu pojedinačno (×) ili sva (`DELETE /queries`); zaključano kad je
   `ALLOW_UPLOADS=false` (javni demo). Razgovori ostaju.
 - **Testovi:** svi bez mreže (fake modeli, lažni SDK klijenti); `tests/conftest.py` sve putanje preusmerava u tmp.
@@ -67,7 +68,7 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
    posle zelenog CI-ja:**
    - [x] Odgovor se ispisuje dok nastaje (#21).
    - [x] Pretraga i preimenovanje razgovora (#22), provereno u browseru (Playwright).
-   - [ ] Izvoz razgovora u PDF i Word.
+   - [x] Izvoz razgovora u PDF i Word (#23), provereno u browseru.
    - [ ] Excel (`.xlsx`) i PowerPoint (`.pptx`) dokumenti (`uv add openpyxl python-pptx`) + **ispravka:**
      citati iz slika/novih formata se ne prepoznaju (`rag._CITATION` i `CITATION` u `app.js` znaju samo
      pdf|docx|txt|md) → izvesti listu ekstenzija iz `SUPPORTED_EXTENSIONS`.
@@ -91,6 +92,7 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 - Claude: zvanični SDK, refusal fallback, `ANTHROPIC_EFFORT` (npr. `low`) je poluga za cenu/brzinu (ADR-014).
 - Frontend (`src/docassist/web/`) nema build korak; menja se direktno, server servira statiku.
 - `renderAnswerText` (app.js) prikazuje Markdown iz odgovora: tabele, `#` naslove, liste, **bold**, `kod`.
+  Isti podskup parsira `export.parse_markdown` za PDF/Word — menjati oba zajedno.
 - n8n 2.x: posle `update:workflow --active=true` treba restart; webhook se registruje par sekundi posle `/healthz`.
 - Sesije su u SQLite (`sessions`), kolačić 1 godina → razgovori preživljavaju restart; vlasnik razgovora
   je `session:<id>` ili `api`/`open`.
@@ -135,3 +137,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-04 | Priprema za HF Space (iframe/kolačić, LFS, DEPLOY za Groq); demo odložen | #20 |
 | 2026-11-04 | Odgovor se ispisuje dok nastaje (`/ask/stream`, NDJSON); Stop prekida i generisanje; ADR-026 | #21 |
 | 2026-11-04 | Pretraga (bez kvačica) i preimenovanje razgovora; provereno u browseru (ispravljeno: korpa je prekrivala olovku) | #22 |
+| 2026-11-04 | Izvoz razgovora u PDF i Word (pitanja, odgovori sa tabelama, izvori); ADR-027 | #23 |
