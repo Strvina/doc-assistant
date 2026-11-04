@@ -273,7 +273,7 @@ function renderExamples() {
 }
 
 /** Minimal, safe Markdown: paragraphs, bullet/numbered lists, **bold**, citation chips. */
-function renderAnswerText(text, citations, invalid) {
+function renderAnswerText(text, citations, invalid, streaming = false) {
   const byKey = new Map(citations.map((c) => [`${c.source.toLowerCase()}|${c.page}`, c]));
   const invalidSet = new Set(invalid);
   const inline = (line) =>
@@ -282,6 +282,7 @@ function renderAnswerText(text, citations, invalid) {
       .replace(/`([^`]+)`/g, "<code>$1</code>")
       .replace(CITATION, (match, source, page) => {
         const citation = byKey.get(`${source.trim().toLowerCase()}|${Number(page)}`);
+        if (streaming) return `<span class="cite pending">${escapeHtml(source.replace(/\.[^.]+$/, ""))} · ${page}</span>`;
         if (!citation) {
           const title = invalidSet.size ? "Ovaj izvor nije među pronađenim pasusima" : "";
           return `<span class="cite invalid" title="${title}">${escapeHtml(source)} · ${page}</span>`;
@@ -497,21 +498,32 @@ async function ask(question) {
   thread.append(message);
   scrollToBottom();
 
+  // While the model writes, the text shows up in a light card; the full card with sources
+  // replaces it when the answer is complete.
+  let live = null;
+  let written = "";
+  const showPiece = (piece) => {
+    written += piece;
+    if (!live) {
+      live = el("article", { class: "answer streaming" }, el("div", { class: "answer-body" }));
+      waiting.replaceWith(live);
+    }
+    const body = live.firstChild;
+    body.innerHTML = renderAnswerText(written, [], [], true);
+    body.append(el("span", { class: "caret", "aria-hidden": "true" }));
+    scrollToBottom();
+  };
+
   try {
-    const data = await api("/ask", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      signal: pending.controller.signal,
-      body: JSON.stringify({
-        question,
-        provider: state.provider,
-        agent: mode === "agent",
-        conversation_id: state.conversationId,
-        request_id: requestId,
-        history: state.history.slice(-3).map((h) => [h.question, h.answer]),
-      }),
-    });
-    waiting.replaceWith(renderAnswer(question, data, mode));
+    const data = await askStream({
+      question,
+      provider: state.provider,
+      agent: mode === "agent",
+      conversation_id: state.conversationId,
+      request_id: requestId,
+      history: state.history.slice(-3).map((h) => [h.question, h.answer]),
+    }, pending.controller.signal, showPiece);
+    (live || waiting).replaceWith(renderAnswer(question, data, mode));
     state.history.push({ question, answer: data.answer });
     state.conversationId = data.conversation_id;
     loadConversations();
@@ -527,13 +539,48 @@ async function ask(question) {
     } else {
       const text = error.status === 429 ? "Dostignut je limit pitanja. Pokušaj kasnije." :
         error.status === 503 ? `Model nije dostupan: ${error.message}` : `Greška: ${error.message}`;
-      waiting.replaceWith(el("div", { class: "msg-error" }, text));
+      (live || waiting).replaceWith(el("div", { class: "msg-error" }, text));
     }
   } finally {
     if (state.pending === pending) state.pending = null;
     setBusy(false);
     scrollToBottom();
   }
+}
+
+// POST /ask/stream: newline-delimited JSON events — "delta" pieces, then "done" or "error".
+async function askStream(body, signal, onPiece) {
+  const response = await fetch("/ask/stream", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!response.ok) {  // refused before the answer started (limits, unknown conversation…)
+    let detail = `${response.status}`;
+    try { const data = await response.json(); detail = typeof data.detail === "string" ? data.detail : detail; } catch {}
+    throw Object.assign(new Error(detail), { status: response.status });
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let newline;
+    while ((newline = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, newline).trim();
+      buffer = buffer.slice(newline + 1);
+      if (!line) continue;
+      const event = JSON.parse(line);
+      if (event.type === "delta") onPiece(event.text);
+      else if (event.type === "done") return event.response;
+      else if (event.type === "error") throw Object.assign(new Error(event.message), { status: event.status });
+    }
+  }
+  throw new Error("Odgovor je prekinut.");
 }
 
 function setBusy(busy) {

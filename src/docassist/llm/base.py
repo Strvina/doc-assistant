@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, Protocol, TypedDict
 
@@ -64,3 +65,19 @@ class AgentRun:
     output_tokens: int
     stop_reason: str  # "end" | "max_tokens" | "refusal" | "max_steps" | "other"
     steps: int
+
+
+def stream_complete(llm: Any, system: str, messages: list[Message]) -> Iterator[str | LLMResult]:
+    """Pieces of the answer as they are written, then the whole `LLMResult` last.
+
+    Providers with a `stream` method send text as the model writes it; for the others the
+    whole answer arrives as one piece (same result, just no early text).
+    """
+    stream = getattr(llm, "stream", None)
+    if stream is not None:
+        yield from stream(system, messages)
+        return
+    result = llm.complete(system, messages)
+    if result.text:
+        yield result.text
+    yield result

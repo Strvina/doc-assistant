@@ -11,16 +11,17 @@ integrations send ``X-API-Key`` and browsers get a session cookie when they open
 from __future__ import annotations
 
 import hashlib
+import json
 import secrets
 import time
 from collections import defaultdict, deque
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Annotated, Any
 from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -42,7 +43,7 @@ from docassist.library import Library
 from docassist.llm import LLMError, LLMProvider
 from docassist.logs import QueryLog
 from docassist.pricing import cost_usd
-from docassist.rag import Answer, answer, merge_passages
+from docassist.rag import Answer, answer, answer_stream, merge_passages
 from docassist.retrieval import EmbedderMismatchError, VectorStore
 from docassist.viewer import pdf_with_highlights, render_html
 
@@ -432,6 +433,56 @@ def create_app(
 
     # --- questions ------------------------------------------------------------------------
 
+    def prepare(
+        body: AskRequest,
+        request: Request,
+        kind: str,
+        who: str,
+        settings: Settings,
+        conversations: ConversationStore,
+    ) -> tuple[LLMProvider, list[tuple[str, str]]]:
+        """Checks shared by /ask and /ask/stream, before any model call."""
+        if body.conversation_id and not conversations.exists(who, body.conversation_id):
+            raise HTTPException(404, f"No conversation {body.conversation_id!r}")
+        if kind != "api":
+            _check_limits(request, settings)
+        history = list(body.history)
+        if body.conversation_id and not history:  # follow-ups use the saved conversation
+            history = conversations.history(who, body.conversation_id)
+        try:
+            return llm_factory(settings, body.provider), history
+        except ValueError as exc:  # unknown provider name
+            raise HTTPException(422, str(exc)) from exc
+        except MissingAPIKeyError as exc:
+            raise HTTPException(503, str(exc)) from exc
+        except LLMError as exc:
+            raise HTTPException(502, str(exc)) from exc
+
+    def finish(
+        result: Answer,
+        body: AskRequest,
+        request: Request,
+        kind: str,
+        who: str,
+        log: QueryLog,
+        conversations: ConversationStore,
+    ) -> AskResponse | None:
+        """Log the answer and save it in the conversation; None if the user cancelled it."""
+        if body.request_id and body.request_id in request.app.state.cancelled:
+            # Cancelled while the model was answering: nothing is saved or logged.
+            request.app.state.cancelled.discard(body.request_id)
+            return None
+        response = to_response(result)
+        channel = "web" if kind == "web" else "api"
+        mode = "agent" if body.agent else "rag"
+        response.log_id = log.log(result, channel=channel, mode=mode)
+        conversation_id = body.conversation_id or conversations.create(who, body.question)
+        response.conversation_id = conversation_id
+        conversations.add_turn(
+            who, conversation_id, body.question, mode, response.model_dump(mode="json")
+        )
+        return response
+
     @app.post("/ask")
     def ask(
         body: AskRequest,
@@ -443,42 +494,71 @@ def create_app(
         log: LogDep,
         conversations: ConversationsDep,
     ) -> AskResponse:
-        if body.conversation_id and not conversations.exists(who, body.conversation_id):
-            raise HTTPException(404, f"No conversation {body.conversation_id!r}")
-        if kind != "api":
-            _check_limits(request, settings)
-        history = body.history
-        if body.conversation_id and not history:  # follow-ups use the saved conversation
-            history = conversations.history(who, body.conversation_id)
+        llm, history = prepare(body, request, kind, who, settings, conversations)
+        top_k = body.top_k or settings.top_k
         try:
-            llm = llm_factory(settings, body.provider)
-            top_k = body.top_k or settings.top_k
             if body.agent:
                 ctx = build_tool_context(settings, store)
                 ctx.top_k = top_k
                 result = run_agent(body.question, ctx, llm, history=history)
             else:
                 result = answer(body.question, store, llm, k=top_k, history=history)
-        except ValueError as exc:  # unknown provider name
-            raise HTTPException(422, str(exc)) from exc
-        except MissingAPIKeyError as exc:
-            raise HTTPException(503, str(exc)) from exc
         except LLMError as exc:
             raise HTTPException(502, str(exc)) from exc
-        if body.request_id and body.request_id in request.app.state.cancelled:
-            # Cancelled while the model was answering: nothing is saved or logged.
-            request.app.state.cancelled.discard(body.request_id)
+        response = finish(result, body, request, kind, who, log, conversations)
+        if response is None:
             raise HTTPException(409, "The question was cancelled")
-        response = to_response(result)
-        channel = "web" if kind == "web" else "api"
-        mode = "agent" if body.agent else "rag"
-        response.log_id = log.log(result, channel=channel, mode=mode)
-        conversation_id = body.conversation_id or conversations.create(who, body.question)
-        response.conversation_id = conversation_id
-        conversations.add_turn(
-            who, conversation_id, body.question, mode, response.model_dump(mode="json")
-        )
         return response
+
+    @app.post("/ask/stream", response_class=StreamingResponse)
+    def ask_stream(
+        body: AskRequest,
+        request: Request,
+        kind: ClientDep,
+        who: OwnerDep,
+        settings: SettingsDep,
+        store: StoreDep,
+        log: LogDep,
+        conversations: ConversationsDep,
+    ) -> StreamingResponse:
+        """Like /ask, but the answer arrives as it is written: newline-delimited JSON events
+        `{"type": "delta", "text": …}` …, then `{"type": "done", "response": <as /ask>}`
+        (or `{"type": "error", "status", "message"}`). Agent mode sends only "done".
+
+        If the client goes away (Stop button), the stream is closed: the model stops
+        generating and nothing is saved.
+        """
+        llm, history = prepare(body, request, kind, who, settings, conversations)
+        top_k = body.top_k or settings.top_k
+
+        def event(data: dict[str, Any]) -> bytes:
+            return (json.dumps(data, ensure_ascii=False) + "\n").encode()
+
+        def events() -> Iterator[bytes]:
+            try:
+                if body.agent:
+                    ctx = build_tool_context(settings, store)
+                    ctx.top_k = top_k
+                    result = run_agent(body.question, ctx, llm, history=history)
+                else:
+                    result = None
+                    for item in answer_stream(body.question, store, llm, k=top_k, history=history):
+                        if isinstance(item, str):
+                            yield event({"type": "delta", "text": item})
+                        else:
+                            result = item
+            except LLMError as exc:
+                yield event({"type": "error", "status": 502, "message": str(exc)})
+                return
+            response = finish(result, body, request, kind, who, log, conversations)
+            if response is None:
+                yield event({"type": "error", "status": 409, "message": "cancelled"})
+                return
+            yield event({"type": "done", "response": response.model_dump(mode="json")})
+
+        # No buffering by proxies, so the text really arrives as it is written.
+        headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+        return StreamingResponse(events(), media_type="application/x-ndjson", headers=headers)
 
     @app.post("/ask/cancel", dependencies=access)
     def cancel(body: CancelRequest, request: Request) -> dict[str, bool]:
