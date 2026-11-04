@@ -234,6 +234,16 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .conv .conv-actions .icon-btn:hover { color: var(--ink); }
 .conv .conv-actions .conv-delete:hover { color: var(--bad); }
 .conv .conv-actions svg { width: 16px; height: 16px; }
+.export-menu {
+  position: fixed; z-index: 60; min-width: 150px; padding: 4px; display: grid;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-2);
+}
+.export-menu a {
+  padding: 8px 12px; border-radius: 7px; color: var(--ink); text-decoration: none;
+  font-size: 13.5px; font-weight: 500;
+}
+.export-menu a:hover, .export-menu a:focus-visible { background: var(--surface-2); outline: none; }
 .conv-rename {
   width: 100%; height: 32px; padding: 0 8px; font: inherit; font-weight: 600; font-size: 13.5px;
   border: 1px solid var(--amber); border-radius: 8px; background: var(--surface); color: var(--ink);
@@ -241,7 +251,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 @media (hover: none) { .conv .conv-actions { opacity: 1; } }
 .conv-list { list-style: none; margin: 0; padding: 4px 10px; overflow-y: auto; flex: 1; }
 .conv {
-  position: relative; display: grid; gap: 3px; padding: 10px 76px 10px 12px;
+  position: relative; display: grid; gap: 3px; padding: 10px 106px 10px 12px;
   border-radius: 11px; cursor: pointer; border: 1px solid transparent;
 }
 .conv:hover { background: var(--surface-2); border-color: var(--line); }

@@ -25,7 +25,7 @@ from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from docassist import __version__
+from docassist import __version__, export
 from docassist.agent import run_agent
 from docassist.agent.tools import ToolError, new_escalation
 from docassist.config import Settings
@@ -602,6 +602,25 @@ def create_app(
         if found is None:
             raise HTTPException(404, f"No conversation {conversation_id!r}")
         return found
+
+    @app.get("/conversations/{conversation_id}/export")
+    def export_conversation(
+        conversation_id: str,
+        who: OwnerDep,
+        conversations: ConversationsDep,
+        fmt: Annotated[
+            str, Query(alias="format", pattern="^(pdf|docx)$", description="pdf | docx")
+        ] = "pdf",
+    ) -> Response:
+        """The conversation as a PDF or Word file: questions, answers and cited passages."""
+        found = conversations.get(who, conversation_id)
+        if found is None:
+            raise HTTPException(404, f"No conversation {conversation_id!r}")
+        return Response(
+            export.export(found, fmt),
+            media_type=export.FORMATS[fmt],
+            headers={"Content-Disposition": export.content_disposition(found, fmt)},
+        )
 
     @app.delete("/conversations/{conversation_id}")
     def delete_conversation(

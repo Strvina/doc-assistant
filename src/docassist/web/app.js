@@ -645,6 +645,9 @@ function renderConversations() {
     : "Još nema sačuvanih razgovora.<br>Svako pitanje se čuva automatski.";
   list.replaceChildren(...state.conversations.map((c) => {
     const remove = el("span", { class: "conv-actions" },
+      el("button", { class: "icon-btn conv-export", type: "button", title: "Preuzmi kao PDF ili Word",
+        "aria-label": `Preuzmi razgovor: ${c.title}`, "aria-haspopup": "menu", html: ICONS.download,
+        onclick: (event) => { event.stopPropagation(); toggleExportMenu(event.currentTarget, c); } }),
       el("button", { class: "icon-btn conv-edit", type: "button", title: "Preimenuj",
         "aria-label": `Preimenuj razgovor: ${c.title}`, html: ICONS.pencil,
         onclick: (event) => { event.stopPropagation(); startRename(event.currentTarget.closest(".conv"), c); } }),
@@ -659,6 +662,30 @@ function renderConversations() {
       remove);
     return item;
   }));
+}
+
+// Export (ADR-027): a small menu under the download button; the links download the file.
+function closeExportMenu() {
+  const menu = document.querySelector(".export-menu");
+  if (!menu) return null;
+  menu.remove();
+  document.querySelector(".conv-export[aria-expanded]")?.removeAttribute("aria-expanded");
+  return menu.dataset.id;
+}
+
+function toggleExportMenu(button, conversation) {
+  if (closeExportMenu() === conversation.id) return;  // second click closes it
+  const href = (format) => `/conversations/${encodeURIComponent(conversation.id)}/export?format=${format}`;
+  const item = (format, label) => el("a", { role: "menuitem", href: href(format), download: true,
+    onclick: (event) => { event.stopPropagation(); closeExportMenu(); } }, label);
+  const menu = el("div", { class: "export-menu", role: "menu", dataset: { id: conversation.id } },
+    item("pdf", "PDF"), item("docx", "Word (.docx)"));
+  const box = button.getBoundingClientRect();
+  menu.style.top = `${box.bottom + 4}px`;
+  menu.style.left = `${Math.max(8, box.right - 150)}px`;
+  document.body.append(menu);
+  button.setAttribute("aria-expanded", "true");
+  menu.querySelector("a").focus();
 }
 
 // Rename in place: the title becomes an input; Enter saves, Esc or leaving the field cancels.
@@ -858,6 +885,7 @@ function bindEvents() {
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
+      if (closeExportMenu()) return;
       if (state.pending) cancelAsk();
       else if (!$("#insights").hidden) $("#insights").hidden = true;
       else if (!$("#viewer").hidden) closeViewer();
@@ -868,6 +896,10 @@ function bindEvents() {
       input.focus();
     }
   });
+  document.addEventListener("click", (event) => {  // a click elsewhere closes the export menu
+    if (!event.target.closest(".export-menu")) closeExportMenu();
+  });
+  $("#conv-list").addEventListener("scroll", closeExportMenu);
 
   for (const button of document.querySelectorAll(".mode-switch button")) {
     button.addEventListener("click", () => setMode(button.dataset.mode));
