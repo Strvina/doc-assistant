@@ -120,6 +120,20 @@ def test_questions_cannot_be_deleted_in_the_public_demo(settings, tmp_path):
     assert demo.get("/insights").json()["stats"]["queries"] == 1
 
 
+def test_app_can_be_embedded_only_where_allowed(settings, tmp_path):
+    plain = make_client(settings, tmp_path).get("/")
+    assert plain.headers["x-frame-options"] == "SAMEORIGIN"
+    assert "samesite=strict" in plain.headers["set-cookie"].lower()
+
+    space = make_client(settings, tmp_path, embed_origins=("https://huggingface.co",)).get("/")
+    assert "x-frame-options" not in space.headers
+    assert space.headers["content-security-policy"] == (
+        "frame-ancestors 'self' https://huggingface.co"
+    )
+    cookie = space.headers["set-cookie"].lower()
+    assert "samesite=none" in cookie and "secure" in cookie and "partitioned" in cookie
+
+
 def test_health_and_empty_index(client):
     body = client.get("/health").json()
 

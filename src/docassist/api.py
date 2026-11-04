@@ -268,16 +268,23 @@ def create_app(
     async def security_headers(request: Request, call_next: Callable) -> Response:
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        embed = _app_settings(request).embed_origins
+        if embed:  # e.g. a Hugging Face Space shows the app in an iframe on huggingface.co
+            frame_ancestors = " ".join(("'self'", *embed))
+            response.headers.setdefault(
+                "Content-Security-Policy", f"frame-ancestors {frame_ancestors}"
+            )
+        else:
+            response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
         response.headers.setdefault("Referrer-Policy", "same-origin")
         return response
 
     # --- web UI ---------------------------------------------------------------------------
 
     @app.get("/", include_in_schema=False)
-    def index(request: Request, conversations: ConversationsDep) -> Response:
+    def index(request: Request, settings: SettingsDep, conversations: ConversationsDep) -> Response:
         response = HTMLResponse(_index_html(), headers={"Cache-Control": "no-cache"})
-        _ensure_session(request, response, conversations)
+        _ensure_session(request, response, settings, conversations)
         return response
 
     app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
@@ -290,7 +297,7 @@ def create_app(
         conversations: ConversationsDep,
     ) -> dict[str, Any]:
         """What the web UI needs to know: available models, limits, demo mode."""
-        _ensure_session(request, response, conversations)
+        _ensure_session(request, response, settings, conversations)
         available = {
             "claude": bool(settings.anthropic_api_key),
             "openai": bool(settings.openai_api_key and settings.openai_model),
@@ -581,7 +588,20 @@ def create_app(
 SESSION_MAX_AGE_S = 365 * 24 * 3600  # saved conversations belong to the session
 
 
-def _ensure_session(request: Request, response: Response, conversations: ConversationStore) -> None:
+def _app_settings(request: Request) -> Settings:
+    """Settings in a middleware, where dependencies are not available."""
+    state = request.app.state
+    if state.settings is None:
+        state.settings = Settings.from_env()
+    return state.settings
+
+
+def _ensure_session(
+    request: Request,
+    response: Response,
+    settings: Settings,
+    conversations: ConversationStore,
+) -> None:
     """Give the browser a session; a known session survives a server restart (it is stored
     with the conversations), so the user keeps their saved conversations."""
     sessions = request.app.state.sessions
@@ -594,6 +614,16 @@ def _ensure_session(request: Request, response: Response, conversations: Convers
     session_id = secrets.token_urlsafe(24)
     sessions[session_id] = 0
     conversations.add_session(session_id)
+    if settings.embed_origins:
+        # Inside an iframe on another site (a Hugging Face Space) a "strict" cookie is never
+        # sent; a partitioned cookie works there and is still separate per embedding site.
+        # Written by hand: Starlette's `partitioned=True` needs Python 3.14 (Docker/CI: 3.12).
+        cookie = (
+            f"{SESSION_COOKIE}={session_id}; Max-Age={SESSION_MAX_AGE_S}; Path=/; HttpOnly; "
+            "Secure; SameSite=None; Partitioned"
+        )
+        response.raw_headers.append((b"set-cookie", cookie.encode("latin-1")))
+        return
     response.set_cookie(
         SESSION_COOKIE,
         session_id,

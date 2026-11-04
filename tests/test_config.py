@@ -22,6 +22,7 @@ def clean_env(monkeypatch):
         "GROQ_MODEL",
         "GROQ_FALLBACK_MODEL",
         "ESCALATION_TEAMS",
+        "EMBED_ORIGINS",
         "EMBEDDING_PROVIDER",
         "EMBEDDING_MODEL",
         "EMBEDDING_CACHE_DIR",
@@ -133,3 +134,12 @@ def test_escalation_teams(clean_env):
 def test_invalid_escalation_teams(value):
     with pytest.raises(ValueError, match="ESCALATION_TEAMS"):
         parse_teams(value)
+
+
+def test_embed_origins(clean_env):
+    assert Settings.from_env(load_dotenv_file=False).embed_origins == ()
+    clean_env.setenv("EMBED_ORIGINS", "https://huggingface.co, https://example.com")
+    assert Settings.from_env(load_dotenv_file=False).embed_origins == (
+        "https://huggingface.co",
+        "https://example.com",
+    )
