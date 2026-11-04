@@ -14,8 +14,9 @@ from collections.abc import Iterable
 
 from docassist.models import Chunk, Page
 
-# Stored with the index: chunks made by another version need `index --rebuild` (ADR-023).
-CHUNKING = "sections-v2"
+# Version of text extraction + chunking, stored with the index: chunks made by another
+# version need `index --rebuild` (ADR-023; "ocr1" = text in images is read, ADR-024).
+CHUNKING = "sections-v2-ocr1"
 # 500/100 measured best with the local embedding model, which reads ~128 tokens (ADR-019).
 DEFAULT_CHUNK_SIZE = 500
 DEFAULT_OVERLAP = 100
