@@ -22,6 +22,11 @@ jobs:
           python-version: "3.12"
           enable-cache: true
 
+      - name: Install Tesseract OCR (Serbian, German, English)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends tesseract-ocr             tesseract-ocr-srp tesseract-ocr-srp-latn tesseract-ocr-deu tesseract-ocr-eng
+
       - name: Install dependencies
         run: uv sync --locked
 

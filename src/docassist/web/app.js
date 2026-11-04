@@ -44,7 +44,7 @@ const TOOL_LABELS = {
   escalate_to_human: "Prosleđivanje pitanja nadležnom",
   create_leave_request: "Nacrt zahteva za odmor",
 };
-const CITATION = /\[\s*([^\[\],]+?\.(?:pdf|docx|txt|md))\s*,\s*(?:str\.?|p\.|pp\.|page|s\.|seite)\s*(\d+)\s*\]/gi;
+const CITATION = /\[\s*([^\[\],]+?\.(?:pdf|docx|txt|md|png|jpe?g|tiff?|bmp))\s*,\s*(?:str\.?|p\.|pp\.|page|s\.|seite)\s*(\d+)\s*\]/gi;
 
 const state = {
   config: null,

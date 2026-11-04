@@ -38,6 +38,21 @@ Merging the keyword ranking (RRF) pushed correct German passages for Serbian que
 the cut, because keywords cannot match across languages; adding the single best keyword hit
 keeps the embedding ranking intact and still catches exact words such as "kantina".
 
+## Scanned documents (OCR, ADR-024)
+
+Both demo PDFs replaced by **image-only copies** (every page rendered at 150 dpi, grey, no text
+layer — like a scan), same file names; the DOCX/TXT documents unchanged. 2026-11-04.
+
+| | Words of the original found by OCR | All key facts retrieved | Groq answers correct | Made-up citations |
+|---|---|---|---|---|
+| `pravilnik_o_radu.pdf` (scan) | 100 % | | | |
+| `montageanleitung_pv400.pdf` (scan) | 98 % | | | |
+| **Whole eval set with the scans** | | **100 %** | **100 %** | **0** |
+
+PyMuPDF's built-in OCR missed the torque table on the scan entirely; calling Tesseract directly
+reads it (`M8 20 Nm 13 mm`), which is why the app does that. On product photos (a coffee/drinks
+price list with bottle pictures) Tesseract still produces partial and noisy text.
+
 ## Answers with free-tier models (ADR-021, ADR-022)
 
 **After ADR-023** (hybrid search + section chunking), clean index, 2026-11-04:

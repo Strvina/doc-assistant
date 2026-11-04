@@ -275,7 +275,12 @@ def _clean(text: str | None) -> str:
     text = re.sub(r"<think>.*?</think>", "", text or "", flags=re.DOTALL)
     # gpt-oss sometimes writes citations in CJK brackets: 【file.pdf, str. 2】 -> [file.pdf, str. 2]
     text = text.replace("【", "[").replace("】", "]")
-    return text.replace(" ", " ").strip()  # narrow no-break space (gpt-oss: "20 Nm")
+    # gpt-oss writes typographic look-alikes: a narrow no-break space ("20 Nm") and
+    # non-breaking hyphens ("Panelvolt-Staff"); plain characters keep names copyable.
+    return text.translate(_PLAIN).strip()
+
+
+_PLAIN = str.maketrans({" ": " ", " ": " ", "‑": "-", "‐": "-"})
 
 
 def _usage(response: Any) -> tuple[int, int]:

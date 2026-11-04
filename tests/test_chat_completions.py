@@ -85,7 +85,7 @@ def search_tool(seen):
 
 
 def test_complete_sends_system_message_and_cleans_text():
-    text = "<think>hmm</think>20 Nm 【manual.pdf, str. 2】"
+    text = "<think>hmm</think>20 Nm 【manual.pdf, str. 2】 Panelvolt‑Staff"
     service = FakeService(**{"m-1": [response(text)]})
 
     result = provider(Endpoint("groq", "m-1", client(service), 2048)).complete("SYSTEM", MESSAGES)
@@ -94,7 +94,7 @@ def test_complete_sends_system_message_and_cleans_text():
     assert request["model"] == "m-1"
     assert request["max_tokens"] == 2048
     assert request["messages"] == [{"role": "system", "content": "SYSTEM"}, *MESSAGES]
-    assert result.text == "20 Nm [manual.pdf, str. 2]"
+    assert result.text == "20 Nm [manual.pdf, str. 2] Panelvolt-Staff"
     assert (result.input_tokens, result.output_tokens) == (100, 10)
     assert result.stop_reason == "end"
 
