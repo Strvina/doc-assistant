@@ -96,6 +96,7 @@ class Settings:
     groq_model: str = DEFAULT_GROQ_MODEL
     groq_fallback_model: str = DEFAULT_GROQ_FALLBACK_MODEL
     escalation_teams: tuple[Team, ...] = parse_teams(DEFAULT_ESCALATION_TEAMS)
+    hybrid_search: bool = True  # embeddings + keywords (ADR-023); false = embeddings only
 
     @classmethod
     def from_env(cls, load_dotenv_file: bool = True) -> Settings:
@@ -135,6 +136,7 @@ class Settings:
             embedding_cache_dir=Path(_env("EMBEDDING_CACHE_DIR", "data/models")),
             index_dir=Path(_env("INDEX_DIR", "data/index")),
             top_k=int(_env("TOP_K", "5")),
+            hybrid_search=_env("HYBRID_SEARCH", "true").lower() in ("1", "true", "yes"),
             escalation_webhook_url=_env("ESCALATION_WEBHOOK_URL") or None,
             escalation_teams=parse_teams(_env("ESCALATION_TEAMS", DEFAULT_ESCALATION_TEAMS)),
             outbox_dir=Path(_env("OUTBOX_DIR", "data/outbox")),

@@ -33,15 +33,15 @@ GitHub Actions · Docker / Hugging Face Spaces
     pregled dokumenta (PDF na tačnoj strani sa **highlight-om** citiranog teksta; DOCX/TXT kao HTML strane);
   - panel *Praćenje*: pitanja, % odgovoreno, vreme, trošak, 👍/👎, **praznine u dokumentaciji**;
   - tamna tema, mobilni prikaz; zaštite na serveru (sesija/API ključ, limiti po sesiji i IP, demo režim).
-- **Pretraga:** lokalni model `paraphrase-multilingual-MiniLM-L12-v2`, chunk 500/100 → tačna strana u top-5
-  za 27/27 eval pitanja (`docs/EVAL_RESULTS.md`).
+- **Pretraga (ADR-023, grana `feat/hybrid-search`):** lokalni `paraphrase-multilingual-MiniLM-L12-v2` +
+  1 dodatni BM25 pogodak po ključnim rečima; podela po odeljcima (naslov ostaje uz tabelu). Sve ključne
+  činjenice stižu do modela za 27/27 pitanja; odgovori sa Groq-om **100 %** (pre: 93 %).
 - **Testovi:** svi bez mreže (fake modeli, lažni SDK klijenti); `tests/conftest.py` sve putanje preusmerava u tmp.
 - **n8n eskalacija provereno uživo:** `uv run python scripts/setup_n8n.py` → webhook → n8n → mejl u Mailpit
   (<http://localhost:8025>); radi i iz koda aplikacije (`WebhookEscalator`).
 - **Pravi AI odgovori bez plaćanja (grana `feat/gemini`):** Claude kredit nije moguće uplatiti (banka),
   pa demo radi na besplatnim nivoima: **Groq** `openai/gpt-oss-120b` (glavni, ~1 s) → `gpt-oss-20b` →
-  **Gemini** `gemini-3.5-flash` → `gemini-flash-lite-latest` (lanac, ADR-022). Eval sa Groq-om: 93 % tačno,
-  0 izmišljenih citata (`docs/EVAL_RESULTS.md`). Gemini free: samo 20 zahteva/dan za 3.5-flash.
+  **Gemini** `gemini-3.5-flash` → `gemini-flash-lite-latest` (lanac, ADR-022). Spojeno u `main` (#12). Gemini free: samo 20 zahteva/dan za 3.5-flash.
 - **Prosleđivanje pitanja timu:** ispod odgovora "nema u dokumentima" dugme po timu (`ESCALATION_TEAMS`,
   podrazumevano HR / Održavanje / Kontrola kvaliteta) → `POST /escalate` → n8n → mejl na adresu tima;
   agent bira tim sam. Jedan mejl po pitanju.
@@ -51,10 +51,9 @@ GitHub Actions · Docker / Hugging Face Spaces
 
 ## Sledeći korak
 
-1. PR #12 (`feat/gemini`: Groq + Gemini lanac, dugmad za timove) → merge. U `.env`: `LLM_PROVIDER=groq`.
-2. Kvalitet pretrage (2 promašaja u evalu, vidi `docs/EVAL_RESULTS.md`): hibridna pretraga (ključne reči +
-   embeddings) i chunking koji drži tabelu zajedno sa naslovom. Eval pokretati na indeksu samo sa demo
-   dokumentima (korisnikov upload menja rezultate). Zatim `--agent` eval.
+1. PR #13 (`feat/hybrid-search`) → merge. Posle merge-a: `uv run python -m docassist.cli index data/documents
+   --rebuild` (nova podela teksta; stari indeks javlja grešku dok se ne izgradi ponovo).
+2. Eval uvek na čistom indeksu (samo demo dokumenti): `INDEX_DIR`/`DOCUMENTS_DIR`/`LOG_DB` u privremeni folder.
 3. Docker radi (pomoglo `wsl --shutdown` + restart Docker Desktop-a) → `docker compose up --build`
    (build slike aplikacije još nije proban). Stara grana `feat/n8n-local` je zastarela — obrisati.
 4. Deploy po `docs/DEPLOY.md` (Hugging Face Space + GitHub Action) → link u README (4.4) → **prijava (4.6)**.
@@ -75,6 +74,7 @@ GitHub Actions · Docker / Hugging Face Spaces
 - Claude: zvanični SDK, refusal fallback, `ANTHROPIC_EFFORT` (npr. `low`) je poluga za cenu/brzinu (ADR-014).
 - Frontend (`src/docassist/web/`) nema build korak; menja se direktno, server servira statiku.
 - n8n 2.x: posle `update:workflow --active=true` treba restart; webhook se registruje par sekundi posle `/healthz`.
+- Indeks pamti embedder i verziju podele (`CHUNKING` u `ingest/chunker.py`); promena → `--rebuild`.
 - Groq: 8.000 tokena/min po modelu → 413 za velike zahteve (agent čita ceo dokument); lanac prelazi dalje.
 - gpt-oss ponekad citira sa `【...】`; `chat_completions._clean` to pretvara u `[...]`.
 - Statika (`app.css`/`app.js`) se u `index.html` servira sa `?v=<hash>` — nema zastarelog CSS-a posle izmene.
@@ -102,3 +102,4 @@ GitHub Actions · Docker / Hugging Face Spaces
 | 2026-11-04 | Sopstveni web UI (3 kolone, pregled dokumenata sa highlight-om, praćenje + praznine), Library, limiti na serveru, HF Spaces deploy; ADR-020 | #10 |
 | 2026-11-04 | n8n + Mailpit jednom komandom (`scripts/setup_n8n.py`), preneseno na novi `main`, provereno uživo (n8n 2.46) | #11 |
 | 2026-11-04 | Besplatni modeli: Gemini, pa Groq + lanac rezervi (ADR-021, ADR-022), eval 93 %; dugmad za prosleđivanje pitanja timovima (n8n → mejl timu) | #12 |
+| 2026-11-04 | Hibridna pretraga (+1 BM25 pogodak) i podela po odeljcima; eval: činjenice 96→100 %, odgovori 93→100 %, agent 100 %; ADR-023 | #13 |

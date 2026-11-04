@@ -27,7 +27,12 @@ def build_embedder(settings: Settings) -> Embedder:
 
 
 def build_store(settings: Settings, *, rebuild: bool = False) -> VectorStore:
-    return VectorStore(settings.index_dir, build_embedder(settings), rebuild=rebuild)
+    return VectorStore(
+        settings.index_dir,
+        build_embedder(settings),
+        rebuild=rebuild,
+        hybrid=settings.hybrid_search,
+    )
 
 
 FREE_SERVICES = ("groq", "gemini")  # free tiers, OpenAI-compatible (ADR-021, ADR-022)
