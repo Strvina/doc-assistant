@@ -3,7 +3,8 @@
 Page numbers are what the user will see in citations, so each loader keeps them as close
 to the original document as the format allows:
 
-- PDF: real pages.
+- PDF: real pages. Text in images (scans, screenshots) is read with OCR (ADR-024).
+- Images (PNG, JPG, TIFF, BMP): one page per image (several for a multi-page TIFF), via OCR.
 - DOCX: Word files have no stored page layout, so a "page" is the text between explicit
   page breaks (hard page break or "page break before" on a paragraph). See ADR-010.
 - TXT/MD: the whole file is page 1, unless it contains form feeds (``\\f``), which are
@@ -24,6 +25,7 @@ import pymupdf
 from docx.table import Table, _Cell
 from docx.text.paragraph import Paragraph
 
+from docassist.ingest import ocr
 from docassist.models import Page
 
 
@@ -46,6 +48,9 @@ _W_TYPE = f"{{{_W_NS}}}type"
 _PDF_TEXT_FLAGS = (pymupdf.TEXTFLAGS_TEXT & ~pymupdf.TEXT_PRESERVE_LIGATURES) | (
     pymupdf.TEXT_DEHYPHENATE
 )
+
+# Damaged PDFs make MuPDF print the same repair message for every page; they still load.
+pymupdf.TOOLS.mupdf_display_errors(False)
 
 _MULTI_BLANK_LINES = re.compile(r"\n{3,}")
 _BULLETS = frozenset("•◦▪▫●○■□‣⁃")
@@ -73,9 +78,22 @@ def load_document(path: str | Path) -> list[Page]:
     return _to_pages(path.name, raw_pages)
 
 
-def load_pdf(path: Path) -> list[str]:
+IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp")
+
+
+def open_pdf(path: Path) -> pymupdf.Document:
+    """Open a PDF, or an image converted to a PDF, so both are read and shown the same way."""
     # Open from memory: on Windows a failed open from disk keeps the file locked.
-    with pymupdf.open(stream=path.read_bytes(), filetype="pdf") as pdf:
+    data = path.read_bytes()
+    suffix = path.suffix.lower()
+    if suffix in IMAGE_EXTENSIONS:
+        with pymupdf.open(stream=data, filetype=suffix.lstrip(".")) as image:
+            data = image.convert_to_pdf()
+    return pymupdf.open(stream=data, filetype="pdf")
+
+
+def load_pdf(path: Path) -> list[str]:
+    with open_pdf(path) as pdf:
         if pdf.needs_pass:
             raise DocumentLoadError(f"{path.name} is password-protected")
         return [_pdf_page_text(page) for page in pdf]
@@ -94,9 +112,17 @@ def _pdf_page_text(page: pymupdf.Page) -> str:
 def pdf_page_blocks(page: pymupdf.Page) -> list[tuple[pymupdf.Rect, str]]:
     """Text blocks of a PDF page with their position, lines joined as in the loaded text.
 
-    The viewer uses the same blocks to highlight a cited passage on the original page.
+    Text in the page's images is added with OCR when images cover enough of the page; OCR
+    blocks are cleaned of picture noise. The viewer uses the same blocks to highlight a cited
+    passage on the original page, so it finds OCR text there too.
     """
     blocks = page.get_text("blocks", flags=_PDF_TEXT_FLAGS, sort=False)
+    text_rects = [pymupdf.Rect(b[:4]) for b in blocks if b[6] == 0 and b[4].strip()]
+    found = ocr.ocr_blocks(page, ocr.settings_from_env(), text_rects)
+    if found:  # OCR text joins the page text in reading order (top to bottom, left to right)
+        blocks = [b for b in blocks if b[6] == 0]
+        blocks += [(*rect, text, -1, 0) for rect, text in found]
+        blocks.sort(key=lambda b: (round(b[1]), b[0]))
     result = []
     for x0, y0, x1, y1, text, _block_no, block_type in blocks:
         if block_type != 0:  # 1 = image block
@@ -141,6 +167,7 @@ def load_text(path: Path) -> list[str]:
 
 _LOADERS: dict[str, Callable[[Path], list[str]]] = {
     ".pdf": load_pdf,
+    **dict.fromkeys(IMAGE_EXTENSIONS, load_pdf),
     ".docx": load_docx,
     ".txt": load_text,
     ".md": load_text,

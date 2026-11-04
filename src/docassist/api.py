@@ -36,6 +36,7 @@ from docassist.factory import (
     build_tool_context,
 )
 from docassist.ingest import DocumentLoadError
+from docassist.ingest.loaders import IMAGE_EXTENSIONS
 from docassist.library import Library
 from docassist.llm import LLMError, LLMProvider
 from docassist.logs import QueryLog
@@ -360,7 +361,7 @@ def create_app(
             chunks = [c for c in library.store.document_chunks(doc.source) if c.chunk_id in wanted]
             passage = merge_passages(chunks) or None
         disposition = {"Content-Disposition": f"inline; filename*=UTF-8''{quote(doc.source)}"}
-        if path.suffix.lower() == ".pdf":
+        if path.suffix.lower() in (".pdf", *IMAGE_EXTENSIONS):
             data = pdf_with_highlights(path, page, passage)
             return Response(data, media_type="application/pdf", headers=disposition)
         return HTMLResponse(render_html(path, page, passage))

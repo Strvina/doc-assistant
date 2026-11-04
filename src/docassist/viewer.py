@@ -14,11 +14,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import docx
-import pymupdf
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 
-from docassist.ingest.loaders import pdf_page_blocks
+from docassist.ingest.loaders import open_pdf, pdf_page_blocks
 
 HIGHLIGHT_COLOR = (1.0, 0.82, 0.25)  # amber, same accent as the web UI
 
@@ -62,7 +61,7 @@ def is_cited(block_text: str, passage: str) -> bool:
 
 
 def pdf_with_highlights(path: Path, page_no: int | None, passage: str | None) -> bytes:
-    with pymupdf.open(stream=path.read_bytes(), filetype="pdf") as pdf:
+    with open_pdf(path) as pdf:  # an uploaded image is shown as a one-page PDF
         if passage and page_no and 1 <= page_no <= pdf.page_count:
             page = pdf[page_no - 1]
             for rect, text in pdf_page_blocks(page):

@@ -237,3 +237,26 @@ ispod granice. Zato se pogodak po ključnim rečima *dodaje*, a ne meša u rang.
 **Cena:** jedan pasus više u promptu (~150 tokena); BM25 indeks se pravi u memoriji (za
 hiljade pasusa zanemarljivo; za veliki broj dokumenata: pravi full-text indeks, npr.
 SQLite FTS5 ili Postgres). Promena podele traži ponovno indeksiranje.
+
+### ADR-024 · OCR za skenove i tekst na slikama (Tesseract, lokalno)
+**Odluka:** strana PDF-a na kojoj slike pokrivaju ≥ 10 % površine se renderuje (200 DPI, sivo)
+i čita **Tesseract**-om (srpski latinica + ćirilica, nemački, engleski), lokalno. Tesseract vraća
+svaku reč sa položajem, pa se OCR tekst grupiše u blokove kao PDF tekst: podela po odeljcima i
+označavanje citata u pregledu rade i na skeniranoj strani. OCR redovi koji se poklapaju sa
+postojećim tekstom strane se izbacuju (bez duplikata); šum sa fotografija se filtrira po redu
+(red ostaje ako je većina tokena čitljiva i bar jedan je reč od 3+ slova ili broj od 2+ cifre).
+Podržan je i upload slika (PNG, JPG, TIFF, BMP) — čitaju se kao PDF od jedne strane.
+`OCR=false` isključuje; bez instaliranog Tesseract-a strane se čitaju bez OCR-a. Indeks pamti
+verziju (`CHUNKING = "sections-v2-ocr1"`). Docker slika i CI instaliraju Tesseract.
+**Zašto:** većina stvarnih PDF-ova su skenovi ili slike nalepljene u PDF; bez OCR-a su prazni.
+Lokalni OCR je besplatan i dokumenti ne napuštaju server (isti argument kao ADR-019).
+Tesseract se poziva direktno (komandna linija, TSV izlaz): ugrađeni OCR u PyMuPDF-u
+(`get_textpage_ocr`, `pdfocr_tobytes`) je na test skenu **preskočio celu tabelu** koju Tesseract
+sam pročita ispravno.
+Izmereno na demo PDF-ovima pretvorenim u slike (bez ijednog slova teksta): 98–100 % reči
+originala; eval sa tim skenovima: pretraga 100 %, odgovori (Groq) **100 %**.
+**Cena:** ~1,5–2 s po strani sa slikama pri indeksiranju (i pri otvaranju takve strane u
+pregledu); Docker slika veća za ~40 MB. Fotografije proizvoda, logotipi i složene tabele u
+fotografijama daju nepouzdan tekst (Lavazza cenovnik: nazivi i cene delimično) — za to je
+sledeći korak opcioni AI model koji čita slike (npr. Gemini), uz svestan izbor jer slike tada
+napuštaju server.
