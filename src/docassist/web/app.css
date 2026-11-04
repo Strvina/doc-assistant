@@ -468,6 +468,18 @@ kbd { font: 600 10.5px/1 var(--mono); padding: 2px 5px; border-radius: 4px; bord
 .q-list .clickable { cursor: pointer; }
 .q-list .clickable:hover { border-color: var(--amber); }
 .q-list .empty { color: var(--muted); border-style: dashed; }
+.q-list li.removable { position: relative; padding-right: 44px; }
+.q-list .q-delete {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 30px; height: 30px; color: var(--muted); opacity: 0; transition: opacity .15s;
+}
+.q-list li:hover .q-delete, .q-list li:focus-within .q-delete { opacity: 1; }
+.q-list .q-delete:hover { color: var(--bad); }
+.q-list .q-delete svg { width: 15px; height: 15px; }
+@media (hover: none) { .q-list .q-delete { opacity: 1; } }
+.modal-actions { display: flex; align-items: center; gap: 8px; }
+.btn.danger-outline { color: var(--bad); border-color: var(--line-strong); background: transparent; }
+.btn.danger-outline:hover { border-color: var(--bad); background: var(--bad-soft); }
 
 /* --- toasts ---------------------------------------------------------------------------- */
 .toasts { position: fixed; right: 18px; bottom: 18px; z-index: 60; display: grid; gap: 8px; }

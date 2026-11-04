@@ -96,6 +96,30 @@ def test_upload_progress_lists_documents_being_read(client, monkeypatch):
     ]
 
 
+def test_delete_one_question_and_all_questions(client):
+    first = client.post("/ask", json={"question": "Prvo pitanje"}).json()
+    client.post("/ask", json={"question": "Drugo pitanje"})
+    client.post("/ask", json={"question": "Treće pitanje"})
+
+    assert client.delete(f"/queries/{first['log_id']}").json() == {"ok": True}
+    assert client.delete(f"/queries/{first['log_id']}").status_code == 404
+    recent = [q["question"] for q in client.get("/insights").json()["recent"]]
+    assert "Prvo pitanje" not in recent and len(recent) == 2
+
+    assert client.delete("/queries").json() == {"deleted": 2}
+    assert client.get("/insights").json()["stats"]["queries"] == 0
+    assert len(client.get("/conversations").json()) == 3  # saved conversations are kept
+
+
+def test_questions_cannot_be_deleted_in_the_public_demo(settings, tmp_path):
+    demo = make_client(settings, tmp_path, allow_uploads=False)
+    log_id = demo.post("/ask", json={"question": "Pitanje"}).json()["log_id"]
+
+    assert demo.delete(f"/queries/{log_id}").status_code == 403
+    assert demo.delete("/queries").status_code == 403
+    assert demo.get("/insights").json()["stats"]["queries"] == 1
+
+
 def test_health_and_empty_index(client):
     body = client.get("/health").json()
 

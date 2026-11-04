@@ -110,6 +110,16 @@ class QueryLog:
         with closing(self._connect()) as db, db:
             db.execute("UPDATE queries SET escalation = ? WHERE id = ?", (reference, query_id))
 
+    def delete(self, query_id: int) -> bool:
+        """Remove one question from the log. False for an unknown id."""
+        with closing(self._connect()) as db, db:
+            return db.execute("DELETE FROM queries WHERE id = ?", (query_id,)).rowcount == 1
+
+    def clear(self) -> int:
+        """Remove every question from the log; returns how many were removed."""
+        with closing(self._connect()) as db, db:
+            return db.execute("DELETE FROM queries").rowcount
+
     def stats(self) -> UsageStats:
         with closing(self._connect()) as db:
             row = db.execute(

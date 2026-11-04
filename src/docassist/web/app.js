@@ -642,19 +642,46 @@ async function openInsights() {
         ["Ocene", `👍 ${s.thumbs_up} · 👎 ${s.thumbs_down}`],
       ].map(([label, value]) => el("div", { class: "stat" }, el("small", {}, label), el("strong", {}, value))),
     );
+    const canDelete = state.config?.allow_uploads;  // off in the public demo
     const item = (q) => el("li", {
-        class: "clickable", tabindex: 0, title: "Postavi ponovo",
+        class: `clickable${canDelete ? " removable" : ""}`, tabindex: 0, title: "Postavi ponovo",
         onclick: () => { $("#insights").hidden = true; const input = $("#composer-input"); input.value = q.question; autosize(input); input.focus(); },
       },
       q.question,
       el("small", {}, [new Date(q.created_at).toLocaleString("sr-RS"), q.found ? "odgovoreno" : "nema u dokumentima",
-        q.feedback === -1 ? "👎" : q.feedback === 1 ? "👍" : "", q.mode === "agent" ? "agent" : ""].filter(Boolean).join(" · ")));
+        q.feedback === -1 ? "👎" : q.feedback === 1 ? "👍" : "", q.mode === "agent" ? "agent" : ""].filter(Boolean).join(" · ")),
+      canDelete && el("button", { class: "icon-btn q-delete", type: "button", title: "Obriši pitanje",
+        "aria-label": `Obriši pitanje: ${q.question}`, html: ICONS.close,
+        onclick: (event) => { event.stopPropagation(); deleteQuery(q); } }));
+    $("#queries-clear").hidden = !canDelete || !s.queries;
     const fill = (id, rows, empty) => $(id).replaceChildren(...(rows.length ? rows.map(item) : [el("li", { class: "empty" }, empty)]));
     fill("#gaps", data.gaps, "Nema praznina — svako pitanje je imalo odgovor.");
     fill("#recent", data.recent, "Još nema pitanja.");
   } catch (error) {
     toast(`Statistika nije dostupna: ${error.message}`, "error");
   }
+}
+
+async function deleteQuery(query) {
+  try {
+    await api(`/queries/${query.id}`, { method: "DELETE" });
+  } catch (error) {
+    toast(`Brisanje nije uspelo: ${error.message}`, "error");
+    return;
+  }
+  await openInsights();
+}
+
+async function clearQueries() {
+  if (!confirm("Obrisati sva pitanja iz praćenja i statistike? Sačuvani razgovori ostaju. Ovo ne može da se vrati.")) return;
+  try {
+    const result = await api("/queries", { method: "DELETE" });
+    toast(`Obrisano pitanja: ${result.deleted}.`);
+  } catch (error) {
+    toast(`Brisanje nije uspelo: ${error.message}`, "error");
+    return;
+  }
+  await openInsights();
 }
 
 // --- layout helpers ---------------------------------------------------------------------
@@ -726,6 +753,7 @@ function bindEvents() {
   $("#load-demo").addEventListener("click", loadDemo);
   $("#insights-open").addEventListener("click", openInsights);
   $("#insights-close").addEventListener("click", () => ($("#insights").hidden = true));
+  $("#queries-clear").addEventListener("click", clearQueries);
   $("#insights").addEventListener("click", (event) => { if (event.target.id === "insights") event.currentTarget.hidden = true; });
   $("#theme-toggle").addEventListener("click", () => {
     const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
