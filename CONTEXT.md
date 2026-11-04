@@ -51,7 +51,7 @@ GitHub Actions · Docker / Hugging Face Spaces
 
 ## Sledeći korak
 
-1. PR `feat/hybrid-search` → merge. Posle merge-a: `uv run python -m docassist.cli index data/documents
+1. PR #13 (`feat/hybrid-search`) → merge. Posle merge-a: `uv run python -m docassist.cli index data/documents
    --rebuild` (nova podela teksta; stari indeks javlja grešku dok se ne izgradi ponovo).
 2. Eval uvek na čistom indeksu (samo demo dokumenti): `INDEX_DIR`/`DOCUMENTS_DIR`/`LOG_DB` u privremeni folder.
 3. Docker radi (pomoglo `wsl --shutdown` + restart Docker Desktop-a) → `docker compose up --build`
@@ -102,4 +102,4 @@ GitHub Actions · Docker / Hugging Face Spaces
 | 2026-11-04 | Sopstveni web UI (3 kolone, pregled dokumenata sa highlight-om, praćenje + praznine), Library, limiti na serveru, HF Spaces deploy; ADR-020 | #10 |
 | 2026-11-04 | n8n + Mailpit jednom komandom (`scripts/setup_n8n.py`), preneseno na novi `main`, provereno uživo (n8n 2.46) | #11 |
 | 2026-11-04 | Besplatni modeli: Gemini, pa Groq + lanac rezervi (ADR-021, ADR-022), eval 93 %; dugmad za prosleđivanje pitanja timovima (n8n → mejl timu) | #12 |
-| 2026-11-04 | Hibridna pretraga (+1 BM25 pogodak) i podela po odeljcima; eval: činjenice 96→100 %, odgovori 93→100 %; ADR-023 | — |
+| 2026-11-04 | Hibridna pretraga (+1 BM25 pogodak) i podela po odeljcima; eval: činjenice 96→100 %, odgovori 93→100 %, agent 100 %; ADR-023 | #13 |
