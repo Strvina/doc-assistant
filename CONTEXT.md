@@ -58,17 +58,15 @@ GitHub Actions · Docker / Hugging Face Spaces
 
 ## Sledeći korak
 
-1. PR #13 (`feat/hybrid-search`) → merge. Posle merge-a: `uv run python -m docassist.cli index data/documents
-   --rebuild` (nova podela teksta; stari indeks javlja grešku dok se ne izgradi ponovo).
-2. PR #15 (OCR prema `main`) → merge. Posle merge-a: `index data/documents --rebuild`. Stare grane
-   `feat/hybrid-search`, `feat/ocr`, `feat/n8n-local` mogu da se obrišu. Ubuduće bez "stacked" PR-ova.
-   Sledeće za slike: opcioni AI model za fotografije/tabele (Gemini) — slike tada napuštaju server.
-3. Eval uvek na čistom indeksu (samo demo dokumenti): `INDEX_DIR`/`DOCUMENTS_DIR`/`LOG_DB` u privremeni folder.
-4. Docker radi (pomoglo `wsl --shutdown` + restart Docker Desktop-a) → `docker compose up --build`
-   (build slike aplikacije još nije proban). Stara grana `feat/n8n-local` je zastarela — obrisati.
-5. Deploy po `docs/DEPLOY.md` (Hugging Face Space + GitHub Action) → link u README (4.4) → **prijava (4.6)**.
-6. Screenshot-ove u README zameniti verzijom sa pravim (Groq) odgovorom.
-7. Claude eval (6.3) kad bude moguće platiti kredit (npr. virtuelna kartica).
+**Odluka (2026-11-04): online demo se za sada NE objavljuje — samo razvoj aplikacije.**
+Sve za Hugging Face je spremno (`docs/DEPLOY.md`: Groq/Gemini, `EMBED_ORIGINS`, LFS u workflow-u);
+deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljena.
+
+1. Dalji razvoj po dogovoru sa korisnikom (predlozi: odgovor koji se ispisuje dok nastaje (streaming),
+   AI model za fotografije/tabele u slikama, pretraga i preimenovanje razgovora).
+2. Eval uvek na čistom indeksu (samo demo dokumenti): `INDEX_DIR`/`DOCUMENTS_DIR`/`LOG_DB` u privremeni folder.
+3. Treniranje modela: korisnik je odložio (opcija A = dotreniranje embeddings modela, kad se vrati na to).
+4. Claude eval (6.3) kad bude moguće platiti kredit.
 
 ## Napomene za sledeću sesiju
 
@@ -124,4 +122,5 @@ GitHub Actions · Docker / Hugging Face Spaces
 | 2026-11-04 | OCR paralelno (~3× brže) + prikaz napretka pri uploadu skena | #16 |
 | 2026-11-04 | Sačuvani razgovori (otvori/obriši) i zaustavljanje pitanja; ADR-025 | #17 |
 | 2026-11-04 | Brisanje pitanja iz praćenja (jedno ili sva; zaključano u demo režimu) | #18 |
-| 2026-11-04 | Odgovori: Markdown tabele, naslovi i `kod` se prikazuju formatirano | — |
+| 2026-11-04 | Odgovori: Markdown tabele, naslovi i `kod` se prikazuju formatirano | #19 |
+| 2026-11-04 | Priprema za HF Space (iframe/kolačić, LFS, DEPLOY za Groq); demo odložen | #20 |
