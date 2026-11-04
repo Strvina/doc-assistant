@@ -15,6 +15,7 @@ import json
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 
 WORKFLOW_ID = "DocAssistEscalat"
@@ -71,8 +72,17 @@ def main() -> int:
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=10) as response:
-        print(f"webhook answered HTTP {response.status}")
+    # /healthz is up a few seconds before published workflows register their webhooks.
+    deadline = time.time() + 60
+    while True:
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                print(f"webhook answered HTTP {response.status}")
+                break
+        except urllib.error.HTTPError as error:
+            if error.code != 404 or time.time() > deadline:
+                raise
+            time.sleep(2)
 
     print(
         "\nDone.\n"

@@ -36,9 +36,10 @@ GitHub Actions · Docker / Hugging Face Spaces
 - **Pretraga:** lokalni model `paraphrase-multilingual-MiniLM-L12-v2`, chunk 500/100 → tačna strana u top-5
   za 27/27 eval pitanja (`docs/EVAL_RESULTS.md`).
 - **Testovi:** svi bez mreže (fake modeli, lažni SDK klijenti); `tests/conftest.py` sve putanje preusmerava u tmp.
-- **Nije provereno uživo (čeka ključ / Docker):** pravi Claude odgovori i agent, n8n workflow, Docker image build.
+- **n8n eskalacija provereno uživo:** `uv run python scripts/setup_n8n.py` → webhook → n8n → mejl u Mailpit
+  (<http://localhost:8025>); radi i iz koda aplikacije (`WebhookEscalator`).
+- **Nije provereno uživo:** pravi Claude odgovori i agent (čeka ključ), Docker image build aplikacije.
 - **Blokirano:**
-  - Docker Desktop ne može da se pokrene ("unable to start") posle punog diska — popraviti u Docker Desktop-u.
   - 0.5 zaštita grane `main` — nije uključena (sekcija uklonjena iz `WORKFLOW.md`).
 
 ## Sledeći korak
@@ -47,9 +48,8 @@ GitHub Actions · Docker / Hugging Face Spaces
    web UI: pitanja iz primera; proveriti jezik odgovora, citate, highlight, agent (`Agent` prekidač).
 2. `uv run python -m docassist.eval` (+ `--agent`, + `ANTHROPIC_MODEL=claude-haiku-5-5`) → tabela u
    `docs/EVAL_RESULTS.md` i README (6.3, 7.2).
-3. Docker: popraviti Docker Desktop → `docker compose up --build`; n8n: `uv run python scripts/setup_n8n.py`
-   (grana `feat/n8n-setup`, commit-ovano lokalno; push + PR tek kad prođe uživo;
-   stara grana `feat/n8n-local` je zastarela — obrisati).
+3. Docker radi (pomoglo `wsl --shutdown` + restart Docker Desktop-a) → `docker compose up --build`
+   (build slike aplikacije još nije proban). Stara grana `feat/n8n-local` je zastarela — obrisati.
 4. Deploy po `docs/DEPLOY.md` (Hugging Face Space + GitHub Action) → link u README (4.4) → **prijava (4.6)**.
 5. Screenshot-ove u README zameniti verzijom sa pravim Claude odgovorom.
 
@@ -66,6 +66,7 @@ GitHub Actions · Docker / Hugging Face Spaces
   original → `index --rebuild` ili ponovni upload.
 - Claude: zvanični SDK, refusal fallback, `ANTHROPIC_EFFORT` (npr. `low`) je poluga za cenu/brzinu (ADR-014).
 - Frontend (`src/docassist/web/`) nema build korak; menja se direktno, server servira statiku.
+- n8n 2.x: posle `update:workflow --active=true` treba restart; webhook se registruje par sekundi posle `/healthz`.
 - `pymupdf` je namerno na 1.x (ADR-009). Lokalni venv je na Python 3.14, CI i Docker na 3.12.
 
 ## Otvorena pitanja
@@ -88,4 +89,4 @@ GitHub Actions · Docker / Hugging Face Spaces
 | 2026-11-04 | Faza 7 (delimično): Docker, README dijagram + Data protection | #8 |
 | 2026-11-04 | Svi PR-ovi spojeni u main; redizajn UI-ja + screenshot | #9 |
 | 2026-11-04 | Sopstveni web UI (3 kolone, pregled dokumenata sa highlight-om, praćenje + praznine), Library, limiti na serveru, HF Spaces deploy; ADR-020 | #10 |
-| 2026-11-04 | n8n + Mailpit jednom komandom (`scripts/setup_n8n.py`), preneseno na novi `main`; čeka proveru uživo (Docker) | — |
+| 2026-11-04 | n8n + Mailpit jednom komandom (`scripts/setup_n8n.py`), preneseno na novi `main`, provereno uživo (n8n 2.46) | #11 |
