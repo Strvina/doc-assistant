@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Doc Assistant">
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="#0f2a47"/>
+  <path d="M20 14h17l9 9v27a2 2 0 0 1-2 2H20a2 2 0 0 1-2-2V16a2 2 0 0 1 2-2z" fill="#fff" opacity=".96"/>
+  <path d="M37 14v7a2 2 0 0 0 2 2h7" fill="none" stroke="#c9d4e2" stroke-width="2"/>
+  <path d="M34.5 25 25 38h7l-2.5 10L40 34h-7l1.5-9z" fill="#f5a524"/>
+</svg>

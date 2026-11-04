@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from docassist.agent.tools import JsonlFile, ToolContext, WebhookEscalator
 from docassist.config import Settings
+from docassist.library import Library
 from docassist.llm import FakeProvider, LLMProvider
 from docassist.retrieval import Embedder, FakeEmbedder, LocalEmbedder, OpenAIEmbedder, VectorStore
 
@@ -69,3 +70,8 @@ def build_tool_context(settings: Settings, store: VectorStore) -> ToolContext:
         leave_requests=JsonlFile(outbox / "leave_requests.jsonl"),
         top_k=settings.top_k,
     )
+
+
+def build_library(settings: Settings, *, rebuild: bool = False) -> Library:
+    """The index plus the stored originals (for the viewer and downloads)."""
+    return Library(build_store(settings, rebuild=rebuild), settings.documents_dir)

@@ -74,7 +74,8 @@ def load_document(path: str | Path) -> list[Page]:
 
 
 def load_pdf(path: Path) -> list[str]:
-    with pymupdf.open(path) as pdf:
+    # Open from memory: on Windows a failed open from disk keeps the file locked.
+    with pymupdf.open(stream=path.read_bytes(), filetype="pdf") as pdf:
         if pdf.needs_pass:
             raise DocumentLoadError(f"{path.name} is password-protected")
         return [_pdf_page_text(page) for page in pdf]
@@ -87,9 +88,17 @@ def _pdf_page_text(page: pymupdf.Page) -> str:
     into blocks (paragraphs, table rows, list items); joining the lines of a block gives
     whole sentences and keeps a table row like "M8 20 Nm 13 mm" on one line.
     """
+    return "\n\n".join(text for _rect, text in pdf_page_blocks(page))
+
+
+def pdf_page_blocks(page: pymupdf.Page) -> list[tuple[pymupdf.Rect, str]]:
+    """Text blocks of a PDF page with their position, lines joined as in the loaded text.
+
+    The viewer uses the same blocks to highlight a cited passage on the original page.
+    """
     blocks = page.get_text("blocks", flags=_PDF_TEXT_FLAGS, sort=False)
-    paragraphs = []
-    for *_, text, _block_no, block_type in blocks:
+    result = []
+    for x0, y0, x1, y1, text, _block_no, block_type in blocks:
         if block_type != 0:  # 1 = image block
             continue
         paragraph = ""
@@ -103,8 +112,8 @@ def _pdf_page_text(page: pymupdf.Page) -> str:
                 paragraph += " "
             paragraph += line
         if paragraph:
-            paragraphs.append(paragraph)
-    return "\n\n".join(paragraphs)
+            result.append((pymupdf.Rect(x0, y0, x1, y1), paragraph))
+    return result
 
 
 def load_docx(path: Path) -> list[str]:

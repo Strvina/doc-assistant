@@ -30,7 +30,7 @@ Ako se odluka promeni, ne briši staru: označi je kao *Zamenjena sa ADR-XXX*.
 **Odluka:** jedan interfejs, provajder se bira preko `LLM_PROVIDER`.
 **Zašto:** oglas izričito traži oba; omogućava uporednu evaluaciju (faza 6).
 
-### ADR-006 · Streamlit prvo, FastAPI u fazi 5
+### ADR-006 · Streamlit prvo, FastAPI u fazi 5 — *zamenjena sa ADR-020*
 **Odluka:** UI u Streamlit-u poziva core paket direktno; API dolazi kad zatreba za n8n.
 **Zašto:** najbrži put do demo-a koji poslodavac može da proba.
 
@@ -164,3 +164,20 @@ ostaju kao opcija (`EMBEDDING_PROVIDER=openai`). Zamenjuje ADR-004; menja velič
 (argument za zaštitu podataka); radi preko jezika (SR pitanje → DE pasus). MiniLM čita ~128 tokena,
 zato manji chunk-ovi daju bolji rezultat. Mali model staje u memoriju besplatnog hostinga.
 **Cena:** ~220 MB preuzimanja pri prvom pokretanju; indeksiranje troši CPU umesto API-ja.
+
+### ADR-020 · Sopstveni web UI (FastAPI + HTML/CSS/JS) umesto Streamlit-a
+**Odluka:** Streamlit aplikacija je uklonjena. FastAPI app servira i web interfejs
+(`src/docassist/web/`: čist HTML/CSS/JS, bez build koraka i bez npm-a) i REST API.
+UI ima tri kolone (biblioteka · razgovor · pregled dokumenta), citate kao klikabilne oznake,
+pregled originala sa označenim pasusom (PDF highlight anotacije; DOCX/TXT kao HTML strane),
+panel za praćenje sa "prazninama u dokumentaciji", tamnu temu i mobilni prikaz.
+Originali se čuvaju uz indeks (`Library`, `DOCUMENTS_DIR`) da bi mogli da se prikažu i preuzmu.
+Zaštite su na serveru: sesija (cookie) za browser, `X-API-Key` za integracije, limit pitanja po
+sesiji i po IP adresi na sat, zaključan upload u demo režimu, max veličina fajla.
+Hosting javnog demoa: Hugging Face Spaces (Docker) umesto Streamlit Community Cloud-a.
+*Zamenjuje ADR-006 i UI deo ADR-015.*
+**Zašto:** Streamlit ne dozvoljava specifičan dizajn ni pregled dokumenta pored razgovora;
+povratna informacija je bila da izgleda previše osnovno. Jedan proces (UI + API) je jednostavniji
+za deploy, a zaštite u Streamlit-u su bile samo u UI-ju (zaobilazile su se preko API-ja).
+**Cena:** frontend se ne testira automatski u CI-ju (testiran je API koji koristi; UI je proveren
+screenshot-ovima u Edge-u, desktop/mobilni/tamna tema).

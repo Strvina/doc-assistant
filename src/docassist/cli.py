@@ -16,8 +16,14 @@ from pathlib import Path
 
 from docassist.agent import run_agent
 from docassist.config import Settings
-from docassist.factory import MissingAPIKeyError, build_llm, build_store, build_tool_context
-from docassist.ingest import SUPPORTED_EXTENSIONS, DocumentLoadError, ingest
+from docassist.factory import (
+    MissingAPIKeyError,
+    build_library,
+    build_llm,
+    build_store,
+    build_tool_context,
+)
+from docassist.ingest import SUPPORTED_EXTENSIONS, DocumentLoadError
 from docassist.llm import LLMError
 from docassist.rag import answer
 from docassist.retrieval import EmbedderMismatchError, retrieve
@@ -68,11 +74,12 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def cmd_index(args: argparse.Namespace, settings: Settings) -> int:
-    store = build_store(settings, rebuild=args.rebuild)
+    library = build_library(settings, rebuild=args.rebuild)
+    store = library.store
     failures = 0
     for path in _iter_files(args.paths):
         try:
-            added = store.add_document(ingest(path))
+            added = library.add_file(path).chunks_added
         except (DocumentLoadError, OSError) as exc:
             print(f"  FAILED     {path}: {exc}", file=sys.stderr)
             failures += 1
@@ -135,7 +142,7 @@ def cmd_docs(args: argparse.Namespace, settings: Settings) -> int:
 
 
 def cmd_delete(args: argparse.Namespace, settings: Settings) -> int:
-    removed = build_store(settings).delete_document(args.doc_id)
+    removed = build_library(settings).delete(args.doc_id)
     if not removed:
         print(f"No document with id {args.doc_id}", file=sys.stderr)
         return 1

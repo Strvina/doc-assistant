@@ -27,10 +27,10 @@ def quote_first_document(system: str, messages: list[Message]) -> str:
     match = _DOCUMENT.search(messages[-1]["content"])
     if match is None:
         return NOT_FOUND_SR
-    paragraphs = [p.strip() for p in match["text"].split("\n\n") if p.strip()]
-    # Skip a short heading line if there is a real paragraph after it.
-    body = next((p for p in paragraphs if len(p) > 60), paragraphs[0] if paragraphs else "")
-    sentence = re.split(r"(?<=[.!?])\s", body, maxsplit=1)[0]
+    lines = [line.strip() for line in match["text"].splitlines() if line.strip()]
+    # Skip headings ("7. Povreda na radu") and table rows: take the first real sentence.
+    body = next((line for line in lines if len(line) > 60), lines[0] if lines else "")
+    sentence = re.split(r"(?<=[a-zčćžšđäöüß)\d][.!?])\s+(?=[A-ZČĆŽŠĐÄÖÜ])", body, maxsplit=1)[0]
     return f"{sentence} [{unescape(match['source'])}, str. {match['page']}]"
 
 
