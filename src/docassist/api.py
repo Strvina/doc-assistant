@@ -10,6 +10,7 @@ integrations send ``X-API-Key`` and browsers get a session cookie when they open
 
 from __future__ import annotations
 
+import hashlib
 import secrets
 import time
 from collections import defaultdict, deque
@@ -25,8 +26,15 @@ from pydantic import BaseModel, Field
 
 from docassist import __version__
 from docassist.agent import run_agent
+from docassist.agent.tools import ToolError, new_escalation
 from docassist.config import Settings
-from docassist.factory import MissingAPIKeyError, build_llm, build_store, build_tool_context
+from docassist.factory import (
+    MissingAPIKeyError,
+    build_escalator,
+    build_llm,
+    build_store,
+    build_tool_context,
+)
 from docassist.ingest import DocumentLoadError
 from docassist.library import Library
 from docassist.llm import LLMError, LLMProvider
@@ -39,14 +47,21 @@ from docassist.viewer import pdf_with_highlights, render_html
 WEB_DIR = Path(__file__).parent / "web"
 SAMPLE_DOCS = Path(__file__).resolve().parents[2] / "data" / "sample_docs"
 SESSION_COOKIE = "da_session"
-PROVIDER_LABELS = {"claude": "Claude", "openai": "ChatGPT", "fake": "Offline demo"}
+PROVIDER_LABELS = {
+    "claude": "Claude",
+    "openai": "ChatGPT",
+    "gemini": "Gemini",
+    "groq": "Groq",
+    "fake": "Offline demo",
+}
+OPTIONAL_PROVIDERS = ("openai", "gemini", "groq")  # listed only when configured (ADR-018/21/22)
 
 # --- request / response models -----------------------------------------------------------
 
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
-    provider: str | None = Field(default=None, description="claude | openai | fake")
+    provider: str | None = Field(default=None, description="claude | openai | gemini | groq | fake")
     agent: bool = Field(default=False, description="Let the model use tools (search, escalate…)")
     top_k: int | None = Field(default=None, ge=1, le=10, description="Passages for the answer")
     history: list[tuple[str, str]] = Field(
@@ -87,6 +102,18 @@ class AskResponse(BaseModel):
 class FeedbackRequest(BaseModel):
     log_id: int
     rating: int = Field(description="1 = helpful, -1 = not helpful, 0 = clear")
+
+
+class EscalateRequest(BaseModel):
+    log_id: int
+    team: str | None = Field(default=None, description="Team id from /api/config; default: first")
+    contact: str = Field(default="", max_length=200, description="How to reach the person asking")
+
+
+class EscalateResponse(BaseModel):
+    reference: str
+    team: str | None = None
+    already_sent: bool = False
 
 
 class DocumentOut(BaseModel):
@@ -212,7 +239,7 @@ def create_app(
 
     @app.get("/", include_in_schema=False)
     def index(request: Request) -> Response:
-        response = FileResponse(WEB_DIR / "index.html", headers={"Cache-Control": "no-cache"})
+        response = HTMLResponse(_index_html(), headers={"Cache-Control": "no-cache"})
         _ensure_session(request, response)
         return response
 
@@ -225,23 +252,33 @@ def create_app(
         available = {
             "claude": bool(settings.anthropic_api_key),
             "openai": bool(settings.openai_api_key and settings.openai_model),
+            "gemini": bool(settings.gemini_api_key),
+            "groq": bool(settings.groq_api_key),
             "fake": True,
         }
         providers = [
             {"id": p, "label": PROVIDER_LABELS[p], "available": available[p]}
-            for p in ("claude", "openai", "fake")
-            if p != "openai" or available["openai"]  # ChatGPT is optional (ADR-018)
+            for p in PROVIDER_LABELS
+            if p not in OPTIONAL_PROVIDERS or available[p]
         ]
         return {
             "version": __version__,
             "providers": providers,
             "default_provider": settings.llm_provider,
-            "models": {"claude": settings.anthropic_model, "openai": settings.openai_model},
+            "models": {
+                "claude": settings.anthropic_model,
+                "openai": settings.openai_model,
+                "gemini": settings.gemini_model,
+                "groq": settings.groq_model,
+            },
             "allow_uploads": settings.allow_uploads,
             "max_upload_mb": settings.max_upload_mb,
             "max_questions_per_session": settings.max_questions_per_session,
             "top_k": settings.top_k,
             "embedding_model": settings.embedding_model,
+            "escalation_teams": [
+                {"id": team.id, "label": team.label} for team in settings.escalation_teams
+            ],
         }
 
     # --- documents ------------------------------------------------------------------------
@@ -377,6 +414,33 @@ def create_app(
             raise HTTPException(404, f"No query with log_id {body.log_id}")
         return {"ok": True}
 
+    @app.post("/escalate", dependencies=access)
+    def escalate(body: EscalateRequest, settings: SettingsDep, log: LogDep) -> EscalateResponse:
+        """Forward an unanswered question to a person (n8n webhook or the local outbox)."""
+        query = log.get(body.log_id)
+        if query is None:
+            raise HTTPException(404, f"No query with log_id {body.log_id}")
+        if query["escalation"]:  # one e-mail per question, however often the button is clicked
+            return EscalateResponse(reference=str(query["escalation"]), already_sent=True)
+        reason = (
+            "The documents have no answer to this question."
+            if not query["found"]
+            else "The user found the answer insufficient."
+        )
+        teams = {team.id: team for team in settings.escalation_teams}
+        team_id = (body.team or settings.escalation_teams[0].id).lower()
+        if team_id not in teams:
+            raise HTTPException(422, f"Unknown team {body.team!r}. Use one of: {', '.join(teams)}")
+        payload = new_escalation(
+            str(query["question"]), reason, body.contact or "unknown", teams[team_id]
+        )
+        try:
+            reference = build_escalator(settings).escalate(payload)
+        except (ToolError, OSError) as exc:  # webhook unreachable, outbox not writable
+            raise HTTPException(502, f"Could not forward the question: {exc}") from exc
+        log.set_escalation(body.log_id, reference)
+        return EscalateResponse(reference=reference, team=team_id)
+
     @app.get("/stats", dependencies=access)
     def stats(log: LogDep) -> dict[str, Any]:
         return vars_of(log.stats())
@@ -409,6 +473,16 @@ def _ensure_session(request: Request, response: Response) -> None:
     session_id = secrets.token_urlsafe(24)
     sessions[session_id] = 0
     response.set_cookie(SESSION_COOKIE, session_id, httponly=True, samesite="strict")
+
+
+def _index_html() -> str:
+    """index.html with versioned asset URLs, so browsers never mix a new app.js with an old
+    app.css after an update (the static files themselves are served without cache headers)."""
+    html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+    for name in ("app.css", "app.js"):
+        digest = hashlib.sha256((WEB_DIR / name).read_bytes()).hexdigest()[:10]
+        html = html.replace(f"/static/{name}", f"/static/{name}?v={digest}")
+    return html
 
 
 def _check_limits(request: Request, settings: Settings) -> None:

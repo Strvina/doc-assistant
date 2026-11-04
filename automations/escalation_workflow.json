@@ -21,14 +21,14 @@
     {
       "parameters": {
         "fromEmail": "doc-assistant@example.com",
-        "toEmail": "hr@example.com",
-        "subject": "=[Doc Assistant] Pitanje bez odgovora u dokumentima ({{ $json.body.id }})",
+        "toEmail": "={{ $json.body.team_email || 'hr@example.com' }}",
+        "subject": "=[Doc Assistant] {{ $json.body.team_label }}: pitanje bez odgovora u dokumentima ({{ $json.body.id }})",
         "emailFormat": "text",
-        "text": "=Zaposleni je postavio pitanje na koje dokumenti ne daju odgovor.\n\nPitanje: {{ $json.body.question }}\nRazlog: {{ $json.body.reason }}\nKontakt: {{ $json.body.contact }}\nVreme: {{ $json.body.created_at }}\nReferenca: {{ $json.body.id }}\n\nOdgovorite zaposlenom direktno, a ako odgovor treba da važi za sve, dopunite dokumente.",
+        "text": "=Zaposleni je postavio pitanje na koje dokumenti ne daju odgovor.\n\nTim: {{ $json.body.team_label }}\nPitanje: {{ $json.body.question }}\nRazlog: {{ $json.body.reason }}\nKontakt: {{ $json.body.contact }}\nVreme: {{ $json.body.created_at }}\nReferenca: {{ $json.body.id }}\n\nOdgovorite zaposlenom direktno, a ako odgovor treba da važi za sve, dopunite dokumente.",
         "options": {}
       },
       "id": "00000000-0000-0000-0000-000000000002",
-      "name": "Notify HR by e-mail",
+      "name": "Notify the team by e-mail",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
       "position": [
@@ -48,7 +48,7 @@
       "main": [
         [
           {
-            "node": "Notify HR by e-mail",
+            "node": "Notify the team by e-mail",
             "type": "main",
             "index": 0
           }

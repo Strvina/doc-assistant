@@ -29,12 +29,16 @@ CREATE TABLE IF NOT EXISTS queries (
     input_tokens  INTEGER NOT NULL,
     output_tokens INTEGER NOT NULL,
     feedback      INTEGER,                   -- 1 = 👍, -1 = 👎, NULL = none
-    cost_usd      REAL                       -- NULL when the model price is unknown
+    cost_usd      REAL,                      -- NULL when the model price is unknown
+    escalation    TEXT                       -- reference when forwarded to a person
 );
 """
 
 # Columns added after the first version; older log files get them on first use.
-_MIGRATIONS = {"cost_usd": "ALTER TABLE queries ADD COLUMN cost_usd REAL"}
+_MIGRATIONS = {
+    "cost_usd": "ALTER TABLE queries ADD COLUMN cost_usd REAL",
+    "escalation": "ALTER TABLE queries ADD COLUMN escalation TEXT",
+}
 
 
 @dataclass(frozen=True)
@@ -97,6 +101,14 @@ class QueryLog:
         with closing(self._connect()) as db, db:
             cursor = db.execute("UPDATE queries SET feedback = ? WHERE id = ?", (rating, query_id))
             return cursor.rowcount == 1
+
+    def get(self, query_id: int) -> dict[str, object] | None:
+        rows = self._select("SELECT * FROM queries WHERE id = ?", query_id)
+        return rows[0] if rows else None
+
+    def set_escalation(self, query_id: int, reference: str) -> None:
+        with closing(self._connect()) as db, db:
+            db.execute("UPDATE queries SET escalation = ? WHERE id = ?", (reference, query_id))
 
     def stats(self) -> UsageStats:
         with closing(self._connect()) as db:

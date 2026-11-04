@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from docassist.agent.tools import JsonlFile, ToolContext, WebhookEscalator
+from docassist.agent.tools import Escalator, JsonlFile, ToolContext, WebhookEscalator
 from docassist.config import Settings
 from docassist.library import Library
 from docassist.llm import FakeProvider, LLMProvider
@@ -30,8 +30,46 @@ def build_store(settings: Settings, *, rebuild: bool = False) -> VectorStore:
     return VectorStore(settings.index_dir, build_embedder(settings), rebuild=rebuild)
 
 
+FREE_SERVICES = ("groq", "gemini")  # free tiers, OpenAI-compatible (ADR-021, ADR-022)
+_KEY_HELP = {
+    "gemini": "GEMINI_API_KEY is not set. Get a free key at https://aistudio.google.com",
+    "groq": "GROQ_API_KEY is not set. Get a free key at https://console.groq.com",
+}
+
+
+def build_free_llm(settings: Settings, service: str) -> LLMProvider:
+    """The chosen free service first, then the other one as a backup when it has a key."""
+    from docassist.llm.chat_completions import ChatCompletionsProvider, endpoint
+
+    models = {
+        "gemini": (
+            settings.gemini_api_key,
+            (settings.gemini_model, settings.gemini_fallback_model),
+            8192,  # thinking models spend part of it on reasoning
+        ),
+        "groq": (
+            settings.groq_api_key,
+            (settings.groq_model, settings.groq_fallback_model),
+            1536,  # input + this count against Groq's 8,000 tokens/minute per model
+        ),
+    }
+    if not models[service][0]:
+        raise MissingAPIKeyError(f"{_KEY_HELP[service]} and add it to .env.")
+    endpoints = []
+    for name in [service, *(s for s in FREE_SERVICES if s != service)]:
+        key, names, max_tokens = models[name]
+        if not key:
+            continue
+        client = None
+        for model in filter(None, names):
+            ep = endpoint(name, model, key, max_tokens=max_tokens, client=client)
+            client = ep.client  # one HTTP client per service
+            endpoints.append(ep)
+    return ChatCompletionsProvider(service, endpoints)
+
+
 def build_llm(settings: Settings, provider: str | None = None) -> LLMProvider:
-    """The configured LLM, or `provider` ("claude" | "openai" | "fake") to override it."""
+    """The configured LLM, or `provider` ("claude" | "openai" | "gemini" | "groq" | "fake")."""
     provider = provider or settings.llm_provider
     if provider == "fake":
         return FakeProvider()
@@ -53,22 +91,26 @@ def build_llm(settings: Settings, provider: str | None = None) -> LLMProvider:
         from docassist.llm.openai_provider import OpenAIProvider
 
         return OpenAIProvider(settings.openai_model, api_key=settings.openai_api_key)
+    if provider in FREE_SERVICES:
+        return build_free_llm(settings, provider)
     raise ValueError(f"Unknown LLM provider {provider!r}")
 
 
+def build_escalator(settings: Settings) -> Escalator:
+    """Escalations go to the webhook (n8n) if configured, otherwise to a local file."""
+    if settings.escalation_webhook_url:
+        return WebhookEscalator(settings.escalation_webhook_url)
+    return JsonlFile(settings.outbox_dir / "escalations.jsonl")
+
+
 def build_tool_context(settings: Settings, store: VectorStore) -> ToolContext:
-    """Agent tools: escalations go to the webhook if configured, otherwise to a local file."""
-    outbox = settings.outbox_dir
-    escalator = (
-        WebhookEscalator(settings.escalation_webhook_url)
-        if settings.escalation_webhook_url
-        else JsonlFile(outbox / "escalations.jsonl")
-    )
+    """Everything the agent tools need."""
     return ToolContext(
         store=store,
-        escalator=escalator,
-        leave_requests=JsonlFile(outbox / "leave_requests.jsonl"),
+        escalator=build_escalator(settings),
+        leave_requests=JsonlFile(settings.outbox_dir / "leave_requests.jsonl"),
         top_k=settings.top_k,
+        teams=settings.escalation_teams,
     )
 
 

@@ -14,6 +14,18 @@ def isolated_data(tmp_path, monkeypatch):
         "EMBEDDING_CACHE_DIR": tmp_path / "models",
     }.items():
         monkeypatch.setenv(name, str(value))
-    for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENAI_MODEL", "API_TOKEN"):
+    for key in (
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "OPENAI_MODEL",
+        "GEMINI_API_KEY",
+        "GEMINI_MODEL",
+        "GEMINI_FALLBACK_MODEL",
+        "GROQ_API_KEY",
+        "GROQ_MODEL",
+        "GROQ_FALLBACK_MODEL",
+        "API_TOKEN",
+        "ESCALATION_WEBHOOK_URL",
+    ):
         monkeypatch.setenv(key, "")  # empty beats a value load_dotenv() would add
     return tmp_path

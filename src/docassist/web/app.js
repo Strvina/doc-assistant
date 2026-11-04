@@ -26,6 +26,8 @@ const ICONS = {
   trash: icon('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>'),
   copy: icon('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>'),
   up: icon('<path d="M7 10v10H4V10zM7 10l4-7c1.7 0 2.5 1 2.2 2.6L12.6 9H19a2 2 0 0 1 2 2.3l-1.2 7A2 2 0 0 1 17.8 20H7"/>'),
+  send: icon('<path d="M4 12l16-8-6 16-2.5-6.5z"/><path d="M11.5 13.5 20 4"/>'),
+  check: icon('<path d="M5 12.5l4.5 4.5L19 7.5"/>'),
   down: icon('<path d="M17 14V4h3v10zM17 14l-4 7c-1.7 0-2.5-1-2.2-2.6l.6-3.4H5a2 2 0 0 1-2-2.3l1.2-7A2 2 0 0 1 6.2 4H17"/>'),
 };
 
@@ -85,7 +87,7 @@ async function loadConfig() {
   const select = $("#provider-select");
   select.replaceChildren(
     ...state.config.providers.map((p) =>
-      el("option", { value: p.id }, p.id === "claude" ? `Claude · ${shortModel(state.config.models.claude)}` : p.label + (p.available ? "" : " (nema ključa)")),
+      el("option", { value: p.id }, p.available && state.config.models[p.id] ? `${p.label} · ${shortModel(state.config.models[p.id])}` : p.label + (p.available || p.id === "fake" ? "" : " (nema ključa)")),
     ),
   );
   const preferred = state.config.providers.find((p) => p.id === state.config.default_provider);
@@ -288,6 +290,45 @@ function renderAnswerText(text, citations, invalid) {
     .join("");
 }
 
+// An unanswered question goes to a team with one click (n8n → e-mail). One button per team
+// from ESCALATION_TEAMS; one escalation per question.
+function escalatePanel(logId) {
+  const teams = state.config.escalation_teams || [];
+  const panel = el("section", { class: "escalate", "aria-label": "Prosledi pitanje" });
+  const hint = el("p", { class: "escalate-hint" }, "Odgovor nije u dokumentima. Izaberite ko treba da odgovori — dobiće pitanje mejlom.");
+  const actions = el("div", { class: "escalate-actions" });
+
+  const send = async (team, button) => {
+    actions.querySelectorAll("button").forEach((b) => (b.disabled = true));
+    button.classList.add("busy");
+    try {
+      const result = await api("/escalate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ log_id: logId, team: team.id }) });
+      const sentTo = teams.find((t) => t.id === result.team)?.label || team.label;
+      panel.classList.add("sent");
+      panel.replaceChildren(
+        el("span", { class: "escalate-icon", html: ICONS.check }),
+        el("div", { class: "escalate-done" },
+          el("strong", {}, result.already_sent ? "Pitanje je već prosleđeno" : `Prosleđeno: ${sentTo}`),
+          el("span", {}, "Referenca ", el("code", {}, result.reference), " · javiće vam se nadležna osoba."),
+        ),
+      );
+    } catch (error) {
+      actions.querySelectorAll("button").forEach((b) => (b.disabled = false));
+      button.classList.remove("busy");
+      toast(`Pitanje nije prosleđeno: ${error.message}`, "error");
+    }
+  };
+
+  for (const team of teams) {
+    const button = el("button", { class: "btn small escalate-btn", type: "button", title: `Prosledi pitanje: ${team.label}` },
+      el("span", { class: "btn-icon", html: ICONS.send }), team.label);
+    button.addEventListener("click", () => send(team, button));
+    actions.append(button);
+  }
+  panel.append(el("h4", {}, "Prosledi pitanje"), hint, actions);
+  return panel;
+}
+
 function renderAnswer(question, data, mode) {
   const card = el("article", { class: "answer" });
   const label = el("div", { class: "answer-label" },
@@ -316,6 +357,8 @@ function renderAnswer(question, data, mode) {
     card.append(el("div", { class: "warning" }, `Odgovor navodi izvore koji nisu među pronađenim pasusima: ${data.invalid_citations.join(", ")}`));
   }
 
+  const agentEscalated = data.tool_calls.some((c) => c.name === "escalate_to_human" && !c.is_error);
+
   if (data.citations.length) {
     card.append(el("div", { class: "sources" },
       el("h4", {}, `Izvori · ${data.citations.length}`),
@@ -331,6 +374,10 @@ function renderAnswer(question, data, mode) {
         ),
       )),
     ));
+  }
+
+  if (!data.found && data.log_id && !agentEscalated && (state.config.escalation_teams || []).length) {
+    card.append(escalatePanel(data.log_id));
   }
 
   const meta = [data.provider === "fake" ? "offline demo" : data.model, `${data.latency_s.toFixed(1)} s`];

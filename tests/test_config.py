@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from docassist import __version__
-from docassist.config import Settings
+from docassist.config import Settings, Team, parse_teams
 
 
 @pytest.fixture
@@ -15,6 +15,13 @@ def clean_env(monkeypatch):
         "ANTHROPIC_EFFORT",
         "OPENAI_API_KEY",
         "OPENAI_MODEL",
+        "GEMINI_API_KEY",
+        "GEMINI_MODEL",
+        "GEMINI_FALLBACK_MODEL",
+        "GROQ_API_KEY",
+        "GROQ_MODEL",
+        "GROQ_FALLBACK_MODEL",
+        "ESCALATION_TEAMS",
         "EMBEDDING_PROVIDER",
         "EMBEDDING_MODEL",
         "EMBEDDING_CACHE_DIR",
@@ -54,7 +61,7 @@ def test_env_overrides(clean_env):
 
 
 def test_invalid_provider(clean_env):
-    clean_env.setenv("LLM_PROVIDER", "gemini")
+    clean_env.setenv("LLM_PROVIDER", "llama")
     with pytest.raises(ValueError, match="LLM_PROVIDER"):
         Settings.from_env(load_dotenv_file=False)
 
@@ -101,3 +108,28 @@ def test_embedding_model_default_follows_provider(clean_env):
     assert Settings.from_env(load_dotenv_file=False).embedding_model == "text-embedding-3-small"
     clean_env.setenv("EMBEDDING_MODEL", "custom-model")
     assert Settings.from_env(load_dotenv_file=False).embedding_model == "custom-model"
+
+
+def test_gemini_settings(clean_env):
+    clean_env.setenv("LLM_PROVIDER", "Gemini")
+    clean_env.setenv("GEMINI_API_KEY", "g-key")
+    settings = Settings.from_env(load_dotenv_file=False)
+    assert settings.llm_provider == "gemini"
+    assert settings.gemini_api_key == "g-key"
+    assert settings.gemini_model == "gemini-3.5-flash"
+    assert settings.gemini_fallback_model == "gemini-flash-lite-latest"
+
+
+def test_escalation_teams(clean_env):
+    settings = Settings.from_env(load_dotenv_file=False)
+    assert [t.id for t in settings.escalation_teams] == ["hr", "maintenance", "quality"]
+
+    clean_env.setenv("ESCALATION_TEAMS", " HR:Ljudski resursi:hr@firma.rs , it ")
+    teams = Settings.from_env(load_dotenv_file=False).escalation_teams
+    assert teams == (Team("hr", "Ljudski resursi", "hr@firma.rs"), Team("it", "it", ""))
+
+
+@pytest.mark.parametrize("value", [",", "hr:HR,hr:Again", "a:b:c:d", ":Label"])
+def test_invalid_escalation_teams(value):
+    with pytest.raises(ValueError, match="ESCALATION_TEAMS"):
+        parse_teams(value)

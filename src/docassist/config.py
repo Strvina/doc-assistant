@@ -8,7 +8,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-VALID_PROVIDERS = ("claude", "openai", "fake")  # fake = offline canned answers
+VALID_PROVIDERS = ("claude", "openai", "gemini", "groq", "fake")  # fake = offline canned answers
 VALID_EFFORTS = ("", "low", "medium", "high", "xhigh", "max")
 # local = multilingual model on this machine (default, ADR-019); openai = optional API;
 # fake = hashing embedder for tests (keyword-like matching only)
@@ -18,6 +18,53 @@ DEFAULT_EMBEDDING_MODELS = {
     "openai": "text-embedding-3-small",
     "fake": "hashing",
 }
+
+
+# Free tier of the Gemini API (ADR-021). A pinned model: the "-latest" alias points to the
+# newest model, which is often overloaded (HTTP 503) on the free tier.
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
+DEFAULT_GEMINI_FALLBACK_MODEL = "gemini-flash-lite-latest"
+# Groq free tier (ADR-022): fast open models, 1,000 requests/day and 8,000 tokens/min each.
+DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
+DEFAULT_GROQ_FALLBACK_MODEL = "openai/gpt-oss-20b"
+
+
+# Who an unanswered question can be forwarded to: "id:Label:e-mail" separated by commas.
+# The demo company's teams; the n8n workflow sends the e-mail to the chosen team's address.
+DEFAULT_ESCALATION_TEAMS = (
+    "hr:HR:hr@example.com,"
+    "maintenance:Održavanje:odrzavanje@example.com,"
+    "quality:Kontrola kvaliteta:kvalitet@example.com"
+)
+
+
+@dataclass(frozen=True, slots=True)
+class Team:
+    """A team that can receive escalated questions (a button in the UI, a choice for the agent)."""
+
+    id: str
+    label: str
+    email: str = ""
+
+
+def parse_teams(value: str) -> tuple[Team, ...]:
+    """Parse ESCALATION_TEAMS, e.g. "hr:HR:hr@firma.rs,maintenance:Održavanje"."""
+    teams: list[Team] = []
+    for item in value.split(","):
+        if not item.strip():
+            continue
+        parts = [part.strip() for part in item.split(":")]
+        if len(parts) > 3 or not parts[0]:
+            raise ValueError(f"ESCALATION_TEAMS: expected id:Label:e-mail, got {item.strip()!r}")
+        team_id = parts[0].lower()
+        label = parts[1] if len(parts) > 1 and parts[1] else team_id
+        email = parts[2] if len(parts) > 2 else ""
+        if any(team.id == team_id for team in teams):
+            raise ValueError(f"ESCALATION_TEAMS: duplicate team id {team_id!r}")
+        teams.append(Team(team_id, label, email))
+    if not teams:
+        raise ValueError("ESCALATION_TEAMS must name at least one team")
+    return tuple(teams)
 
 
 @dataclass(frozen=True)
@@ -42,6 +89,13 @@ class Settings:
     max_questions_per_ip_hour: int = 120
     documents_dir: Path = Path("data/documents")
     max_upload_mb: int = 20
+    gemini_api_key: str | None = None
+    gemini_model: str = DEFAULT_GEMINI_MODEL
+    gemini_fallback_model: str = DEFAULT_GEMINI_FALLBACK_MODEL
+    groq_api_key: str | None = None
+    groq_model: str = DEFAULT_GROQ_MODEL
+    groq_fallback_model: str = DEFAULT_GROQ_FALLBACK_MODEL
+    escalation_teams: tuple[Team, ...] = parse_teams(DEFAULT_ESCALATION_TEAMS)
 
     @classmethod
     def from_env(cls, load_dotenv_file: bool = True) -> Settings:
@@ -70,12 +124,19 @@ class Settings:
             anthropic_effort=effort or None,
             openai_api_key=_env("OPENAI_API_KEY") or None,
             openai_model=_env("OPENAI_MODEL", ""),
+            gemini_api_key=_env("GEMINI_API_KEY") or None,
+            gemini_model=_env("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
+            gemini_fallback_model=_env("GEMINI_FALLBACK_MODEL", DEFAULT_GEMINI_FALLBACK_MODEL),
+            groq_api_key=_env("GROQ_API_KEY") or None,
+            groq_model=_env("GROQ_MODEL", DEFAULT_GROQ_MODEL),
+            groq_fallback_model=_env("GROQ_FALLBACK_MODEL", DEFAULT_GROQ_FALLBACK_MODEL),
             embedding_provider=embedding_provider,
             embedding_model=_env("EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODELS[embedding_provider]),
             embedding_cache_dir=Path(_env("EMBEDDING_CACHE_DIR", "data/models")),
             index_dir=Path(_env("INDEX_DIR", "data/index")),
             top_k=int(_env("TOP_K", "5")),
             escalation_webhook_url=_env("ESCALATION_WEBHOOK_URL") or None,
+            escalation_teams=parse_teams(_env("ESCALATION_TEAMS", DEFAULT_ESCALATION_TEAMS)),
             outbox_dir=Path(_env("OUTBOX_DIR", "data/outbox")),
             api_token=_env("API_TOKEN") or None,
             log_db=Path(_env("LOG_DB", "data/logs.sqlite")),

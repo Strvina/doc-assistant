@@ -21,7 +21,7 @@ Ako odgovor nije u dokumentima, bot to kaže umesto da izmišlja.
 
 ## Stack (detalji u `docs/DECISIONS.md`)
 
-Python 3.12 · uv · Claude API (OpenAI opciono, ADR-018) · lokalni višejezični embeddings
+Python 3.12 · uv · Claude API (OpenAI opciono, ADR-018) · besplatni Groq/Gemini za demo (ADR-021/022) · lokalni višejezični embeddings
 (fastembed, ADR-019) · ChromaDB · FastAPI + sopstveni web UI (ADR-020) · n8n · ruff + pytest ·
 GitHub Actions · Docker / Hugging Face Spaces
 
@@ -38,20 +38,28 @@ GitHub Actions · Docker / Hugging Face Spaces
 - **Testovi:** svi bez mreže (fake modeli, lažni SDK klijenti); `tests/conftest.py` sve putanje preusmerava u tmp.
 - **n8n eskalacija provereno uživo:** `uv run python scripts/setup_n8n.py` → webhook → n8n → mejl u Mailpit
   (<http://localhost:8025>); radi i iz koda aplikacije (`WebhookEscalator`).
-- **Nije provereno uživo:** pravi Claude odgovori i agent (čeka ključ), Docker image build aplikacije.
+- **Pravi AI odgovori bez plaćanja (grana `feat/gemini`):** Claude kredit nije moguće uplatiti (banka),
+  pa demo radi na besplatnim nivoima: **Groq** `openai/gpt-oss-120b` (glavni, ~1 s) → `gpt-oss-20b` →
+  **Gemini** `gemini-3.5-flash` → `gemini-flash-lite-latest` (lanac, ADR-022). Eval sa Groq-om: 93 % tačno,
+  0 izmišljenih citata (`docs/EVAL_RESULTS.md`). Gemini free: samo 20 zahteva/dan za 3.5-flash.
+- **Prosleđivanje pitanja timu:** ispod odgovora "nema u dokumentima" dugme po timu (`ESCALATION_TEAMS`,
+  podrazumevano HR / Održavanje / Kontrola kvaliteta) → `POST /escalate` → n8n → mejl na adresu tima;
+  agent bira tim sam. Jedan mejl po pitanju.
+- **Nije provereno uživo:** Claude (nema kredita), Docker image build aplikacije.
 - **Blokirano:**
   - 0.5 zaštita grane `main` — nije uključena (sekcija uklonjena iz `WORKFLOW.md`).
 
 ## Sledeći korak
 
-1. `.env` sa `ANTHROPIC_API_KEY` → `uv run python -m docassist.cli index data/sample_docs --rebuild` →
-   web UI: pitanja iz primera; proveriti jezik odgovora, citate, highlight, agent (`Agent` prekidač).
-2. `uv run python -m docassist.eval` (+ `--agent`, + `ANTHROPIC_MODEL=claude-haiku-5-5`) → tabela u
-   `docs/EVAL_RESULTS.md` i README (6.3, 7.2).
+1. PR #12 (`feat/gemini`: Groq + Gemini lanac, dugmad za timove) → merge. U `.env`: `LLM_PROVIDER=groq`.
+2. Kvalitet pretrage (2 promašaja u evalu, vidi `docs/EVAL_RESULTS.md`): hibridna pretraga (ključne reči +
+   embeddings) i chunking koji drži tabelu zajedno sa naslovom. Eval pokretati na indeksu samo sa demo
+   dokumentima (korisnikov upload menja rezultate). Zatim `--agent` eval.
 3. Docker radi (pomoglo `wsl --shutdown` + restart Docker Desktop-a) → `docker compose up --build`
    (build slike aplikacije još nije proban). Stara grana `feat/n8n-local` je zastarela — obrisati.
 4. Deploy po `docs/DEPLOY.md` (Hugging Face Space + GitHub Action) → link u README (4.4) → **prijava (4.6)**.
-5. Screenshot-ove u README zameniti verzijom sa pravim Claude odgovorom.
+5. Screenshot-ove u README zameniti verzijom sa pravim (Groq) odgovorom.
+6. Claude eval (6.3) kad bude moguće platiti kredit (npr. virtuelna kartica).
 
 ## Napomene za sledeću sesiju
 
@@ -67,6 +75,9 @@ GitHub Actions · Docker / Hugging Face Spaces
 - Claude: zvanični SDK, refusal fallback, `ANTHROPIC_EFFORT` (npr. `low`) je poluga za cenu/brzinu (ADR-014).
 - Frontend (`src/docassist/web/`) nema build korak; menja se direktno, server servira statiku.
 - n8n 2.x: posle `update:workflow --active=true` treba restart; webhook se registruje par sekundi posle `/healthz`.
+- Groq: 8.000 tokena/min po modelu → 413 za velike zahteve (agent čita ceo dokument); lanac prelazi dalje.
+- gpt-oss ponekad citira sa `【...】`; `chat_completions._clean` to pretvara u `[...]`.
+- Statika (`app.css`/`app.js`) se u `index.html` servira sa `?v=<hash>` — nema zastarelog CSS-a posle izmene.
 - `pymupdf` je namerno na 1.x (ADR-009). Lokalni venv je na Python 3.14, CI i Docker na 3.12.
 
 ## Otvorena pitanja
@@ -90,3 +101,4 @@ GitHub Actions · Docker / Hugging Face Spaces
 | 2026-11-04 | Svi PR-ovi spojeni u main; redizajn UI-ja + screenshot | #9 |
 | 2026-11-04 | Sopstveni web UI (3 kolone, pregled dokumenata sa highlight-om, praćenje + praznine), Library, limiti na serveru, HF Spaces deploy; ADR-020 | #10 |
 | 2026-11-04 | n8n + Mailpit jednom komandom (`scripts/setup_n8n.py`), preneseno na novi `main`, provereno uživo (n8n 2.46) | #11 |
+| 2026-11-04 | Besplatni modeli: Gemini, pa Groq + lanac rezervi (ADR-021, ADR-022), eval 93 %; dugmad za prosleđivanje pitanja timovima (n8n → mejl timu) | #12 |

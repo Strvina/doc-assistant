@@ -1,3 +1,4 @@
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -58,6 +59,7 @@ def test_index_page_sets_a_session_cookie(client):
     assert response.status_code == 200
     assert "<title>Doc Assistant</title>" in response.text
     assert SESSION_COOKIE in response.cookies
+    assert "/static/app.css?v=" in response.text  # versioned: no stale CSS after an update
     assert response.headers["x-frame-options"] == "SAMEORIGIN"
     assert client.get("/static/app.js").status_code == 200
 
@@ -69,6 +71,18 @@ def test_config(client):
     assert body["providers"][0]["available"] is False
     assert body["default_provider"] == "fake"
     assert body["allow_uploads"] is True
+
+
+def test_config_lists_gemini_when_key_is_set(settings, tmp_path):
+    client = make_client(
+        settings, tmp_path, gemini_api_key="g-key", gemini_model="gemini-x", groq_api_key="gsk"
+    )
+    body = client.get("/api/config").json()
+
+    gemini = next(p for p in body["providers"] if p["id"] == "gemini")
+    assert gemini == {"id": "gemini", "label": "Gemini", "available": True}
+    assert body["models"]["gemini"] == "gemini-x"
+    assert [p["id"] for p in body["providers"]] == ["claude", "gemini", "groq", "fake"]
 
 
 def test_health_and_empty_index(client):
@@ -183,6 +197,43 @@ def test_ask_agent_mode_reports_tool_calls(client):
 
     assert [c["name"] for c in body["tool_calls"]] == ["search_documents"]
     assert body["found"] is True
+
+
+def test_escalate_unanswered_question_once(client, settings):
+    body = client.post("/ask", json={"question": "Koja je cena akcija na berzi?"}).json()
+    assert body["found"] is False
+
+    first = client.post("/escalate", json={"log_id": body["log_id"]})
+    again = client.post("/escalate", json={"log_id": body["log_id"]})
+
+    assert first.status_code == 200
+    reference = first.json()["reference"]
+    assert reference.startswith("ESC-")
+    assert again.json()["reference"] == reference
+    assert again.json()["already_sent"] is True
+    lines = (settings.outbox_dir / "escalations.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1  # the second click did not send a second e-mail
+    record = json.loads(lines[0])
+    assert record["question"] == "Koja je cena akcija na berzi?"
+    assert record["id"] == reference
+    assert first.json()["team"] == record["team"] == "hr"  # first team is the default
+
+
+def test_escalate_to_a_chosen_team(client, settings):
+    teams = client.get("/api/config").json()["escalation_teams"]
+    assert {"id": "maintenance", "label": "Održavanje"} in teams
+    log_id = client.post("/ask", json={"question": "Koja je cena akcija?"}).json()["log_id"]
+
+    assert client.post("/escalate", json={"log_id": log_id, "team": "sales"}).status_code == 422
+    response = client.post("/escalate", json={"log_id": log_id, "team": "maintenance"})
+
+    assert response.json()["team"] == "maintenance"
+    record = json.loads((settings.outbox_dir / "escalations.jsonl").read_text(encoding="utf-8"))
+    assert (record["team_label"], record["team_email"]) == ("Održavanje", "odrzavanje@example.com")
+
+
+def test_escalate_unknown_log_id(client):
+    assert client.post("/escalate", json={"log_id": 999}).status_code == 404
 
 
 @pytest.mark.parametrize(("provider", "status"), [("claude", 503), ("broken", 502)])
