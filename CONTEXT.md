@@ -69,6 +69,22 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
    - [x] Odgovor se ispisuje dok nastaje (#21).
    - [x] Pretraga i preimenovanje razgovora (#22), provereno u browseru (Playwright).
    - [x] Izvoz razgovora u PDF i Word (#23), provereno u browseru.
+   - [~] **Ispravke posle korisnikovog testa — grana `fix/tables-export`, NIJE spojeno.** Urađeno:
+     - "export.json" pri izvozu: uzrok je server na :8000 pokrenut pre #23 bez `--reload` (ruta ne
+       postoji → 404 JSON). **Korisnik treba da restartuje server.** UI sada preuzima kroz `fetch` i
+       pokazuje poruku (404 → "restartuj server") umesto da snimi grešku kao fajl.
+     - Tabele u odgovoru: pravilo za model `TABLE_RULE` (`llm/prompts.py`, i u agentu) — kratke
+       ćelije, opisi ispod tabele; UI: skraćen naziv izvora u čipu (24 znaka, u tabeli 16, ceo u
+       tooltip-u), kolone sa brojevima desno i u jednom redu (`td.num`), tekst kolone min 10em.
+       Izvoz (PDF/Word) takođe skraćuje izvore u tabelama (`export.short_citations`).
+     - Testovi prolaze. **Ostaje:** browser provera (skripta `ui_table.py` u scratchpad-u je pala
+       samo na delu za toast — lista razgovora se ne puni preko `page.route`; tabela je proverena i
+       izgleda dobro), pa eval sa Groq-om (promenjen prompt) na čistom indeksu, pa PR i spajanje.
+     - **OCR (Lavazza cenovnik, str. 4/10):** Tesseract je na granici — 27 kombinacija (dpi 200/300/400,
+       jezici, psm 3/11/12) bez primetnog poboljšanja. Cene sa malim decimalama ("1099⁰⁰") ispadaju
+       kao "10990,", ćirilica (`srp`) pretvara latinicu u ćirilicu ("Модка"), naziv i cena iz iste
+       kartice se razdvoje. Pravo rešenje = stavka "AI model za slike" ispod → predložiti da ide pre
+       Excel/PowerPoint.
    - [ ] Excel (`.xlsx`) i PowerPoint (`.pptx`) dokumenti (`uv add openpyxl python-pptx`) + **ispravka:**
      citati iz slika/novih formata se ne prepoznaju (`rag._CITATION` i `CITATION` u `app.js` znaju samo
      pdf|docx|txt|md) → izvesti listu ekstenzija iz `SUPPORTED_EXTENSIONS`.
@@ -138,3 +154,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-04 | Odgovor se ispisuje dok nastaje (`/ask/stream`, NDJSON); Stop prekida i generisanje; ADR-026 | #21 |
 | 2026-11-04 | Pretraga (bez kvačica) i preimenovanje razgovora; provereno u browseru (ispravljeno: korpa je prekrivala olovku) | #22 |
 | 2026-11-04 | Izvoz razgovora u PDF i Word (pitanja, odgovori sa tabelama, izvori); ADR-027 | #23 |
+| 2026-11-04 | Ispravke: izvoz kroz `fetch` sa porukom o grešci, kraće tabele (pravilo za model + prikaz), analiza OCR-a Lavazza cenovnika | (grana `fix/tables-export`, nije spojeno) |

@@ -239,11 +239,12 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm);
   box-shadow: var(--shadow-2);
 }
-.export-menu a {
-  padding: 8px 12px; border-radius: 7px; color: var(--ink); text-decoration: none;
+.export-menu button {
+  padding: 8px 12px; border: 0; border-radius: 7px; background: none; color: var(--ink);
+  text-align: left; font: inherit; cursor: pointer;
   font-size: 13.5px; font-weight: 500;
 }
-.export-menu a:hover, .export-menu a:focus-visible { background: var(--surface-2); outline: none; }
+.export-menu button:hover, .export-menu button:focus-visible { background: var(--surface-2); outline: none; }
 .conv-rename {
   width: 100%; height: 32px; padding: 0 8px; font: inherit; font-weight: 600; font-size: 13.5px;
   border: 1px solid var(--amber); border-radius: 8px; background: var(--surface); color: var(--ink);
@@ -344,13 +345,16 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .answer-body code { font: 600 .9em var(--mono); padding: 1px 5px; border-radius: 5px; background: var(--surface-2); border: 1px solid var(--line); }
 /* Tables from the model: scroll sideways on a phone instead of squeezing the columns. */
 .table-wrap { overflow-x: auto; margin: 4px 0 12px; border: 1px solid var(--line); border-radius: 10px; }
-.answer-body table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.45; }
-.answer-body th, .answer-body td { padding: 9px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+.answer-body table { width: 100%; border-collapse: collapse; font-size: 13.5px; line-height: 1.45; }
+.answer-body th, .answer-body td { padding: 8px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+/* Text columns never shrink to a word per line; a wide table scrolls sideways instead. */
+.answer-body td { min-width: 10em; max-width: 26em; }
+.answer-body td.num, .answer-body th.num { min-width: 0; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+.answer-body td:has(> .cite:only-child) { min-width: 0; }
 .answer-body th { background: var(--surface-2); font-size: 12.5px; font-weight: 700; color: var(--ink-2); white-space: nowrap; }
 .answer-body tbody tr:last-child td { border-bottom: 0; }
 .answer-body tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
 .answer-body td .cite { white-space: nowrap; }
-@media (max-width: 860px) { .answer-body td { min-width: 140px; } }
 .answer-label {
   display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
   font: 600 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted);

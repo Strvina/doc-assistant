@@ -193,3 +193,20 @@ def test_export_endpoint_returns_files_only_to_the_owner(settings, tmp_path):
 
     assert bob.get(f"/conversations/{cid}/export").status_code == 404
     assert alice.get(f"/conversations/{cid}/export", params={"format": "xlsx"}).status_code == 422
+
+
+def test_table_citations_are_shortened_full_names_stay_in_sources():
+    long_name = "Lavazza Belgrade Training Center Cenovnik 2026. (optimized).pdf"
+    assert (
+        export.short_citations(f"x [{long_name}, str. 6]") == "x [Lavazza Belgrade Traini…, str. 6]"
+    )
+    assert export.short_citations("[kratko.pdf, p. 2]") == "[kratko, str. 2]"
+
+    answer = f"| Kafa | Cena | Izvor |\n|---|---|---|\n| Cuba | 3.605,00 | [{long_name}, str. 6] |"
+    turn = {
+        "question": "q",
+        "response": {"answer": answer, "citations": [{"source": long_name, "page": 6}]},
+    }
+    html = export.to_html({"title": "t", "turns": [turn]})
+    assert "<td>[Lavazza Belgrade Traini…, str. 6]</td>" in html
+    assert f"<b>{long_name}, str. 6</b>" in html  # the full name under "Izvori"
