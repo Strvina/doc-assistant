@@ -48,7 +48,8 @@ GitHub Actions · Docker / Hugging Face Spaces
 2. `uv run python -m docassist.eval` (+ `--agent`, + `ANTHROPIC_MODEL=claude-haiku-5-5`) → tabela u
    `docs/EVAL_RESULTS.md` i README (6.3, 7.2).
 3. Docker: popraviti Docker Desktop → `docker compose up --build`; n8n: `uv run python scripts/setup_n8n.py`
-   (grana `feat/n8n-local`, PR još nije otvoren — prvo proveriti uživo).
+   (grana `feat/n8n-setup`, commit-ovano lokalno; push + PR tek kad prođe uživo;
+   stara grana `feat/n8n-local` je zastarela — obrisati).
 4. Deploy po `docs/DEPLOY.md` (Hugging Face Space + GitHub Action) → link u README (4.4) → **prijava (4.6)**.
 5. Screenshot-ove u README zameniti verzijom sa pravim Claude odgovorom.
 
@@ -87,3 +88,4 @@ GitHub Actions · Docker / Hugging Face Spaces
 | 2026-11-04 | Faza 7 (delimično): Docker, README dijagram + Data protection | #8 |
 | 2026-11-04 | Svi PR-ovi spojeni u main; redizajn UI-ja + screenshot | #9 |
 | 2026-11-04 | Sopstveni web UI (3 kolone, pregled dokumenata sa highlight-om, praćenje + praznine), Library, limiti na serveru, HF Spaces deploy; ADR-020 | #10 |
+| 2026-11-04 | n8n + Mailpit jednom komandom (`scripts/setup_n8n.py`), preneseno na novi `main`; čeka proveru uživo (Docker) | — |
