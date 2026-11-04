@@ -56,8 +56,8 @@ GitHub Actions · Docker / Hugging Face Spaces
 
 1. PR #13 (`feat/hybrid-search`) → merge. Posle merge-a: `uv run python -m docassist.cli index data/documents
    --rebuild` (nova podela teksta; stari indeks javlja grešku dok se ne izgradi ponovo).
-2. PR #14 `feat/ocr` (posle #13; grana je napravljena od `feat/hybrid-search` → posle merge-a #13
-   `git rebase --onto main feat/hybrid-search feat/ocr`). Posle merge-a: `index data/documents --rebuild`.
+2. PR #15 (OCR prema `main`) → merge. Posle merge-a: `index data/documents --rebuild`. Stare grane
+   `feat/hybrid-search`, `feat/ocr`, `feat/n8n-local` mogu da se obrišu. Ubuduće bez "stacked" PR-ova.
    Sledeće za slike: opcioni AI model za fotografije/tabele (Gemini) — slike tada napuštaju server.
 3. Eval uvek na čistom indeksu (samo demo dokumenti): `INDEX_DIR`/`DOCUMENTS_DIR`/`LOG_DB` u privremeni folder.
 4. Docker radi (pomoglo `wsl --shutdown` + restart Docker Desktop-a) → `docker compose up --build`
@@ -111,4 +111,4 @@ GitHub Actions · Docker / Hugging Face Spaces
 | 2026-11-04 | n8n + Mailpit jednom komandom (`scripts/setup_n8n.py`), preneseno na novi `main`, provereno uživo (n8n 2.46) | #11 |
 | 2026-11-04 | Besplatni modeli: Gemini, pa Groq + lanac rezervi (ADR-021, ADR-022), eval 93 %; dugmad za prosleđivanje pitanja timovima (n8n → mejl timu) | #12 |
 | 2026-11-04 | Hibridna pretraga (+1 BM25 pogodak) i podela po odeljcima; eval: činjenice 96→100 %, odgovori 93→100 %, agent 100 %; ADR-023 | #13 |
-| 2026-11-04 | OCR (Tesseract) za skenove i slike, upload slika; eval sa skenovima 100 %; ADR-024 | #14 |
+| 2026-11-04 | OCR (Tesseract) za skenove i slike, upload slika; eval sa skenovima 100 %; ADR-024 | #15 (#14 greškom spojen u `feat/hybrid-search`) |
