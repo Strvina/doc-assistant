@@ -614,18 +614,22 @@ def _ensure_session(
     session_id = secrets.token_urlsafe(24)
     sessions[session_id] = 0
     conversations.add_session(session_id)
+    if settings.embed_origins:
+        # Inside an iframe on another site (a Hugging Face Space) a "strict" cookie is never
+        # sent; a partitioned cookie works there and is still separate per embedding site.
+        # Written by hand: Starlette's `partitioned=True` needs Python 3.14 (Docker/CI: 3.12).
+        cookie = (
+            f"{SESSION_COOKIE}={session_id}; Max-Age={SESSION_MAX_AGE_S}; Path=/; HttpOnly; "
+            "Secure; SameSite=None; Partitioned"
+        )
+        response.raw_headers.append((b"set-cookie", cookie.encode("latin-1")))
+        return
     response.set_cookie(
         SESSION_COOKIE,
         session_id,
         max_age=SESSION_MAX_AGE_S,
         httponly=True,
-        # Inside an iframe on another site (a Hugging Face Space) a "strict" cookie is never
-        # sent; a partitioned cookie works there and is still separate per embedding site.
-        **(
-            {"samesite": "none", "secure": True, "partitioned": True}
-            if settings.embed_origins
-            else {"samesite": "strict"}
-        ),
+        samesite="strict",
     )
 
 
