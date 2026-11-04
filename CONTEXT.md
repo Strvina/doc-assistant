@@ -68,8 +68,7 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
    posle zelenog CI-ja:**
    - [x] Odgovor se ispisuje dok nastaje (#21).
    - [x] Pretraga i preimenovanje razgovora (#22), provereno u browseru (Playwright).
-   - [~] Izvoz razgovora u PDF i Word — grana `feat/conversation-export`, provereno u browseru;
-     ostaje: CI zelen → spojiti PR.
+   - [x] Izvoz razgovora u PDF i Word (#23), provereno u browseru.
    - [ ] Excel (`.xlsx`) i PowerPoint (`.pptx`) dokumenti (`uv add openpyxl python-pptx`) + **ispravka:**
      citati iz slika/novih formata se ne prepoznaju (`rag._CITATION` i `CITATION` u `app.js` znaju samo
      pdf|docx|txt|md) → izvesti listu ekstenzija iz `SUPPORTED_EXTENSIONS`.
@@ -138,4 +137,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-04 | Priprema za HF Space (iframe/kolačić, LFS, DEPLOY za Groq); demo odložen | #20 |
 | 2026-11-04 | Odgovor se ispisuje dok nastaje (`/ask/stream`, NDJSON); Stop prekida i generisanje; ADR-026 | #21 |
 | 2026-11-04 | Pretraga (bez kvačica) i preimenovanje razgovora; provereno u browseru (ispravljeno: korpa je prekrivala olovku) | #22 |
-| 2026-11-04 | Izvoz razgovora u PDF i Word (pitanja, odgovori sa tabelama, izvori); ADR-027 | (PR otvoren) |
+| 2026-11-04 | Izvoz razgovora u PDF i Word (pitanja, odgovori sa tabelama, izvori); ADR-027 | #23 |
