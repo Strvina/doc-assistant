@@ -13,15 +13,6 @@ git remote add origin https://github.com/<tvoj-username>/doc-assistant.git
 git push -u origin main
 ```
 
-**Zaštita grane `main`** — GitHub → repo → *Settings → Rules → Rulesets → New branch ruleset*:
-- Target: `main` (Default branch)
-- ✅ Restrict deletions · ✅ Block force pushes
-- ✅ Require a pull request before merging — **Required approvals: 0**
-- ✅ Require status checks to pass → dodaj check **`checks`** (pojavi se posle prvog CI run-a)
-
-> Zašto 0 odobrenja: GitHub ne dozvoljava autoru da odobri sopstveni PR. Kad radiš sam,
-> "odobravanje" je: CI zelen + ti pregledaš diff u PR-u + **Squash and merge**.
-
 ## Svakodnevni ciklus (jedan zadatak iz PLAN.md = jedan PR)
 
 ```bash

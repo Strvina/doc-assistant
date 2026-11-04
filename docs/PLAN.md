@@ -63,7 +63,7 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
   - `escalate_to_human` — kad nema odgovora: šalje pitanje nadležnom (webhook)
   - `create_leave_request` — iz razgovora popuni zahtev za godišnji odmor (JSON)
 - [x] 5.2 FastAPI: `POST /ask`, `POST /documents`, `GET /health` (+ `GET/DELETE /documents`, `X-API-Key`)
-- [x] 5.3 n8n workflow: webhook → email/Slack obaveštenje (export JSON u `automations/`) — nije probano u živom n8n-u
+- [x] 5.3 n8n workflow: webhook → email/Slack obaveštenje (export JSON u `automations/`) — provereno uživo: n8n 2.46 + Mailpit, `scripts/setup_n8n.py`
 - [x] 5.4 Testovi agent petlje sa FakeProvider-om koji "bira" alat
 
 ## Faza 6 — Evaluacija i monitoring (21–25. 11.)  · grana: `feat/eval`

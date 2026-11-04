@@ -19,16 +19,23 @@ The workflow receives it with a **Webhook** node and sends an e-mail to HR
 (**Send Email** node). Swap the e-mail node for Slack, Teams or a ticketing system as needed.
 Without a webhook URL, escalations are appended to `data/outbox/escalations.jsonl` instead.
 
-### Setup
+### Setup (one command, everything local and free)
 
-1. Run n8n, e.g. `docker run -it --rm -p 5678:5678 docker.n8n.io/n8nio/n8n`, open <http://localhost:5678>.
-2. *Workflows → Import from File* → `automations/escalation_workflow.json`.
-3. Open **Notify HR by e-mail**: add SMTP credentials, set the From/To addresses.
-4. Open **Escalation webhook** and copy the *Test URL* (or the *Production URL* after activating the workflow).
-5. In `.env`: `ESCALATION_WEBHOOK_URL=<that URL>`.
-6. Try it: `uv run python -m docassist.cli ask "Ko odobrava bonus? Prosledi pitanje HR-u." --agent`
+```bash
+uv run python scripts/setup_n8n.py
+```
 
-> If Doc Assistant runs in Docker and n8n on the host, use `http://host.docker.internal:5678/...`.
+It starts **n8n** and **Mailpit** (a local test inbox) with Docker, imports the SMTP credentials
+(`n8n_credentials_mailpit.json`, pointing to Mailpit) and the workflow, activates it and sends one
+test escalation. Then:
+
+- n8n: <http://localhost:5678> (the first visit asks you to create the owner account)
+- Mailpit inbox: <http://localhost:8025> — the test e-mail should already be there
+- add to `.env`: `ESCALATION_WEBHOOK_URL=http://localhost:5678/webhook/doc-assistant-escalation`
+
+To send real e-mail, edit the *Mailpit* credential in n8n (or create a new SMTP credential) with
+your mail server. If Doc Assistant itself runs in Docker Compose, use
+`http://n8n:5678/webhook/doc-assistant-escalation` as the webhook URL.
 
 ## Calling Doc Assistant from n8n
 
