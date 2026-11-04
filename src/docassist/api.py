@@ -234,10 +234,7 @@ def to_response(result: Answer) -> AskResponse:
         answer=result.text,
         found=result.found,
         citations=[
-            CitationOut(
-                source=c.source, page=c.page, text="\n\n".join(chunk.text for chunk in c.chunks)
-            )
-            for c in result.citations
+            CitationOut(source=c.source, page=c.page, text=c.passage) for c in result.citations
         ],
         invalid_citations=result.invalid_citations,
         tool_calls=[ToolCallOut(**vars_of(call)) for call in result.tool_calls],

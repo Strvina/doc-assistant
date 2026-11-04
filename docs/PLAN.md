@@ -51,7 +51,7 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 - [x] 4.2 Chat sa istorijom; citati prikazani ispod odgovora (klik → tekst chunk-a)
 - [x] 4.3 Izbor modela u sidebar-u (Claude / ChatGPT)
 - [ ] 4.4 Deploy online demo + link u README — uputstvo spremno u `docs/DEPLOY.md`
-- [ ] 4.5 README: opis, screenshot, kako pokrenuti — opis i pokretanje urađeni; fali screenshot
+- [x] 4.5 README: opis, screenshot, kako pokrenuti
 - [ ] **4.6 PRIJAVA NA OGLAS** (CV na srpskom + link na demo i GitHub)
 
 ## Faza 5 — Agent i automatizacija (15–20. 11.)  · grana: `feat/agent`

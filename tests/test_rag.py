@@ -5,7 +5,7 @@ import pytest
 from docassist.ingest import ingest
 from docassist.llm import NOT_FOUND_SR, SYSTEM_PROMPT, FakeProvider, LLMResult
 from docassist.models import Chunk
-from docassist.rag import answer, extract_citations
+from docassist.rag import answer, extract_citations, merge_passages
 from docassist.retrieval import FakeEmbedder, SearchResult, VectorStore
 
 SAMPLE_DOCS = Path(__file__).resolve().parent.parent / "data" / "sample_docs"
@@ -142,3 +142,17 @@ def test_refusal_gets_a_readable_message(store):
 
     assert result.stop_reason == "refusal"
     assert "declined" in result.text
+
+
+def test_merge_passages_removes_overlap():
+    def c(index, text):
+        return Chunk(f"x.pdf::p1::{index}", "d", "x.pdf", 1, text)
+
+    first = c(0, "Prvi deo teksta. Ovo je zajednički deo koji se ponavlja.")
+    second = c(1, "Ovo je zajednički deo koji se ponavlja. Drugi deo.")
+    far = c(5, "Daleki pasus.")
+
+    assert merge_passages([second, first]) == (
+        "Prvi deo teksta. Ovo je zajednički deo koji se ponavlja. Drugi deo."
+    )
+    assert merge_passages([first, far]).endswith("[…]\n\nDaleki pasus.")

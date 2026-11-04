@@ -26,6 +26,11 @@ class Citation:
     page: int
     chunks: tuple[Chunk, ...]  # retrieved chunks from that page, to show the quoted text
 
+    @property
+    def passage(self) -> str:
+        """The cited text of this page, without the overlap neighbouring chunks share."""
+        return merge_passages(self.chunks)
+
 
 @dataclass(frozen=True)
 class Answer:
@@ -102,6 +107,23 @@ def answer(
         stop_reason=result.stop_reason,
         invalid_citations=invalid,
     )
+
+
+def merge_passages(chunks: Sequence[Chunk]) -> str:
+    """Join chunks of one page in reading order, dropping the text neighbours share (overlap)."""
+    ordered = sorted(chunks, key=lambda c: int(c.chunk_id.rsplit("::", 1)[-1]))
+    merged = ""
+    for chunk in ordered:
+        text = chunk.text
+        overlap = next(
+            (n for n in range(min(len(merged), len(text)), 0, -1) if merged.endswith(text[:n])),
+            0,
+        )
+        if overlap >= 20:  # real overlap, not an accidental one-word match
+            merged += text[overlap:]
+        else:
+            merged += ("\n\n[…]\n\n" if merged else "") + text
+    return merged
 
 
 def extract_citations(
