@@ -216,3 +216,24 @@ Flash-Lite 15–20 s po pozivu (agent 80–110 s). Groq free tier — 0,2–1,5 
 **Cena:** odgovor u jednom razgovoru može doći od različitih modela (UI prikazuje koji);
 gpt-oss je strožiji od Gemini-ja kad je kontekst iscepkan (vidi EVAL_RESULTS); besplatni nivoi
 nemaju garanciju dostupnosti. Za prave firmine dokumente i dalje: Claude ili plaćeni nivo.
+
+### ADR-023 · Hibridna pretraga (+1 pogodak po ključnim rečima) i podela po odeljcima
+**Odluka:**
+1. **Pretraga:** uz `k` pasusa po značenju (embeddings) dodaje se najviše **jedan** pasus koji
+   BM25 pretraga po ključnim rečima rangira prvi, ako ga embeddings nisu vratili
+   (`retrieval/keywords.py`, `VectorStore.search`; `HYBRID_SEARCH=false` isključuje).
+   Tokeni: mala slova, bez dijakritika, skraćeni na 6 znakova (grubi "stemmer" za srpski/nemački).
+2. **Podela teksta:** strana se deli po odeljcima — numerisani naslovi ("6. Anzugsmomente …") i
+   pitanja u FAQ-u; ceo odeljak ide u jedan pasus kad stane, a delovi dugog odeljka počinju
+   njegovim naslovom (`split_sections`). Indeks pamti verziju podele (`CHUNKING`); stari indeks
+   traži `index data/documents --rebuild`.
+**Zašto:** dva promašaja iz evaluacije (ADR-022): "Kada radi kantina?" — mali embedding model nije
+našao pasus sa tačnom rečju; M8 — red tabele odvojen od naslova "za sabirnice", pa je model
+zaključio da vrednost ne postoji. Izmereno (`docs/EVAL_RESULTS.md`): sve činjenice u pronađenim
+pasusima 96 % → **100 %**; odgovori (Groq gpt-oss-120b) 93 % → **100 %**.
+Spajanje rang-lista (Reciprocal Rank Fusion), i sa manjom težinom ključnih reči, bilo je **gore**
+(93 %): ključne reči ne rade preko jezika, pa su gurale tačne nemačke pasuse za srpska pitanja
+ispod granice. Zato se pogodak po ključnim rečima *dodaje*, a ne meša u rang.
+**Cena:** jedan pasus više u promptu (~150 tokena); BM25 indeks se pravi u memoriji (za
+hiljade pasusa zanemarljivo; za veliki broj dokumenata: pravi full-text indeks, npr.
+SQLite FTS5 ili Postgres). Promena podele traži ponovno indeksiranje.

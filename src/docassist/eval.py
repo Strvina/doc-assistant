@@ -59,6 +59,7 @@ class QuestionResult:
     page_hit: bool = False  # cited the expected source and page
     doc_hit: bool = False  # cited the expected source (any page)
     retrieved_hit: bool = False  # expected page was among the retrieved chunks
+    facts_retrieved: bool = False  # every key fact is in the retrieved chunks' text
     fact_recall: float = 0.0
     invalid_citations: int = 0
     latency_s: float = 0.0
@@ -115,6 +116,7 @@ def score(question: Question, result: Answer) -> QuestionResult:
         page_hit=expected in cited,
         doc_hit=any(source == question.source for source, _ in cited),
         retrieved_hit=expected in retrieved,
+        facts_retrieved=_facts_in(result.retrieved, question),
         fact_recall=fact_recall(result.text, question.facts) if question.answerable else 0.0,
         invalid_citations=len(result.invalid_citations),
         latency_s=result.latency_s,
@@ -122,6 +124,14 @@ def score(question: Question, result: Answer) -> QuestionResult:
         output_tokens=result.output_tokens,
         tool_calls=[call.name for call in result.tool_calls],
     )
+
+
+def _facts_in(hits: Sequence[Any], question: Question) -> bool:
+    """Stricter than the page check: the passages that reached the model contain every fact."""
+    if not question.answerable:
+        return False
+    text = " ".join(hit.chunk.text for hit in hits)
+    return fact_recall(text, question.facts) == 1.0
 
 
 def evaluate(
@@ -147,6 +157,7 @@ def evaluate(
                     lang=question.lang,
                     answerable=question.answerable,
                     retrieved_hit=(question.source, question.page) in pages,
+                    facts_retrieved=_facts_in(hits, question),
                 )
             )
             continue
@@ -180,6 +191,7 @@ def summarize(results: Sequence[QuestionResult], model: str = "") -> dict[str, A
         "errors": sum(r.error is not None for r in results),
         "correct": rate(results, "correct"),
         "retrieval_hit_rate": rate(answerable, "retrieved_hit"),
+        "facts_retrieved_rate": rate(answerable, "facts_retrieved"),
         "page_citation_accuracy": rate(answerable, "page_hit"),
         "document_citation_accuracy": rate(answerable, "doc_hit"),
         "fact_recall": (
@@ -216,6 +228,7 @@ def to_markdown(summary: dict[str, Any], results: Sequence[QuestionResult], titl
         "|---|---|",
         f"| Correct overall | {pct(summary['correct'])} |",
         f"| Expected page retrieved (top-k) | {pct(summary['retrieval_hit_rate'])} |",
+        f"| All key facts in retrieved passages | {pct(summary['facts_retrieved_rate'])} |",
         f"| Expected page cited | {pct(summary['page_citation_accuracy'])} |",
         f"| Expected document cited | {pct(summary['document_citation_accuracy'])} |",
         f"| Fact recall | {pct(summary['fact_recall'])} |",
@@ -293,9 +306,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         encoding="utf-8",
     )
     if llm is None:
-        print(f"Expected page among top-{settings.top_k} chunks: {summary['retrieval_hit_rate']}")
+        k = settings.top_k
+        print(f"Expected page among top-{k} chunks: {summary['retrieval_hit_rate']}")
+        print(f"All key facts in top-{k} chunks: {summary['facts_retrieved_rate']}")
         missed = [r.id for r in results if r.answerable and not r.retrieved_hit]
-        print("Missed: " + (", ".join(missed) or "none"))
+        print("Missed page: " + (", ".join(missed) or "none"))
+        no_facts = [r.id for r in results if r.answerable and not r.facts_retrieved]
+        print("Missed facts: " + (", ".join(no_facts) or "none"))
     else:
         print(to_markdown(summary, results, title))
     print(f"Full report: {report}")

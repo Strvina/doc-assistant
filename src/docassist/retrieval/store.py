@@ -1,7 +1,8 @@
-"""Chunk storage and similarity search on top of a local ChromaDB collection (ADR-003)."""
+"""Chunk storage and hybrid search (embeddings + BM25 keywords) on ChromaDB (ADR-003, ADR-023)."""
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,17 +10,22 @@ from typing import Any
 
 import chromadb
 
+from docassist.ingest.chunker import CHUNKING
 from docassist.models import Chunk
 from docassist.retrieval.embedder import Embedder
+from docassist.retrieval.keywords import KeywordIndex
 
 DEFAULT_COLLECTION = "chunks"
 _ADD_BATCH = 1000
+# Hybrid search adds this many top keyword (BM25) hits that embedding search did not return.
+KEYWORD_EXTRA = 1
 
 
 @dataclass(frozen=True, slots=True)
 class SearchResult:
     chunk: Chunk
     score: float  # cosine similarity, higher is better (1.0 = identical direction)
+    keyword_rank: int | None = None  # 1-based rank in the keyword (BM25) results, if any
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,7 +37,7 @@ class DocumentInfo:
 
 
 class EmbedderMismatchError(RuntimeError):
-    """The index was built with a different embedder than the one in use now."""
+    """The index was built with a different embedder (or chunking) than the one in use now."""
 
 
 class VectorStore:
@@ -49,6 +55,7 @@ class VectorStore:
         collection: str = DEFAULT_COLLECTION,
         rebuild: bool = False,
         client: Any = None,
+        hybrid: bool = True,
     ) -> None:
         if client is None:
             if path is None:
@@ -61,6 +68,8 @@ class VectorStore:
         self._client = client
         self._embedder = embedder
         self._name = collection
+        self._hybrid = hybrid
+        self._keywords: KeywordIndex | None = None  # built on first search, dropped on change
 
         if rebuild and collection in {c.name for c in client.list_collections()}:
             client.delete_collection(collection)
@@ -68,14 +77,20 @@ class VectorStore:
         self._collection = client.get_or_create_collection(
             collection,
             configuration={"hnsw": {"space": "cosine"}},
-            metadata={"embedder": embedder.name},
+            metadata={"embedder": embedder.name, "chunking": CHUNKING},
             embedding_function=None,
         )
-        built_with = (self._collection.metadata or {}).get("embedder")
+        meta = self._collection.metadata or {}
+        built_with = meta.get("embedder")
         if built_with != embedder.name:
             raise EmbedderMismatchError(
                 f"Index was built with {built_with!r} but the current embedder is "
-                f"{embedder.name!r}. Rebuild the index (cli: index --rebuild)."
+                f"{embedder.name!r}. Rebuild the index (cli: index data/documents --rebuild)."
+            )
+        if meta.get("chunking") != CHUNKING:
+            raise EmbedderMismatchError(
+                f"Index was built with chunking {meta.get('chunking')!r}, the current one is "
+                f"{CHUNKING!r}. Rebuild the index (cli: index data/documents --rebuild)."
             )
 
     def add_document(self, chunks: Sequence[Chunk]) -> int:
@@ -106,28 +121,47 @@ class VectorStore:
                 documents=[c.text for c in batch],
                 metadatas=[{"source": c.source, "page": c.page, "doc_id": c.doc_id} for c in batch],
             )
+        self._keywords = None
         return len(chunks)
 
     def search(self, query: str, k: int = 5) -> list[SearchResult]:
+        """The `k` chunks most similar in meaning, best first; in hybrid mode (default) plus
+        up to `KEYWORD_EXTRA` chunks that keyword search ranks first but embeddings missed.
+
+        Keyword hits are added, not merged into the ranking: merging (tried: Reciprocal Rank
+        Fusion, also with lower keyword weight) pushed correct German passages for Serbian
+        questions out of the top k, because keywords cannot match across languages
+        (measured in docs/EVAL_RESULTS.md, ADR-023). `score` is always the cosine similarity.
+        """
         if k <= 0 or self.count() == 0:
             return []
         query_embedding = self._embedder.embed_query(query)
+        hits = self._vector_search(query_embedding, min(k, self.count()))
+        if not self._hybrid:
+            return hits
+
+        seen = {hit.chunk.chunk_id for hit in hits}
+        extra = [
+            (rank, chunk)
+            for rank, (chunk, _) in enumerate(self._keyword_index().search(query, k), start=1)
+            if chunk.chunk_id not in seen
+        ][:KEYWORD_EXTRA]
+        if extra:
+            scored = self._scored([chunk.chunk_id for _, chunk in extra], query_embedding)
+            hits += [
+                SearchResult(chunk, scored[chunk.chunk_id].score, keyword_rank=rank)
+                for rank, chunk in extra
+            ]
+        return hits
+
+    def _vector_search(self, query_embedding: list[float], n: int) -> list[SearchResult]:
         result = self._collection.query(
             query_embeddings=[query_embedding],
-            n_results=min(k, self.count()),
+            n_results=n,
             include=["documents", "metadatas", "distances"],
         )
         return [
-            SearchResult(
-                chunk=Chunk(
-                    chunk_id=chunk_id,
-                    doc_id=meta["doc_id"],
-                    source=meta["source"],
-                    page=int(meta["page"]),
-                    text=text,
-                ),
-                score=1.0 - distance,
-            )
+            SearchResult(chunk=_chunk(chunk_id, text, meta), score=1.0 - distance)
             for chunk_id, text, meta, distance in zip(
                 result["ids"][0],
                 result["documents"][0],
@@ -136,6 +170,31 @@ class VectorStore:
                 strict=True,
             )
         ]
+
+    def _scored(self, ids: list[str], query_embedding: list[float]) -> dict[str, SearchResult]:
+        found = self._collection.get(ids=ids, include=["documents", "metadatas", "embeddings"])
+        results = {}
+        for chunk_id, text, meta, vector in zip(
+            found["ids"], found["documents"], found["metadatas"], found["embeddings"], strict=True
+        ):
+            results[chunk_id] = SearchResult(
+                _chunk(chunk_id, text, meta), _cosine(query_embedding, list(vector))
+            )
+        return results
+
+    def _keyword_index(self) -> KeywordIndex:
+        # Rebuilt when another process (UI and API share the index) changed the collection.
+        if self._keywords is None or len(self._keywords) != self.count():
+            found = self._collection.get(include=["documents", "metadatas"])
+            self._keywords = KeywordIndex(
+                [
+                    _chunk(chunk_id, text, meta)
+                    for chunk_id, text, meta in zip(
+                        found["ids"], found["documents"], found["metadatas"], strict=True
+                    )
+                ]
+            )
+        return self._keywords
 
     def documents(self) -> list[DocumentInfo]:
         """All indexed documents, sorted by name."""
@@ -169,7 +228,23 @@ class VectorStore:
         ids = self._collection.get(where={"doc_id": doc_id})["ids"]
         if ids:
             self._collection.delete(ids=ids)
+            self._keywords = None
         return len(ids)
 
     def count(self) -> int:
         return self._collection.count()
+
+
+def _chunk(chunk_id: str, text: str, meta: dict[str, Any]) -> Chunk:
+    return Chunk(
+        chunk_id=chunk_id,
+        doc_id=meta["doc_id"],
+        source=meta["source"],
+        page=int(meta["page"]),
+        text=text,
+    )
+
+
+def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
+    norm = math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
+    return sum(x * y for x, y in zip(a, b, strict=True)) / norm if norm else 0.0

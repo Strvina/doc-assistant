@@ -200,6 +200,18 @@ def test_embedder_mismatch_is_detected(tmp_path):
         VectorStore(tmp_path, FakeEmbedder(dimensions=128))
 
 
+def test_index_from_an_older_chunking_must_be_rebuilt(tmp_path, monkeypatch):
+    import docassist.retrieval.store as store_module
+
+    monkeypatch.setattr(store_module, "CHUNKING", "fixed-v1")
+    VectorStore(tmp_path, FakeEmbedder()).add_document([chunk("a.txt", 1, 0, "old chunks")])
+    monkeypatch.setattr(store_module, "CHUNKING", "sections-v2")
+
+    with pytest.raises(EmbedderMismatchError, match="chunking 'fixed-v1'.*--rebuild"):
+        VectorStore(tmp_path, FakeEmbedder())
+    assert VectorStore(tmp_path, FakeEmbedder(), rebuild=True).count() == 0
+
+
 def test_rebuild_clears_the_index(tmp_path):
     VectorStore(tmp_path, FakeEmbedder()).add_document([chunk("a.txt", 1, 0, "old")])
 
@@ -217,7 +229,7 @@ def test_retrieve_on_sample_docs(store):
 
     results = retrieve(store, "Anzugsmoment Sammelschienen M8 Schrauben", k=3)
 
-    assert len(results) == 3
+    assert len(results) in (3, 4)  # k by meaning + at most one extra keyword hit
     top = results[0].chunk
     assert (top.source, top.page) == ("montageanleitung_pv400.pdf", 2)
 
@@ -228,3 +240,68 @@ def test_retrieve_min_score_filters_weak_matches(store):
     results = retrieve(store, "torque values", k=2, min_score=0.5)
 
     assert [r.chunk.text for r in results] == ["torque values"]
+
+
+# --- hybrid search (ADR-023) -------------------------------------------------------------
+
+
+class AxisEmbedder:
+    """Puts each known text on its own axis, so the "meaning" ranking is fully scripted."""
+
+    name = "axis"
+
+    def __init__(self, axes: dict[str, int], query_vector: list[float]) -> None:
+        self.axes, self.query_vector = axes, query_vector
+
+    def embed(self, texts):
+        vectors = []
+        for text in texts:
+            vector = [0.0] * len(self.query_vector)
+            vector[self.axes.get(text, 0)] = 1.0
+            vectors.append(vector)
+        return vectors
+
+    def embed_query(self, text):
+        return self.query_vector
+
+
+def hybrid_store(tmp_path, hybrid=True):
+    texts = ["Radno vreme je od 7 do 15.", "Parking je iza hale B.", "Kantina radi od 10:30."]
+    # By meaning the canteen passage is last; by keywords it is the only match.
+    embedder = AxisEmbedder({t: i for i, t in enumerate(texts)}, [0.9, 0.4, 0.1])
+    store = VectorStore(tmp_path / "hybrid", embedder, hybrid=hybrid)
+    store.add_document([chunk("faq.txt", 1, i, t) for i, t in enumerate(texts)])
+    return store
+
+
+def test_hybrid_search_adds_the_top_keyword_hit(tmp_path):
+    results = hybrid_store(tmp_path).search("Kada radi kantina?", k=1)
+
+    assert [r.chunk.text for r in results] == [
+        "Radno vreme je od 7 do 15.",
+        "Kantina radi od 10:30.",
+    ]
+    assert results[0].keyword_rank is None
+    assert results[1].keyword_rank == 1
+    assert 0 < results[1].score < results[0].score  # cosine similarity, also for the extra hit
+
+
+def test_keyword_hit_already_found_by_meaning_is_not_added_twice(tmp_path):
+    results = hybrid_store(tmp_path).search("Kada radi kantina?", k=3)
+    assert len(results) == 3
+
+
+def test_hybrid_search_can_be_turned_off(tmp_path):
+    results = hybrid_store(tmp_path, hybrid=False).search("Kada radi kantina?", k=1)
+    assert [r.chunk.text for r in results] == ["Radno vreme je od 7 do 15."]
+
+
+def test_keyword_index_sees_new_and_deleted_documents(tmp_path):
+    store = hybrid_store(tmp_path)
+    store.search("kantina", k=1)  # builds the keyword index
+    store.delete_document("doc1")
+    store.add_document([chunk("menu.txt", 1, 0, "Kantina: ručak 450 din.", doc_id="doc2")])
+
+    results = store.search("kantina", k=1)
+
+    assert {r.chunk.source for r in results} == {"menu.txt"}

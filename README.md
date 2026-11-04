@@ -17,7 +17,7 @@ When the answer is not in the documents, it says so instead of guessing.
 
 | | |
 |---|---|
-| **Cross-language search** | A Serbian question finds the answer in a German installation manual. Search runs on a local multilingual model — measured: the right page is in the top 5 for **27/27** evaluation questions (keyword search: 15/27). |
+| **Cross-language search** | A Serbian question finds the answer in a German installation manual. Hybrid search: a local multilingual embedding model plus BM25 keywords for exact words and codes; chunks follow document sections, so a table stays with its heading — measured: every key fact reaches the model for **27/27** evaluation questions. |
 | **Verifiable citations** | Every claim cites `[document, page]`. Citations are checked against the passages the model actually received; a made-up source is flagged in the UI. |
 | **Highlighted originals** | Sources open in a built-in viewer: PDFs on the right page with the cited blocks highlighted, Word/text documents rendered as pages with the passage marked. Every document can be viewed whole or downloaded. |
 | **Agent with tools** | Native Claude tool use, no framework: search, read a whole document, escalate an unanswered question to a person (n8n → e-mail), draft a leave request. |
@@ -105,10 +105,15 @@ citation accuracy, key-fact recall, correct "not found", made-up citations, late
 |---|---|---|
 | keyword hashing (baseline) | 56 % | — |
 | local multilingual MiniLM, 800-char chunks | 89 % | 74 % |
-| **local multilingual MiniLM, 500-char chunks** | **100 %** | **85 %** |
+| local multilingual MiniLM, 500-char chunks | 100 % | 85 % |
+
+| Answers (30 questions, Groq `openai/gpt-oss-120b`, free tier) | Correct | Made-up citations |
+|---|---|---|
+| embeddings only, fixed chunks | 93 % | 0 |
+| **hybrid search + section chunks** (ADR-023) | **100 %** | **0** |
 
 A small set written by the author, so treat these numbers as a sanity check, not a benchmark.
-Answer quality with Claude: see [docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md) (pending).
+Details, the agent run and what did not work (rank fusion): [docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md).
 
 ## Automation (n8n)
 

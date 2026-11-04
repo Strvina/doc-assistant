@@ -20,7 +20,37 @@ The right page among the top-5 retrieved passages, 27 answerable questions (2026
 Caveats: a small set written by the author with knowledge of the documents, and the chunk size was
 chosen on the same set — a sanity check, not a benchmark.
 
+### Stricter check: every key fact in the retrieved passages (ADR-023)
+
+"Right page retrieved" can pass while the passage with the answer is missing (another passage
+from the same page was found). This column checks that all key facts are in the passages the
+model receives. Clean index (demo documents only), 27 answerable questions, 2026-11-04:
+
+| Search | Chunking | Top 5 | Top 3 |
+|---|---|---|---|
+| embeddings | fixed 500/100 | 96 % (misses `faq-canteen`) | 93 % |
+| embeddings + keywords merged (RRF) | fixed 500/100 | 93 % | 89 % |
+| embeddings + keywords merged (RRF, keyword weight 0.3) | fixed 500/100 | 93 % | 89 % |
+| embeddings | by section | 96 % | 93 % |
+| **embeddings + 1 keyword hit added** | **by section** | **100 %** | 96 % |
+
+Merging the keyword ranking (RRF) pushed correct German passages for Serbian questions below
+the cut, because keywords cannot match across languages; adding the single best keyword hit
+keeps the embedding ranking intact and still catches exact words such as "kantina".
+
 ## Answers with free-tier models (ADR-021, ADR-022)
+
+**After ADR-023** (hybrid search + section chunking), clean index, 2026-11-04:
+
+| Run | Correct overall | Page cited | Fact recall | "Not found" correct | Wrong "not found" | Made-up citations | Latency avg / p95 | Cost |
+|---|---|---|---|---|---|---|---|---|
+| groq openai/gpt-oss-120b, RAG | **100 %** | 100 % | 100 % | 100 % | 0 % | 0 | 6.2 s / 10.7 s ¹ | free |
+| groq openai/gpt-oss-120b, agent | **100 %** | 100 % | 100 % | 100 % | 0 % | 0 | 12.8 s / 22.2 s ¹ | free |
+
+¹ The runs send 30 questions back to back and wait out Groq's per-minute token limit; a single
+question takes 1–3 s (agent: 3–7 s). The agent used ~3× the tokens of plain RAG (101k vs 35k in).
+
+**Before** (fixed chunks, embeddings only; the index also held one unrelated uploaded document):
 
 `uv run python -m docassist.eval --provider groq`, 2026-11-04, local MiniLM embeddings, top-5.
 The index also held one extra, unrelated document uploaded while testing (a coffee price list),
