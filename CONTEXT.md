@@ -41,6 +41,7 @@ GitHub Actions · Docker / Hugging Face Spaces
   skeniranim demo PDF-ovima: 100 %. Fotografije proizvoda (Lavazza) daju delimičan tekst.
 - **Razgovori (ADR-025):** kartica *Razgovori* levo — svako pitanje se čuva, stari razgovor se otvara ili
   briše; dugme za slanje je *Stop* dok se čeka (i `Esc`), zaustavljeno pitanje se ne čuva i vraća se u polje.
+  Pretraga razgovora (naslov/pitanja/odgovori, bez obzira na kvačice) i preimenovanje olovkom.
 - **Praćenje:** pitanja iz loga se brišu pojedinačno (×) ili sva (`DELETE /queries`); zaključano kad je
   `ALLOW_UPLOADS=false` (javni demo). Razgovori ostaju.
 - **Testovi:** svi bez mreže (fake modeli, lažni SDK klijenti); `tests/conftest.py` sve putanje preusmerava u tmp.
@@ -65,9 +66,7 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 1. **Korisnik je tražio 5 stvari ("sve mi uradi"), radi se redom, svaka = jedan PR koji Claude spaja
    posle zelenog CI-ja:**
    - [x] Odgovor se ispisuje dok nastaje (#21).
-   - [~] Pretraga i preimenovanje razgovora — grana `feat/conversation-search`, PR otvoren, CI/merge
-     nisu završeni. **Prvo:** proveriti UI u browseru (polje "Pretraži razgovore…", olovka → Enter
-     čuva / Esc odustaje), pa spojiti PR.
+   - [x] Pretraga i preimenovanje razgovora (#22), provereno u browseru (Playwright).
    - [ ] Izvoz razgovora u PDF i Word.
    - [ ] Excel (`.xlsx`) i PowerPoint (`.pptx`) dokumenti (`uv add openpyxl python-pptx`) + **ispravka:**
      citati iz slika/novih formata se ne prepoznaju (`rag._CITATION` i `CITATION` u `app.js` znaju samo
@@ -135,4 +134,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-04 | Odgovori: Markdown tabele, naslovi i `kod` se prikazuju formatirano | #19 |
 | 2026-11-04 | Priprema za HF Space (iframe/kolačić, LFS, DEPLOY za Groq); demo odložen | #20 |
 | 2026-11-04 | Odgovor se ispisuje dok nastaje (`/ask/stream`, NDJSON); Stop prekida i generisanje; ADR-026 | #21 |
-| 2026-11-04 | Pretraga (bez kvačica) i preimenovanje razgovora — kod + testovi gotovi, UI još nije proveren u browseru | (PR otvoren) |
+| 2026-11-04 | Pretraga (bez kvačica) i preimenovanje razgovora; provereno u browseru (ispravljeno: korpa je prekrivala olovku) | #22 |
