@@ -92,21 +92,41 @@ def open_pdf(path: Path) -> pymupdf.Document:
     return pymupdf.open(stream=data, filetype="pdf")
 
 
+# Documents being read right now, for the UI: file name -> (pages read by OCR, pages to read).
+PROGRESS: dict[str, tuple[int, int]] = {}
+
+
 def load_pdf(path: Path) -> list[str]:
-    with open_pdf(path) as pdf:
-        if pdf.needs_pass:
-            raise DocumentLoadError(f"{path.name} is password-protected")
-        return [_pdf_page_text(page) for page in pdf]
-
-
-def _pdf_page_text(page: pymupdf.Page) -> str:
-    """Page text with one paragraph per line, paragraphs separated by a blank line.
+    """Page texts with one paragraph per line, paragraphs separated by a blank line.
 
     PDFs store visual lines, so a sentence is often cut by a line wrap. PyMuPDF groups lines
     into blocks (paragraphs, table rows, list items); joining the lines of a block gives
     whole sentences and keeps a table row like "M8 20 Nm 13 mm" on one line.
+
+    Pages that need OCR are rendered one by one, then read by Tesseract in parallel (a
+    96-page scan: ~4 s per page one at a time); `PROGRESS` shows how far it is.
     """
-    return "\n\n".join(text for _rect, text in pdf_page_blocks(page))
+    settings = ocr.settings_from_env()
+    natives, jobs = [], {}
+    with open_pdf(path) as pdf:
+        if pdf.needs_pass:
+            raise DocumentLoadError(f"{path.name} is password-protected")
+        for index, page in enumerate(pdf):
+            blocks = _native_blocks(page)
+            natives.append(blocks)
+            job = ocr.prepare(page, settings, _text_rects(blocks))
+            if job is not None:
+                jobs[index] = job
+    if jobs:
+        PROGRESS[path.name] = (0, len(jobs))
+    try:
+        found = ocr.run_jobs(jobs, lambda done, total: PROGRESS.update({path.name: (done, total)}))
+    finally:
+        PROGRESS.pop(path.name, None)
+    return [
+        "\n\n".join(text for _rect, text in _paragraph_blocks(_merge(blocks, found.get(i, []))))
+        for i, blocks in enumerate(natives)
+    ]
 
 
 def pdf_page_blocks(page: pymupdf.Page) -> list[tuple[pymupdf.Rect, str]]:
@@ -116,13 +136,30 @@ def pdf_page_blocks(page: pymupdf.Page) -> list[tuple[pymupdf.Rect, str]]:
     blocks are cleaned of picture noise. The viewer uses the same blocks to highlight a cited
     passage on the original page, so it finds OCR text there too.
     """
-    blocks = page.get_text("blocks", flags=_PDF_TEXT_FLAGS, sort=False)
-    text_rects = [pymupdf.Rect(b[:4]) for b in blocks if b[6] == 0 and b[4].strip()]
-    found = ocr.ocr_blocks(page, ocr.settings_from_env(), text_rects)
-    if found:  # OCR text joins the page text in reading order (top to bottom, left to right)
-        blocks = [b for b in blocks if b[6] == 0]
-        blocks += [(*rect, text, -1, 0) for rect, text in found]
-        blocks.sort(key=lambda b: (round(b[1]), b[0]))
+    blocks = _native_blocks(page)
+    found = ocr.ocr_blocks(page, ocr.settings_from_env(), _text_rects(blocks))
+    return _paragraph_blocks(_merge(blocks, found))
+
+
+def _native_blocks(page: pymupdf.Page) -> list[tuple]:
+    return page.get_text("blocks", flags=_PDF_TEXT_FLAGS, sort=False)
+
+
+def _text_rects(blocks: list[tuple]) -> list[pymupdf.Rect]:
+    return [pymupdf.Rect(b[:4]) for b in blocks if b[6] == 0 and b[4].strip()]
+
+
+def _merge(blocks: list[tuple], found: list[tuple[pymupdf.Rect, str]]) -> list[tuple]:
+    """Add OCR paragraphs to the page's own text blocks, in reading order."""
+    if not found:
+        return blocks
+    merged = [b for b in blocks if b[6] == 0]
+    merged += [(*rect, text, -1, 0) for rect, text in found]
+    merged.sort(key=lambda b: (round(b[1]), b[0]))  # top to bottom, left to right
+    return merged
+
+
+def _paragraph_blocks(blocks: list[tuple]) -> list[tuple[pymupdf.Rect, str]]:
     result = []
     for x0, y0, x1, y1, text, _block_no, block_type in blocks:
         if block_type != 0:  # 1 = image block

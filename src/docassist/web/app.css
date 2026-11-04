@@ -330,6 +330,8 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 [data-theme="dark"] .answer-foot .icon-btn.on { color: var(--amber); }
 .answer-foot svg { width: 17px; height: 17px; }
 /* Forward an unanswered question: its own band under the answer, one button per team. */
+
+
 .escalate {
   display: grid; gap: 10px; padding: 14px 18px 16px;
   border-top: 1px solid var(--line); background: var(--surface-2);

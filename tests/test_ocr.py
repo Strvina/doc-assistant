@@ -154,3 +154,55 @@ def test_image_file_is_a_one_page_document(tmp_path, monkeypatch):
 
     assert page.page_no == 1
     assert "M8 20 Nm" in page.text
+
+
+# --- parallel pages and progress -----------------------------------------------------------
+
+
+def test_jobs_run_in_parallel_and_report_progress(monkeypatch):
+    seen = []
+    monkeypatch.setattr(ocr, "run", lambda job: [(pymupdf.Rect(0, 0, 1, 1), job.languages)])
+    jobs = {
+        index: ocr.OcrJob(b"", 1.0, pymupdf.Rect(0, 0, 10, 10), (), "tesseract", f"p{index}")
+        for index in (0, 3, 7)
+    }
+
+    results = ocr.run_jobs(jobs, lambda done, total: seen.append((done, total)))
+
+    assert {index: blocks[0][1] for index, blocks in results.items()} == {
+        0: "p0",
+        3: "p3",
+        7: "p7",
+    }
+    assert seen == [(1, 3), (2, 3), (3, 3)]
+    assert ocr.run_jobs({}) == {}
+
+
+@needs_tesseract
+def test_multi_page_scan_reports_progress_while_reading(tmp_path, monkeypatch):
+    from docassist.ingest import loaders
+
+    monkeypatch.setenv("OCR_LANGUAGES", "deu+eng")
+    path, pixmap = scanned_pdf(tmp_path / "one.pdf")
+    scan = pymupdf.open()
+    for _ in range(3):
+        scan.new_page(width=595, height=842).insert_image(
+            pymupdf.Rect(0, 0, 595, 842), pixmap=pixmap
+        )
+    scan.save(tmp_path / "three.pdf")
+    progress = []
+    original = ocr.run_jobs
+    monkeypatch.setattr(
+        ocr,
+        "run_jobs",
+        lambda jobs, on_done=None: original(
+            jobs, lambda d, t: (on_done(d, t), progress.append(dict(loaders.PROGRESS)))
+        ),
+    )
+
+    pages = load_document(tmp_path / "three.pdf")
+
+    assert [p.page_no for p in pages] == [1, 2, 3]
+    assert all("M8 20 Nm" in p.text for p in pages)
+    assert progress[-1] == {"three.pdf": (3, 3)}
+    assert "three.pdf" not in loaders.PROGRESS  # cleared when done

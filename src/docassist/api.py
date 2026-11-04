@@ -36,7 +36,7 @@ from docassist.factory import (
     build_tool_context,
 )
 from docassist.ingest import DocumentLoadError
-from docassist.ingest.loaders import IMAGE_EXTENSIONS
+from docassist.ingest.loaders import IMAGE_EXTENSIONS, PROGRESS
 from docassist.library import Library
 from docassist.llm import LLMError, LLMProvider
 from docassist.logs import QueryLog
@@ -327,6 +327,14 @@ def create_app(
                 continue
             results.append(IndexResult(**vars_of(added), status=added.status))
         return results
+
+    @app.get("/documents/progress", dependencies=access)
+    def upload_progress() -> list[dict[str, Any]]:
+        """Documents being read right now: pages read by OCR so far, of how many."""
+        return [
+            {"source": source, "done": done, "total": total}
+            for source, (done, total) in list(PROGRESS.items())
+        ]
 
     @app.post("/documents/demo", dependencies=uploads)
     def load_demo_documents(library: LibraryDep) -> list[IndexResult]:

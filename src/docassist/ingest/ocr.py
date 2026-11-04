@@ -25,6 +25,8 @@ import shutil
 import subprocess
 import sys
 from collections import defaultdict
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
@@ -39,6 +41,8 @@ MIN_IMAGE_SHARE = 0.10
 # An OCR line is a duplicate when this share of it lies inside the page's own text blocks.
 OVERLAP_SHARE = 0.5
 TIMEOUT_S = 120
+# Pages read at the same time (one Tesseract process each); leave a core for the web server.
+WORKERS = max(1, (os.cpu_count() or 2) - 1)
 
 _TESSERACT_CANDIDATES = (
     Path("C:/Program Files/Tesseract-OCR/tesseract.exe"),
@@ -100,37 +104,91 @@ def image_share(page: pymupdf.Page) -> float:
     return min(covered / page_area, 1.0)
 
 
-def ocr_blocks(
-    page: pymupdf.Page, settings: OcrSettings, text_rects: list[pymupdf.Rect]
-) -> list[tuple[pymupdf.Rect, str]]:
-    """Paragraphs read by OCR from the page's images, with their position on the page.
+@dataclass(frozen=True)
+class OcrJob:
+    """One page rendered for Tesseract. Rendering uses the PDF (one thread at a time); the
+    job itself has no PDF objects, so several jobs can run in parallel (`run_jobs`)."""
 
-    Empty when OCR is off or not installed, the page has too few images, or Tesseract
-    fails; lines that overlap `text_rects` (the page's own text) are left out.
-    """
+    png: bytes
+    scale: float  # PDF points per pixel
+    page_rect: pymupdf.Rect
+    text_rects: tuple[pymupdf.Rect, ...]
+    command: str
+    languages: str
+
+
+def prepare(
+    page: pymupdf.Page, settings: OcrSettings, text_rects: list[pymupdf.Rect]
+) -> OcrJob | None:
+    """An OCR job for the page, or None when OCR is off or not installed or the page has too
+    few images to need it."""
     if not settings.enabled or image_share(page) < MIN_IMAGE_SHARE:
-        return []
+        return None
     command, languages = tesseract_command(), usable_languages(settings.languages)
     if command is None or languages is None:
-        return []
+        return None
     pixmap = page.get_pixmap(dpi=settings.dpi, colorspace=pymupdf.csGRAY)
+    return OcrJob(
+        pixmap.tobytes("png"),
+        page.rect.width / pixmap.width,
+        pymupdf.Rect(page.rect),
+        tuple(text_rects),
+        command,
+        languages,
+    )
+
+
+def run(job: OcrJob) -> list[tuple[pymupdf.Rect, str]]:
+    """Paragraphs Tesseract reads in the job's page, with their position on the page; lines
+    over the page's own text are left out. Empty if Tesseract fails."""
     try:
         result = _run(
-            [command, "stdin", "stdout", "-l", languages, "--psm", "3", "tsv"],
-            pixmap.tobytes("png"),
+            [job.command, "stdin", "stdout", "-l", job.languages, "--psm", "3", "tsv"], job.png
         )
     except (OSError, subprocess.SubprocessError):
         return []
     if result.returncode != 0:
         return []
-    scale = page.rect.width / pixmap.width
-    return _paragraphs(result.stdout.decode("utf-8", "replace"), scale, page.rect, text_rects)
+    tsv = result.stdout.decode("utf-8", "replace")
+    return _paragraphs(tsv, job.scale, job.page_rect, list(job.text_rects))
+
+
+def run_jobs(
+    jobs: dict[int, OcrJob], on_done: Callable[[int, int], None] | None = None
+) -> dict[int, list[tuple[pymupdf.Rect, str]]]:
+    """Run OCR jobs (keyed by page index) in parallel; `on_done(done, total)` after each."""
+    results: dict[int, list[tuple[pymupdf.Rect, str]]] = {}
+    if not jobs:
+        return results
+    with ThreadPoolExecutor(max_workers=min(WORKERS, len(jobs))) as pool:
+        futures = {pool.submit(run, job): index for index, job in jobs.items()}
+        for done, future in enumerate(as_completed(futures), start=1):
+            results[futures[future]] = future.result()
+            if on_done:
+                on_done(done, len(jobs))
+    return results
+
+
+def ocr_blocks(
+    page: pymupdf.Page, settings: OcrSettings, text_rects: list[pymupdf.Rect]
+) -> list[tuple[pymupdf.Rect, str]]:
+    """OCR paragraphs of one page (the viewer, one page at a time). Empty if not needed."""
+    job = prepare(page, settings, text_rects)
+    return run(job) if job else []
 
 
 def _run(args: list[str], data: bytes) -> subprocess.CompletedProcess[bytes]:
     flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0  # no console popup
+    # One thread per Tesseract process: pages already run in parallel (run_jobs).
+    env = {**os.environ, "OMP_THREAD_LIMIT": "1"}
     return subprocess.run(
-        args, input=data, capture_output=True, timeout=TIMEOUT_S, check=False, creationflags=flags
+        args,
+        input=data,
+        capture_output=True,
+        timeout=TIMEOUT_S,
+        check=False,
+        creationflags=flags,
+        env=env,
     )
 
 

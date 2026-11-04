@@ -85,6 +85,17 @@ def test_config_lists_gemini_when_key_is_set(settings, tmp_path):
     assert [p["id"] for p in body["providers"]] == ["claude", "gemini", "groq", "fake"]
 
 
+def test_upload_progress_lists_documents_being_read(client, monkeypatch):
+    from docassist.ingest import loaders
+
+    assert client.get("/documents/progress").json() == []
+    monkeypatch.setitem(loaders.PROGRESS, "scan.pdf", (23, 96))
+
+    assert client.get("/documents/progress").json() == [
+        {"source": "scan.pdf", "done": 23, "total": 96}
+    ]
+
+
 def test_health_and_empty_index(client):
     body = client.get("/health").json()
 
