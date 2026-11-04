@@ -235,7 +235,18 @@ def test_text_is_normalized(tmp_path):
 
 
 def test_supported_extensions():
-    assert set(SUPPORTED_EXTENSIONS) == {".pdf", ".docx", ".txt", ".md"}
+    assert set(SUPPORTED_EXTENSIONS) == {
+        ".pdf",
+        ".docx",
+        ".txt",
+        ".md",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".tif",
+        ".tiff",
+        ".bmp",
+    }
 
 
 def test_extension_is_case_insensitive(tmp_path):

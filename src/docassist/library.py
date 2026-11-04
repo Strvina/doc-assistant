@@ -111,7 +111,9 @@ class Library:
             raise UnsupportedFileTypeError(f"Unsupported file type {path.suffix!r} for {path.name}")
         chunks = ingest(path)
         if not chunks:
-            raise DocumentLoadError(f"{path.name} contains no text (scanned PDF?)")
+            raise DocumentLoadError(
+                f"{path.name}: no text found, also not with OCR (is Tesseract installed?)"
+            )
         added = self.store.add_document(chunks)
         target = self.files_dir / path.name
         if path.resolve() != target.resolve():

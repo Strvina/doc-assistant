@@ -36,6 +36,9 @@ GitHub Actions · Docker / Hugging Face Spaces
 - **Pretraga (ADR-023, grana `feat/hybrid-search`):** lokalni `paraphrase-multilingual-MiniLM-L12-v2` +
   1 dodatni BM25 pogodak po ključnim rečima; podela po odeljcima (naslov ostaje uz tabelu). Sve ključne
   činjenice stižu do modela za 27/27 pitanja; odgovori sa Groq-om **100 %** (pre: 93 %).
+- **OCR (ADR-024, grana `feat/ocr`):** skenovi, slike u PDF-u i upload slika (PNG/JPG/TIFF/BMP) se čitaju
+  Tesseract-om lokalno (srp latinica+ćirilica, deu, eng); pregled označava citat i na skenu. Eval sa
+  skeniranim demo PDF-ovima: 100 %. Fotografije proizvoda (Lavazza) daju delimičan tekst.
 - **Testovi:** svi bez mreže (fake modeli, lažni SDK klijenti); `tests/conftest.py` sve putanje preusmerava u tmp.
 - **n8n eskalacija provereno uživo:** `uv run python scripts/setup_n8n.py` → webhook → n8n → mejl u Mailpit
   (<http://localhost:8025>); radi i iz koda aplikacije (`WebhookEscalator`).
@@ -53,12 +56,15 @@ GitHub Actions · Docker / Hugging Face Spaces
 
 1. PR #13 (`feat/hybrid-search`) → merge. Posle merge-a: `uv run python -m docassist.cli index data/documents
    --rebuild` (nova podela teksta; stari indeks javlja grešku dok se ne izgradi ponovo).
-2. Eval uvek na čistom indeksu (samo demo dokumenti): `INDEX_DIR`/`DOCUMENTS_DIR`/`LOG_DB` u privremeni folder.
-3. Docker radi (pomoglo `wsl --shutdown` + restart Docker Desktop-a) → `docker compose up --build`
+2. PR `feat/ocr` (posle #13; grana je napravljena od `feat/hybrid-search` → posle merge-a #13
+   `git rebase --onto main feat/hybrid-search feat/ocr`). Posle merge-a: `index data/documents --rebuild`.
+   Sledeće za slike: opcioni AI model za fotografije/tabele (Gemini) — slike tada napuštaju server.
+3. Eval uvek na čistom indeksu (samo demo dokumenti): `INDEX_DIR`/`DOCUMENTS_DIR`/`LOG_DB` u privremeni folder.
+4. Docker radi (pomoglo `wsl --shutdown` + restart Docker Desktop-a) → `docker compose up --build`
    (build slike aplikacije još nije proban). Stara grana `feat/n8n-local` je zastarela — obrisati.
-4. Deploy po `docs/DEPLOY.md` (Hugging Face Space + GitHub Action) → link u README (4.4) → **prijava (4.6)**.
-5. Screenshot-ove u README zameniti verzijom sa pravim (Groq) odgovorom.
-6. Claude eval (6.3) kad bude moguće platiti kredit (npr. virtuelna kartica).
+5. Deploy po `docs/DEPLOY.md` (Hugging Face Space + GitHub Action) → link u README (4.4) → **prijava (4.6)**.
+6. Screenshot-ove u README zameniti verzijom sa pravim (Groq) odgovorom.
+7. Claude eval (6.3) kad bude moguće platiti kredit (npr. virtuelna kartica).
 
 ## Napomene za sledeću sesiju
 
@@ -74,6 +80,8 @@ GitHub Actions · Docker / Hugging Face Spaces
 - Claude: zvanični SDK, refusal fallback, `ANTHROPIC_EFFORT` (npr. `low`) je poluga za cenu/brzinu (ADR-014).
 - Frontend (`src/docassist/web/`) nema build korak; menja se direktno, server servira statiku.
 - n8n 2.x: posle `update:workflow --active=true` treba restart; webhook se registruje par sekundi posle `/healthz`.
+- Tesseract se zove direktno (`ingest/ocr.py`, TSV); PyMuPDF-ov OCR je preskakao tabele. Windows: traži se
+  u `C:/Program Files/Tesseract-OCR`. OCR strane u pregledu se radi ponovo (~1,5 s).
 - Indeks pamti embedder i verziju podele (`CHUNKING` u `ingest/chunker.py`); promena → `--rebuild`.
 - Groq: 8.000 tokena/min po modelu → 413 za velike zahteve (agent čita ceo dokument); lanac prelazi dalje.
 - gpt-oss ponekad citira sa `【...】`; `chat_completions._clean` to pretvara u `[...]`.
@@ -103,3 +111,4 @@ GitHub Actions · Docker / Hugging Face Spaces
 | 2026-11-04 | n8n + Mailpit jednom komandom (`scripts/setup_n8n.py`), preneseno na novi `main`, provereno uživo (n8n 2.46) | #11 |
 | 2026-11-04 | Besplatni modeli: Gemini, pa Groq + lanac rezervi (ADR-021, ADR-022), eval 93 %; dugmad za prosleđivanje pitanja timovima (n8n → mejl timu) | #12 |
 | 2026-11-04 | Hibridna pretraga (+1 BM25 pogodak) i podela po odeljcima; eval: činjenice 96→100 %, odgovori 93→100 %, agent 100 %; ADR-023 | #13 |
+| 2026-11-04 | OCR (Tesseract) za skenove i slike, upload slika; eval sa skenovima 100 %; ADR-024 | — |

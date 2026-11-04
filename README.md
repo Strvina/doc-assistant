@@ -22,6 +22,7 @@ When the answer is not in the documents, it says so instead of guessing.
 | **Highlighted originals** | Sources open in a built-in viewer: PDFs on the right page with the cited blocks highlighted, Word/text documents rendered as pages with the passage marked. Every document can be viewed whole or downloaded. |
 | **Agent with tools** | Native Claude tool use, no framework: search, read a whole document, escalate an unanswered question to a person (n8n → e-mail), draft a leave request. |
 | **Measured, monitored** | 30-question evaluation set and runner; every answer logged with latency, tokens, cost and 👍/👎; a dashboard lists the **gaps in the documentation** (questions the documents could not answer). |
+| **Reads scans and images** | Scanned PDFs, screenshots pasted into PDFs and uploaded photos (PNG/JPG/TIFF) are read with local OCR (Tesseract; Serbian Latin and Cyrillic, German, English). The viewer highlights the cited passage on the scan too — measured: 100 % correct answers with the demo PDFs replaced by image-only scans. |
 | **Privacy-minded** | Documents are indexed locally; only the question and a few retrieved passages go to the model. Demo mode with upload lock and per-session / per-IP limits. |
 
 ![Welcome screen](docs/images/welcome.png)

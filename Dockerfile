@@ -16,6 +16,9 @@ ENV UV_COMPILE_BYTECODE=1 \
 
 WORKDIR /app
 
+# OCR for scans and text in images (ADR-024): Tesseract with Serbian, German and English.
+RUN apt-get update     && apt-get install -y --no-install-recommends tesseract-ocr        tesseract-ocr-srp tesseract-ocr-srp-latn tesseract-ocr-deu tesseract-ocr-eng     && rm -rf /var/lib/apt/lists/*
+
 # Dependencies first, so code changes don't reinstall them.
 COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --locked --no-dev --no-install-project
