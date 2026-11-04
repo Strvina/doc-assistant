@@ -26,6 +26,44 @@ DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
 DEFAULT_GEMINI_FALLBACK_MODEL = "gemini-flash-lite-latest"
 
 
+# Who an unanswered question can be forwarded to: "id:Label:e-mail" separated by commas.
+# The demo company's teams; the n8n workflow sends the e-mail to the chosen team's address.
+DEFAULT_ESCALATION_TEAMS = (
+    "hr:HR:hr@example.com,"
+    "maintenance:Održavanje:odrzavanje@example.com,"
+    "quality:Kontrola kvaliteta:kvalitet@example.com"
+)
+
+
+@dataclass(frozen=True, slots=True)
+class Team:
+    """A team that can receive escalated questions (a button in the UI, a choice for the agent)."""
+
+    id: str
+    label: str
+    email: str = ""
+
+
+def parse_teams(value: str) -> tuple[Team, ...]:
+    """Parse ESCALATION_TEAMS, e.g. "hr:HR:hr@firma.rs,maintenance:Održavanje"."""
+    teams: list[Team] = []
+    for item in value.split(","):
+        if not item.strip():
+            continue
+        parts = [part.strip() for part in item.split(":")]
+        if len(parts) > 3 or not parts[0]:
+            raise ValueError(f"ESCALATION_TEAMS: expected id:Label:e-mail, got {item.strip()!r}")
+        team_id = parts[0].lower()
+        label = parts[1] if len(parts) > 1 and parts[1] else team_id
+        email = parts[2] if len(parts) > 2 else ""
+        if any(team.id == team_id for team in teams):
+            raise ValueError(f"ESCALATION_TEAMS: duplicate team id {team_id!r}")
+        teams.append(Team(team_id, label, email))
+    if not teams:
+        raise ValueError("ESCALATION_TEAMS must name at least one team")
+    return tuple(teams)
+
+
 @dataclass(frozen=True)
 class Settings:
     llm_provider: str
@@ -51,6 +89,7 @@ class Settings:
     gemini_api_key: str | None = None
     gemini_model: str = DEFAULT_GEMINI_MODEL
     gemini_fallback_model: str = DEFAULT_GEMINI_FALLBACK_MODEL
+    escalation_teams: tuple[Team, ...] = parse_teams(DEFAULT_ESCALATION_TEAMS)
 
     @classmethod
     def from_env(cls, load_dotenv_file: bool = True) -> Settings:
@@ -88,6 +127,7 @@ class Settings:
             index_dir=Path(_env("INDEX_DIR", "data/index")),
             top_k=int(_env("TOP_K", "5")),
             escalation_webhook_url=_env("ESCALATION_WEBHOOK_URL") or None,
+            escalation_teams=parse_teams(_env("ESCALATION_TEAMS", DEFAULT_ESCALATION_TEAMS)),
             outbox_dir=Path(_env("OUTBOX_DIR", "data/outbox")),
             api_token=_env("API_TOKEN") or None,
             log_db=Path(_env("LOG_DB", "data/logs.sqlite")),

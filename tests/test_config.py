@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from docassist import __version__
-from docassist.config import Settings
+from docassist.config import Settings, Team, parse_teams
 
 
 @pytest.fixture
@@ -18,6 +18,7 @@ def clean_env(monkeypatch):
         "GEMINI_API_KEY",
         "GEMINI_MODEL",
         "GEMINI_FALLBACK_MODEL",
+        "ESCALATION_TEAMS",
         "EMBEDDING_PROVIDER",
         "EMBEDDING_MODEL",
         "EMBEDDING_CACHE_DIR",
@@ -114,3 +115,18 @@ def test_gemini_settings(clean_env):
     assert settings.gemini_api_key == "g-key"
     assert settings.gemini_model == "gemini-3.5-flash"
     assert settings.gemini_fallback_model == "gemini-flash-lite-latest"
+
+
+def test_escalation_teams(clean_env):
+    settings = Settings.from_env(load_dotenv_file=False)
+    assert [t.id for t in settings.escalation_teams] == ["hr", "maintenance", "quality"]
+
+    clean_env.setenv("ESCALATION_TEAMS", " HR:Ljudski resursi:hr@firma.rs , it ")
+    teams = Settings.from_env(load_dotenv_file=False).escalation_teams
+    assert teams == (Team("hr", "Ljudski resursi", "hr@firma.rs"), Team("it", "it", ""))
+
+
+@pytest.mark.parametrize("value", [",", "hr:HR,hr:Again", "a:b:c:d", ":Label"])
+def test_invalid_escalation_teams(value):
+    with pytest.raises(ValueError, match="ESCALATION_TEAMS"):
+        parse_teams(value)

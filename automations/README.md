@@ -19,6 +19,11 @@ The workflow receives it with a **Webhook** node and sends an e-mail to HR
 (**Send Email** node). Swap the e-mail node for Slack, Teams or a ticketing system as needed.
 Without a webhook URL, escalations are appended to `data/outbox/escalations.jsonl` instead.
 
+The payload names the team (`team`, `team_label`, `team_email`). Teams come from
+`ESCALATION_TEAMS` in `.env` (`id:Label:e-mail`, comma-separated); the web UI shows one
+"forward" button per team under unanswered questions, and the agent picks the team itself.
+The workflow sends the e-mail to `team_email` (falling back to HR).
+
 ### Setup (one command, everything local and free)
 
 ```bash

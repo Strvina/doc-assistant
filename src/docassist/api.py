@@ -10,6 +10,7 @@ integrations send ``X-API-Key`` and browsers get a session cookie when they open
 
 from __future__ import annotations
 
+import hashlib
 import secrets
 import time
 from collections import defaultdict, deque
@@ -104,11 +105,13 @@ class FeedbackRequest(BaseModel):
 
 class EscalateRequest(BaseModel):
     log_id: int
+    team: str | None = Field(default=None, description="Team id from /api/config; default: first")
     contact: str = Field(default="", max_length=200, description="How to reach the person asking")
 
 
 class EscalateResponse(BaseModel):
     reference: str
+    team: str | None = None
     already_sent: bool = False
 
 
@@ -235,7 +238,7 @@ def create_app(
 
     @app.get("/", include_in_schema=False)
     def index(request: Request) -> Response:
-        response = FileResponse(WEB_DIR / "index.html", headers={"Cache-Control": "no-cache"})
+        response = HTMLResponse(_index_html(), headers={"Cache-Control": "no-cache"})
         _ensure_session(request, response)
         return response
 
@@ -270,6 +273,9 @@ def create_app(
             "max_questions_per_session": settings.max_questions_per_session,
             "top_k": settings.top_k,
             "embedding_model": settings.embedding_model,
+            "escalation_teams": [
+                {"id": team.id, "label": team.label} for team in settings.escalation_teams
+            ],
         }
 
     # --- documents ------------------------------------------------------------------------
@@ -418,13 +424,19 @@ def create_app(
             if not query["found"]
             else "The user found the answer insufficient."
         )
-        payload = new_escalation(str(query["question"]), reason, body.contact or "unknown")
+        teams = {team.id: team for team in settings.escalation_teams}
+        team_id = (body.team or settings.escalation_teams[0].id).lower()
+        if team_id not in teams:
+            raise HTTPException(422, f"Unknown team {body.team!r}. Use one of: {', '.join(teams)}")
+        payload = new_escalation(
+            str(query["question"]), reason, body.contact or "unknown", teams[team_id]
+        )
         try:
             reference = build_escalator(settings).escalate(payload)
         except (ToolError, OSError) as exc:  # webhook unreachable, outbox not writable
             raise HTTPException(502, f"Could not forward the question: {exc}") from exc
         log.set_escalation(body.log_id, reference)
-        return EscalateResponse(reference=reference)
+        return EscalateResponse(reference=reference, team=team_id)
 
     @app.get("/stats", dependencies=access)
     def stats(log: LogDep) -> dict[str, Any]:
@@ -458,6 +470,16 @@ def _ensure_session(request: Request, response: Response) -> None:
     session_id = secrets.token_urlsafe(24)
     sessions[session_id] = 0
     response.set_cookie(SESSION_COOKIE, session_id, httponly=True, samesite="strict")
+
+
+def _index_html() -> str:
+    """index.html with versioned asset URLs, so browsers never mix a new app.js with an old
+    app.css after an update (the static files themselves are served without cache headers)."""
+    html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+    for name in ("app.css", "app.js"):
+        digest = hashlib.sha256((WEB_DIR / name).read_bytes()).hexdigest()[:10]
+        html = html.replace(f"/static/{name}", f"/static/{name}?v={digest}")
+    return html
 
 
 def _check_limits(request: Request, settings: Settings) -> None:

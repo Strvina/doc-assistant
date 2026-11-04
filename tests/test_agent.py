@@ -15,6 +15,7 @@ from docassist.agent import (
     run_agent,
 )
 from docassist.agent.tools import working_days
+from docassist.config import Team
 from docassist.ingest import ingest
 from docassist.llm import FakeProvider
 from docassist.llm.claude import ClaudeProvider
@@ -83,13 +84,34 @@ def test_escalation_goes_to_the_escalator(ctx):
     output, is_error = execute_tool(
         build_tools(ctx),
         "escalate_to_human",
-        {"question": "Ko odobrava bonus?", "reason": "not in documents", "contact": "Ana"},
+        {
+            "team": "hr",
+            "question": "Ko odobrava bonus?",
+            "reason": "not in documents",
+            "contact": "Ana",
+        },
     )
 
     assert not is_error
     [record] = ctx.escalator.records
     assert record["question"] == "Ko odobrava bonus?"
+    assert (record["team"], record["team_label"]) == ("hr", "HR")
     assert record["id"] in output
+
+
+def test_escalation_to_a_configured_team(ctx):
+    ctx.teams = (Team("hr", "HR"), Team("maintenance", "Održavanje", "odrz@firma.rs"))
+    tools = build_tools(ctx)
+    schema = next(t for t in tools if t.name == "escalate_to_human").input_schema
+    assert schema["properties"]["team"]["enum"] == ["hr", "maintenance"]
+
+    args = {"team": "Maintenance", "question": "q", "reason": "r", "contact": "c"}
+    output, is_error = execute_tool(tools, "escalate_to_human", args)
+    assert not is_error
+    assert ctx.escalator.records[0]["team_email"] == "odrz@firma.rs"
+
+    output, is_error = execute_tool(tools, "escalate_to_human", {**args, "team": "sales"})
+    assert is_error and "Unknown team" in output
 
 
 def test_leave_request_counts_working_days(ctx):
@@ -368,7 +390,9 @@ def test_webhook_escalator_unreachable_is_a_tool_error(ctx):
 
     ctx.escalator = WebhookEscalator("http://127.0.0.1:9/nothing", timeout=1)
     output, is_error = execute_tool(
-        build_tools(ctx), "escalate_to_human", {"question": "q", "reason": "r", "contact": "c"}
+        build_tools(ctx),
+        "escalate_to_human",
+        {"team": "hr", "question": "q", "reason": "r", "contact": "c"},
     )
 
     assert is_error and "unreachable" in output
@@ -383,12 +407,15 @@ def test_n8n_workflow_matches_escalation_payload(ctx):
         ).read_text(encoding="utf-8")
     )
     execute_tool(
-        build_tools(ctx), "escalate_to_human", {"question": "q", "reason": "r", "contact": "c"}
+        build_tools(ctx),
+        "escalate_to_human",
+        {"team": "hr", "question": "q", "reason": "r", "contact": "c"},
     )
     payload_fields = set(ctx.escalator.records[0])
 
     email = next(n for n in workflow["nodes"] if n["type"] == "n8n-nodes-base.emailSend")
-    template = email["parameters"]["subject"] + email["parameters"]["text"]
+    params = email["parameters"]
+    template = params["toEmail"] + params["subject"] + params["text"]
     used = set(re.findall(r"\$json\.body\.(\w+)", template))
     assert used and used <= payload_fields
     assert set(workflow["connections"]) == {"Escalation webhook"}

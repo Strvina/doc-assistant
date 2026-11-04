@@ -83,6 +83,7 @@ def build_tool_context(settings: Settings, store: VectorStore) -> ToolContext:
         escalator=build_escalator(settings),
         leave_requests=JsonlFile(settings.outbox_dir / "leave_requests.jsonl"),
         top_k=settings.top_k,
+        teams=settings.escalation_teams,
     )
 
 

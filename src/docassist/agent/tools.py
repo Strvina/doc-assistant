@@ -10,6 +10,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
+from docassist.config import Team
 from docassist.llm.prompts import format_context
 from docassist.models import Chunk
 from docassist.retrieval import SearchResult, VectorStore, retrieve
@@ -37,6 +38,7 @@ class ToolContext:
     escalator: Escalator
     leave_requests: LeaveRequestSink
     top_k: int = 5
+    teams: tuple[Team, ...] = (Team("hr", "HR"),)
     retrieved: list[SearchResult] = field(default_factory=list)
 
 
@@ -111,7 +113,7 @@ class Recorder:
         return request["id"]
 
 
-def new_escalation(question: str, reason: str, contact: str) -> dict[str, Any]:
+def new_escalation(question: str, reason: str, contact: str, team: Team) -> dict[str, Any]:
     """The payload the n8n workflow expects (automations/escalation_workflow.json)."""
     return {
         "id": _new_id("ESC"),
@@ -119,6 +121,9 @@ def new_escalation(question: str, reason: str, contact: str) -> dict[str, Any]:
         "question": question,
         "reason": reason,
         "contact": contact,
+        "team": team.id,
+        "team_label": team.label,
+        "team_email": team.email,
     }
 
 
@@ -136,6 +141,8 @@ def _schema(properties: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_tools(ctx: ToolContext) -> list[Tool]:
+    team_ids = ", ".join(t.id for t in ctx.teams)
+
     def search_documents(args: dict[str, Any]) -> str:
         results = retrieve(ctx.store, args["query"], k=ctx.top_k)
         if not results:
@@ -159,7 +166,10 @@ def build_tools(ctx: ToolContext) -> list[Tool]:
         return _document_text(chunks)
 
     def escalate_to_human(args: dict[str, Any]) -> str:
-        payload = new_escalation(args["question"], args["reason"], args["contact"])
+        team = next((t for t in ctx.teams if t.id == str(args["team"]).lower()), None)
+        if team is None:
+            raise ToolError(f"Unknown team {args['team']!r}. Use one of: {team_ids}")
+        payload = new_escalation(args["question"], args["reason"], args["contact"], team)
         reference = ctx.escalator.escalate(payload)
         return f"Escalated to a person, reference {reference}."
 
@@ -207,10 +217,16 @@ def build_tools(ctx: ToolContext) -> list[Tool]:
         ),
         Tool(
             "escalate_to_human",
-            "Send the user's question to the responsible person when the documents do not "
+            "Send the user's question to the responsible team when the documents do not "
             "answer it. Only call this after the user agreed to escalate.",
             _schema(
                 {
+                    "team": {
+                        "type": "string",
+                        "enum": [t.id for t in ctx.teams],
+                        "description": "Who should answer: "
+                        + "; ".join(f"{t.id} = {t.label}" for t in ctx.teams),
+                    },
                     "question": {"type": "string", "description": "The user's question."},
                     "reason": {"type": "string", "description": "Why it is escalated."},
                     "contact": {

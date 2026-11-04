@@ -59,6 +59,7 @@ def test_index_page_sets_a_session_cookie(client):
     assert response.status_code == 200
     assert "<title>Doc Assistant</title>" in response.text
     assert SESSION_COOKIE in response.cookies
+    assert "/static/app.css?v=" in response.text  # versioned: no stale CSS after an update
     assert response.headers["x-frame-options"] == "SAMEORIGIN"
     assert client.get("/static/app.js").status_code == 200
 
@@ -205,12 +206,27 @@ def test_escalate_unanswered_question_once(client, settings):
     assert first.status_code == 200
     reference = first.json()["reference"]
     assert reference.startswith("ESC-")
-    assert again.json() == {"reference": reference, "already_sent": True}
+    assert again.json()["reference"] == reference
+    assert again.json()["already_sent"] is True
     lines = (settings.outbox_dir / "escalations.jsonl").read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1  # the second click did not send a second e-mail
     record = json.loads(lines[0])
     assert record["question"] == "Koja je cena akcija na berzi?"
     assert record["id"] == reference
+    assert first.json()["team"] == record["team"] == "hr"  # first team is the default
+
+
+def test_escalate_to_a_chosen_team(client, settings):
+    teams = client.get("/api/config").json()["escalation_teams"]
+    assert {"id": "maintenance", "label": "Održavanje"} in teams
+    log_id = client.post("/ask", json={"question": "Koja je cena akcija?"}).json()["log_id"]
+
+    assert client.post("/escalate", json={"log_id": log_id, "team": "sales"}).status_code == 422
+    response = client.post("/escalate", json={"log_id": log_id, "team": "maintenance"})
+
+    assert response.json()["team"] == "maintenance"
+    record = json.loads((settings.outbox_dir / "escalations.jsonl").read_text(encoding="utf-8"))
+    assert (record["team_label"], record["team_email"]) == ("Održavanje", "odrzavanje@example.com")
 
 
 def test_escalate_unknown_log_id(client):
