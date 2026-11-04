@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import re
 import time
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 
 from docassist.llm import NOT_FOUND_SR, SYSTEM_PROMPT, LLMProvider, Message, build_user_message
-from docassist.llm.base import ToolCall
+from docassist.llm.base import ToolCall, stream_complete
 from docassist.models import Chunk
 from docassist.retrieval import SearchResult, VectorStore, retrieve
 
@@ -67,10 +67,29 @@ def answer(
     `history` is a list of earlier (question, answer) pairs for follow-up questions; only
     the current question gets document context.
     """
+    final = None
+    for event in answer_stream(question, store, llm, k=k, min_score=min_score, history=history):
+        if isinstance(event, Answer):
+            final = event
+    assert final is not None
+    return final
+
+
+def answer_stream(
+    question: str,
+    store: VectorStore,
+    llm: LLMProvider,
+    *,
+    k: int = 5,
+    min_score: float = 0.0,
+    history: Sequence[tuple[str, str]] = (),
+) -> Iterator[str | Answer]:
+    """Like `answer`, but yields the text as the model writes it, then the `Answer` last."""
     started = time.perf_counter()
     results = retrieve(store, question, k=k, min_score=min_score)
     if not results:
-        return Answer(
+        yield NOT_FOUND_SR
+        yield Answer(
             question=question,
             text=NOT_FOUND_SR,
             citations=[],
@@ -79,6 +98,7 @@ def answer(
             model="",
             latency_s=time.perf_counter() - started,
         )
+        return
 
     messages: list[Message] = []
     for previous_question, previous_answer in history:
@@ -88,13 +108,19 @@ def answer(
         {"role": "user", "content": build_user_message(question, [r.chunk for r in results])}
     )
 
-    result = llm.complete(SYSTEM_PROMPT, messages)
+    result = None
+    for piece in stream_complete(llm, SYSTEM_PROMPT, messages):
+        if isinstance(piece, str):
+            yield piece
+        else:
+            result = piece
+    assert result is not None
     citations, invalid = extract_citations(result.text, results)
     text = result.text
     if result.stop_reason == "refusal" and not text:
         text = "The model declined to answer this question."
 
-    return Answer(
+    yield Answer(
         question=question,
         text=text,
         citations=citations,

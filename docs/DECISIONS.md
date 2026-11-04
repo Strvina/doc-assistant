@@ -278,3 +278,17 @@ brisanje sa servera, a na javnom demou posetioci ne vide tuđe razgovore.
 **Cena:** model ipak završi zaustavljeni odgovor u pozadini (troši limit, ne i vreme korisnika);
 razgovori su vezani za browser — drugi browser ili obrisani kolačići = nova, prazna lista
 (nema korisničkih naloga). Brisanje razgovora ne briše red iz loga pitanja (monitoring).
+
+### ADR-026 · Odgovor se ispisuje dok nastaje (streaming, NDJSON)
+**Odluka:** `POST /ask/stream` šalje odgovor kao niz JSON redova (`application/x-ndjson`):
+`{"type":"delta","text":…}` dok model piše, pa `{"type":"done","response":<isto kao /ask>}`
+(ili `{"type":"error",…}`). Provajder sa metodom `stream` (Groq/Gemini preko Chat Completions,
+offline) šalje tekst u delovima; ostali (Claude, ChatGPT — još nisu provereni uživo) daju ceo
+odgovor kao jedan deo (`stream_complete`). Agent šalje samo "done" (između koraka su alati).
+UI čita tok kroz `fetch` + `ReadableStream`; dok se piše, citati su neutralne oznake, a gotova
+kartica sa izvorima zamenjuje tekst na kraju. Stop prekida tok: server zatvara stream ka modelu
+(prestaje generisanje) i ništa ne čuva. `/ask` ostaje za integracije.
+**Zašto:** prvi tekst posle ~1,5 s umesto celog odgovora posle 3–10 s; NDJSON (a ne SSE) jer
+pitanje ide POST-om sa telom, a `fetch` čita tok direktno.
+**Cena:** i dalje se čeka pretraga i prvi token modela; besplatni Gemini nekad šalje odgovor u
+jednom komadu.

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from html import unescape
 from typing import TYPE_CHECKING, Any
 
@@ -66,6 +66,12 @@ class FakeProvider:
             output_tokens=len(text) // 4,
             stop_reason="end",
         )
+
+    def stream(self, system: str, messages: list[Message]) -> Iterator[str | LLMResult]:
+        """The same answer as `complete`, word by word (to test streaming without a model)."""
+        result = self.complete(system, messages)
+        yield from re.findall(r"\S+\s*", result.text)
+        yield result
 
     def run_agent(
         self, system: str, messages: list[Message], tools: list[Tool], max_steps: int = 8

@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import re
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -95,6 +96,48 @@ class ChatCompletionsProvider:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             stop_reason=_stop_reason(choice.finish_reason),
+        )
+
+    def stream(self, system: str, messages: list[Message]) -> Iterator[str | LLMResult]:
+        """Answer text as the model writes it, then the whole `LLMResult`.
+
+        The endpoint chain works as in `complete`: quota and overload errors arrive when the
+        stream is opened, before any text, so the next endpoint can still take over.
+        """
+        response = self._create(
+            [{"role": "system", "content": system}, *messages],
+            stream=True,
+            stream_options={"include_usage": True},
+        )
+        parts: list[str] = []
+        model, finish, usage = "", None, None
+        try:
+            for chunk in response:
+                model = getattr(chunk, "model", None) or model
+                usage = getattr(chunk, "usage", None) or usage
+                if not chunk.choices:
+                    continue
+                choice = chunk.choices[0]
+                finish = choice.finish_reason or finish
+                piece = (getattr(choice.delta, "content", None) or "").translate(_PLAIN)
+                piece = piece.replace("\u3010", "[").replace("\u3011", "]")
+                if piece:
+                    parts.append(piece)
+                    yield piece
+        except openai.APIError as exc:
+            raise LLMError(f"{self._name}: the answer stopped halfway ({exc})") from exc
+        finally:
+            close = getattr(response, "close", None)
+            if close:  # also when the client went away: stop generating, keep the quota
+                close()
+        input_tokens = getattr(usage, "prompt_tokens", 0) or 0
+        output_tokens = getattr(usage, "completion_tokens", 0) or 0
+        yield LLMResult(
+            text=_clean("".join(parts)),
+            model=model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            stop_reason=_stop_reason(finish),
         )
 
     def run_agent(
