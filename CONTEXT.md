@@ -83,6 +83,7 @@ GitHub Actions · Docker / Hugging Face Spaces
   original → `index --rebuild` ili ponovni upload.
 - Claude: zvanični SDK, refusal fallback, `ANTHROPIC_EFFORT` (npr. `low`) je poluga za cenu/brzinu (ADR-014).
 - Frontend (`src/docassist/web/`) nema build korak; menja se direktno, server servira statiku.
+- `renderAnswerText` (app.js) prikazuje Markdown iz odgovora: tabele, `#` naslove, liste, **bold**, `kod`.
 - n8n 2.x: posle `update:workflow --active=true` treba restart; webhook se registruje par sekundi posle `/healthz`.
 - Sesije su u SQLite (`sessions`), kolačić 1 godina → razgovori preživljavaju restart; vlasnik razgovora
   je `session:<id>` ili `api`/`open`.
@@ -122,4 +123,5 @@ GitHub Actions · Docker / Hugging Face Spaces
 | 2026-11-04 | OCR (Tesseract) za skenove i slike, upload slika; eval sa skenovima 100 %; ADR-024 | #15 (#14 greškom spojen u `feat/hybrid-search`) |
 | 2026-11-04 | OCR paralelno (~3× brže) + prikaz napretka pri uploadu skena | #16 |
 | 2026-11-04 | Sačuvani razgovori (otvori/obriši) i zaustavljanje pitanja; ADR-025 | #17 |
-| 2026-11-04 | Brisanje pitanja iz praćenja (jedno ili sva; zaključano u demo režimu) | — |
+| 2026-11-04 | Brisanje pitanja iz praćenja (jedno ili sva; zaključano u demo režimu) | #18 |
+| 2026-11-04 | Odgovori: Markdown tabele, naslovi i `kod` se prikazuju formatirano | — |
