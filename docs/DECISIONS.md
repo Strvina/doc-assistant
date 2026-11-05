@@ -306,3 +306,21 @@ nemačka slova. Izvoz na serveru (a ne `window.print`) daje isti fajl i za API i
 **Cena:** Markdown parser postoji dvaput (app.js i Python) — promena u jednom traži promenu u
 drugom. Vreme u fajlu je lokalno vreme servera (na HF Space-u UTC). Koraci agenta (alati) se ne
 izvoze, samo konačni odgovor.
+
+### ADR-028 · Excel i PowerPoint dokumenti
+**Odluka:** `.xlsx` (openpyxl) i `.pptx` (python-pptx). Excel: jedna "strana" = jedan vidljiv list
+(sakriveni se preskaču), vrednosti koje je Excel poslednje izračunao (ne formule). Kad prvi red
+imenuje kolone, svaki sledeći red se indeksira kao `Kolona: vrednost | Kolona: vrednost`.
+PowerPoint: jedna strana = jedan slajd; naslov prezentacije (naslov prvog slajda), naslov slajda,
+pa tekst i tabele odozgo nadole, pa beleške govornika (`Notes: …`). Pregled prikazuje list kao tabelu, a slajd kao stranu, i označava citirani red
+ili pasus. Citati se prepoznaju za bilo koju ekstenziju i više izvora u jednoj zagradi
+(`[a.xlsx, str. 2; b.pdf, str. 3]`) — `docassist/citations.py` i isti parser u `app.js`.
+**Zašto:** u firmi su cenovnici, spiskovi delova i obuke često u Excelu/PowerPointu. Dugačak list se
+deli na mnogo delova; red koji sam kaže šta mu je koja kolona ostaje razumljiv i daleko od zaglavlja.
+Beleške često sadrže ono što se na slajdu samo pominje. Slajd retko ponavlja o čemu je
+prezentacija ("Warranty and service" — za koji proizvod?): bez naslova prezentacije pretraga nije
+našla slajd ni za jedno od 2 eval pitanja, sa njim 2/2. gpt-oss je u evalu spojio dva izvora u jednu
+zagradu, pa je tačan odgovor izgledao kao da nema izvora.
+**Cena:** slike u slajdovima i listovima se ne čitaju (to je posao modela za slike). `.xls`, `.ppt`
+(stari binarni formati) nisu podržani. Veliki list daje mnogo delova (više tokena po redu zbog naziva
+kolona). Strana u citatu za Excel je redni broj lista ("str. 2" = drugi list).

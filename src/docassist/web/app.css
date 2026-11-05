@@ -210,6 +210,8 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 }
 .file-badge.pdf { background: #c0392b; }
 .file-badge.docx { background: #2b5797; }
+.file-badge.xlsx { background: #1e7145; }
+.file-badge.pptx { background: #c43e1c; }
 .file-badge.txt, .file-badge.md { background: #5b6b7f; }
 .lang {
   font: 600 10px/1 var(--mono); padding: 2px 5px; border-radius: 5px;

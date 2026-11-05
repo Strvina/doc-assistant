@@ -54,6 +54,28 @@ def test_citation_format_variants(citation):
     assert invalid == []
 
 
+def test_several_sources_in_one_bracket_and_any_extension():
+    retrieved = [result("parts.xlsx", 2), result("Cenovnik 2026. (v2).pdf", 3)]
+    text = (
+        "Okvir košta 23900 [parts.xlsx, str. 2; Cenovnik 2026. (v2).pdf, str. 3; x.pptx, str. 1]."
+    )
+
+    citations, invalid = extract_citations(text, retrieved)
+
+    assert [(c.source, c.page) for c in citations] == [
+        ("parts.xlsx", 2),
+        ("Cenovnik 2026. (v2).pdf", 3),
+    ]
+    assert invalid == ["[x.pptx, str. 1]"]
+
+
+@pytest.mark.parametrize(
+    "text", ["[see manual.pdf]", "[manual.pdf, str. 2; not a citation]", "[v1.2, page 3]"]
+)
+def test_brackets_that_are_not_citations(text):
+    assert extract_citations(text, [result("manual.pdf", 2)]) == ([], [])
+
+
 def test_citation_to_wrong_page_is_invalid():
     citations, invalid = extract_citations("x [manual.pdf, str. 3]", [result("manual.pdf", 2)])
 

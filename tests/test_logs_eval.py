@@ -85,7 +85,7 @@ def test_empty_log_stats(tmp_path):
 def test_question_file_is_valid():
     questions = load_questions()
 
-    assert 25 <= len(questions) <= 30
+    assert 25 <= len(questions) <= 40
     assert len({q.id for q in questions}) == len(questions)
     assert {q.lang for q in questions} == {"sr", "de", "en"}
     assert sum(not q.answerable for q in questions) >= 3

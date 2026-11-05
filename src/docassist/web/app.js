@@ -46,7 +46,20 @@ const TOOL_LABELS = {
   escalate_to_human: "Prosleđivanje pitanja nadležnom",
   create_leave_request: "Nacrt zahteva za odmor",
 };
-const CITATION = /\[\s*([^\[\],]+?\.(?:pdf|docx|txt|md|png|jpe?g|tiff?|bmp))\s*,\s*(?:str\.?|p\.|pp\.|page|s\.|seite)\s*(\d+)\s*\]/gi;
+// [pravilnik.pdf, str. 2] or several in one bracket: [a.docx, str. 2; b.xlsx, str. 1].
+// Any file extension; read the same way as docassist/citations.py — change both together.
+const CITE_BRACKET = /\[([^\[\]\n]+)\]/g;
+const CITE_PART = /^\s*([^\[\],;\n]+?\.[A-Za-z0-9]{2,5})\s*,\s*(?:str\.?|p\.|pp\.|page|s\.|seite)\s*(\d+)\s*$/i;
+
+function citationParts(inner) {
+  const refs = [];
+  for (const part of inner.split(";")) {
+    const match = part.match(CITE_PART);
+    if (!match) return null;  // not (only) citations: leave the bracket as text
+    refs.push({ source: match[1].trim(), page: Number(match[2]) });
+  }
+  return refs;
+}
 
 const CITE_LABEL = 24;  // characters of a file name shown in a citation chip
 const CITE_LABEL_TABLE = 16;  // … and inside a table cell
@@ -108,7 +121,8 @@ async function loadConfig() {
   });
   const zone = $("#dropzone");
   zone.hidden = !state.config.allow_uploads;
-  $("#dropzone-hint").textContent = `PDF, Word, TXT, MD · do ${state.config.max_upload_mb} MB`;
+  $("#dropzone-hint").textContent = `PDF, Word, Excel, PowerPoint, TXT, slike · do ${state.config.max_upload_mb} MB`;
+  if (state.config.extensions) $("#file-input").accept = state.config.extensions.join(",");
 }
 
 function shortModel(model) {
@@ -286,19 +300,29 @@ function renderAnswerText(text, citations, invalid, streaming = false) {
     const name = source.trim().replace(/\.[^.]+$/, "");
     return escapeHtml(name.length > max ? `${name.slice(0, max - 1).trimEnd()}…` : name);
   };
-  const inline = (line, max = CITE_LABEL) =>
-    escapeHtml(line)
+  const chip = (source, page, max) => {
+    const citation = byKey.get(`${source.toLowerCase()}|${page}`);
+    if (streaming) return `<span class="cite pending" title="${escapeHtml(source)}">${label(source, max)} · ${page}</span>`;
+    if (!citation) {
+      const title = invalidSet.size ? "Ovaj izvor nije među pronađenim pasusima" : "";
+      return `<span class="cite invalid" title="${title}">${label(source, max)} · ${page}</span>`;
+    }
+    return `<button class="cite" type="button" data-doc="${citation.doc_id}" data-page="${citation.page}" data-key="${escapeHtml(source.toLowerCase())}|${citation.page}" title="Otvori ${escapeHtml(citation.source)}, strana ${citation.page}">${label(citation.source, max)} · ${citation.page}</button>`;
+  };
+  // Citations become placeholders first, so Markdown and escaping never touch them.
+  const inline = (line, max = CITE_LABEL) => {
+    const chips = [];
+    const marked = line.replace(CITE_BRACKET, (match, inner) => {
+      const refs = citationParts(inner);
+      if (!refs) return match;
+      chips.push(refs.map((r) => chip(r.source, r.page, max)).join(" "));
+      return `\u0000${chips.length - 1}\u0000`;
+    });
+    return escapeHtml(marked)
       .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
       .replace(/`([^`]+)`/g, "<code>$1</code>")
-      .replace(CITATION, (match, source, page) => {
-        const citation = byKey.get(`${source.trim().toLowerCase()}|${Number(page)}`);
-        if (streaming) return `<span class="cite pending" title="${escapeHtml(source.trim())}">${label(source, max)} · ${page}</span>`;
-        if (!citation) {
-          const title = invalidSet.size ? "Ovaj izvor nije među pronađenim pasusima" : "";
-          return `<span class="cite invalid" title="${title}">${label(source, max)} · ${page}</span>`;
-        }
-        return `<button class="cite" type="button" data-doc="${citation.doc_id}" data-page="${citation.page}" data-key="${escapeHtml(source.trim().toLowerCase())}|${citation.page}" title="Otvori ${escapeHtml(citation.source)}, strana ${citation.page}">${label(citation.source, max)} · ${citation.page}</button>`;
-      });
+      .replace(/\u0000(\d+)\u0000/g, (_, i) => chips[Number(i)]);
+  };
 
   // Markdown that models use in answers: tables, headings, lists, **bold**, `code`.
   const blocks = [];

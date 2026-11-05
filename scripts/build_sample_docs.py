@@ -6,7 +6,9 @@ Usage:
 The sources use a tiny Markdown subset:
     # Title            ## Heading          ### Subheading
     - bullet item      | table | row |     (first table row is the header)
-    <<<PAGE>>>         explicit page break
+    > note             speaker notes (PPTX)
+    <<<PAGE>>>         explicit page break (PPTX: next slide)
+XLSX: every "## Heading" starts a worksheet with that name, filled from the table under it.
 Anything else is a paragraph; paragraphs are separated by blank lines.
 """
 
@@ -19,8 +21,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import docx
+import openpyxl
+import pptx
 import pymupdf
 from docx.shared import Pt
+from openpyxl.styles import Font
+from pptx.util import Inches
+from pptx.util import Pt as SlidePt
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC_DIR = Path(__file__).resolve().parent / "sample_docs_src"
@@ -36,6 +43,8 @@ DOCUMENTS = {
     "quality_control_procedure.md": "quality_control_procedure.docx",
     "bezbednost_na_radu.md": "bezbednost_na_radu.docx",
     "faq.md": "faq.txt",
+    "rezervni_delovi.md": "rezervni_delovi.xlsx",
+    "pv400_sales_training.md": "pv400_sales_training.pptx",
 }
 
 PDF_CSS = """
@@ -52,7 +61,7 @@ th { background-color: #e6e6e6; }
 
 @dataclass
 class Block:
-    kind: str  # title | h2 | h3 | meta | p | ul | table | pagebreak
+    kind: str  # title | h2 | h3 | meta | p | ul | table | note | pagebreak
     text: str = ""
     items: list[str] = field(default_factory=list)
     rows: list[list[str]] = field(default_factory=list)
@@ -75,6 +84,8 @@ def parse(source: str) -> list[Block]:
             blocks.append(Block("h3", first[4:]))
         elif first.startswith("- "):
             blocks.append(Block("ul", items=[line[2:] for line in lines]))
+        elif first.startswith("> "):
+            blocks.append(Block("note", " ".join(line.removeprefix("> ") for line in lines)))
         elif first.startswith("|"):
             rows = [[cell.strip() for cell in line.strip("|").split("|")] for line in lines]
             blocks.append(Block("table", rows=rows))
@@ -171,6 +182,77 @@ def build_docx(blocks: list[Block], title: str, out: Path) -> None:
     document.save(str(out))
 
 
+def build_xlsx(blocks: list[Block], title: str, out: Path) -> None:
+    workbook = openpyxl.Workbook()
+    workbook.remove(workbook.active)
+    workbook.properties.title = title
+    workbook.properties.creator = AUTHOR
+    sheet = None
+    for block in blocks:
+        if block.kind == "h2":
+            sheet = workbook.create_sheet(block.text[:31])
+        elif block.kind == "table" and sheet is not None:
+            for row_no, row in enumerate(block.rows):
+                sheet.append([int(v) if v.isdigit() else v for v in row])
+                if row_no == 0:
+                    for cell in sheet[sheet.max_row]:
+                        cell.font = Font(bold=True)
+            for column in sheet.columns:
+                width = max(len(str(cell.value or "")) for cell in column)
+                sheet.column_dimensions[column[0].column_letter].width = min(width + 2, 60)
+    workbook.save(out)
+
+
+def build_pptx(blocks: list[Block], title: str, out: Path) -> None:
+    deck = pptx.Presentation()
+    deck.slide_width, deck.slide_height = Inches(13.333), Inches(7.5)
+    deck.core_properties.title = title
+    deck.core_properties.author = AUTHOR
+
+    slides: list[list[Block]] = [[]]
+    for block in blocks:
+        if block.kind == "pagebreak":
+            slides.append([])
+        else:
+            slides[-1].append(block)
+
+    for content in slides:
+        if content and content[0].kind == "title":
+            slide = deck.slides.add_slide(deck.slide_layouts[0])  # title slide
+            slide.shapes.title.text = content[0].text
+            meta = next((b.text for b in content if b.kind == "meta"), "")
+            slide.placeholders[1].text = meta
+            continue
+        slide = deck.slides.add_slide(deck.slide_layouts[5])  # title only
+        top = Inches(1.7)
+        for block in content:
+            match block.kind:
+                case "h2":
+                    slide.shapes.title.text = block.text
+                case "p" | "ul":
+                    lines = [block.text] if block.kind == "p" else [f"• {i}" for i in block.items]
+                    box = slide.shapes.add_textbox(Inches(0.8), top, Inches(11.7), Inches(0.5))
+                    frame = box.text_frame
+                    frame.word_wrap = True
+                    for n, line in enumerate(lines):
+                        paragraph = frame.paragraphs[0] if n == 0 else frame.add_paragraph()
+                        paragraph.text = line
+                        paragraph.font.size = SlidePt(22)
+                    top += Inches(0.55 * len(lines) + 0.3)
+                case "table":
+                    rows, cols = len(block.rows), len(block.rows[0])
+                    shape = slide.shapes.add_table(
+                        rows, cols, Inches(0.8), top, Inches(11.7), Inches(0.5 * rows)
+                    )
+                    for r, row in enumerate(block.rows):
+                        for c, value in enumerate(row):
+                            shape.table.cell(r, c).text = value
+                    top += Inches(0.5 * rows + 0.3)
+                case "note":
+                    slide.notes_slide.notes_text_frame.text = block.text
+    deck.save(str(out))
+
+
 def build_txt(source: str, out: Path) -> None:
     text = source.replace(f"\n{PAGE_BREAK}\n", "\f")
     out.write_text(text.strip() + "\n", encoding="utf-8", newline="\n")
@@ -189,6 +271,10 @@ def main() -> None:
                 build_pdf(blocks, title, out)
             case ".docx":
                 build_docx(blocks, title, out)
+            case ".xlsx":
+                build_xlsx(blocks, title, out)
+            case ".pptx":
+                build_pptx(blocks, title, out)
             case ".txt":
                 build_txt(source, out)
             case _:

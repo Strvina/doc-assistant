@@ -1,9 +1,13 @@
+import datetime as dt
 from pathlib import Path
 
 import docx
+import openpyxl
+import pptx
 import pymupdf
 import pytest
 from docx.enum.text import WD_BREAK
+from pptx.util import Inches
 
 from docassist.ingest import (
     SUPPORTED_EXTENSIONS,
@@ -231,6 +235,108 @@ def test_text_is_normalized(tmp_path):
     assert load_document(path)[0].text == "Živko Ilic\n\nnextline"
 
 
+# --- XLSX --------------------------------------------------------------------------------
+
+
+def make_xlsx(path: Path, sheets: dict[str, list[list]], hidden: tuple[str, ...] = ()) -> Path:
+    workbook = openpyxl.Workbook()
+    workbook.remove(workbook.active)
+    for name, rows in sheets.items():
+        sheet = workbook.create_sheet(name)
+        for row in rows:
+            sheet.append(row)
+        if name in hidden:
+            sheet.sheet_state = "hidden"
+    workbook.save(path)
+    return path
+
+
+def test_xlsx_one_page_per_sheet_rows_name_their_columns(tmp_path):
+    path = make_xlsx(
+        tmp_path / "parts.xlsx",
+        {
+            "Prices": [["Code", "Name", "Price"], ["A-1", "Breaker", 1250], ["B-2", None, 9.5]],
+            "Notes": [["Prices without VAT."], [], ["Call 230."]],
+        },
+    )
+
+    pages = load_document(path)
+
+    assert [p.page_no for p in pages] == [1, 2]
+    assert pages[0].text == (
+        "Prices\n"
+        "Code | Name | Price\n"
+        "Code: A-1 | Name: Breaker | Price: 1250\n"
+        "Code: B-2 | Price: 9.5"
+    )
+    assert pages[1].text == "Notes\nPrices without VAT.\nCall 230."  # no header: one column
+
+
+def test_xlsx_numbers_dates_and_hidden_sheets(tmp_path):
+    path = make_xlsx(
+        tmp_path / "x.xlsx",
+        {
+            "Data": [[2026, 3.0, dt.datetime(2026, 1, 15), "two\nlines", None, None]],
+            "Helper": [["secret"]],
+        },
+        hidden=("Helper",),
+    )
+
+    pages = load_document(path)
+
+    assert [(p.page_no, p.text) for p in pages] == [(1, "Data\n2026 | 3 | 2026-01-15 | two lines")]
+
+
+def test_xlsx_empty_sheet_keeps_numbering(tmp_path):
+    path = make_xlsx(tmp_path / "x.xlsx", {"Empty": [], "Full": [["value"]]})
+
+    assert [(p.page_no, p.text) for p in load_document(path)] == [(2, "Full\nvalue")]
+
+
+# --- PPTX --------------------------------------------------------------------------------
+
+
+def make_pptx(path: Path) -> Path:
+    deck = pptx.Presentation()
+    title_slide = deck.slides.add_slide(deck.slide_layouts[0])
+    title_slide.shapes.title.text = "Training"
+    title_slide.placeholders[1].text = "Sales team"
+
+    slide = deck.slides.add_slide(deck.slide_layouts[5])  # title only
+    slide.shapes.title.text = "Prices"
+    lower = slide.shapes.add_textbox(Inches(1), Inches(5), Inches(6), Inches(1))
+    lower.text_frame.text = "Below the table"
+    upper = slide.shapes.add_textbox(Inches(1), Inches(1.5), Inches(6), Inches(1))
+    upper.text_frame.text = "First line"
+    upper.text_frame.add_paragraph().text = "Second line"
+    table = slide.shapes.add_table(2, 2, Inches(1), Inches(3), Inches(6), Inches(1)).table
+    for r, row in enumerate([["Item", "Price"], ["S", "1,950"]]):
+        for c, value in enumerate(row):
+            table.cell(r, c).text = value
+    slide.notes_slide.notes_text_frame.text = "Max discount 8 %."
+
+    deck.slides.add_slide(deck.slide_layouts[6])  # blank slide
+    deck.save(str(path))
+    return path
+
+
+def test_pptx_one_page_per_slide_in_reading_order_with_notes(tmp_path):
+    pages = load_document(make_pptx(tmp_path / "deck.pptx"))
+
+    assert [p.page_no for p in pages] == [1, 2]  # the blank 3rd slide is skipped
+    assert pages[0].text == "Training\nSales team"
+    assert pages[1].text == (
+        "Training\n"  # the deck's title, so the slide is found by what the deck is about
+        "Prices\n"
+        "First line\n"
+        "Second line\n"
+        "Item | Price\n"
+        "S | 1,950\n"
+        "Below the table\n"
+        "Notes: Max discount 8 %."
+    )
+
+
 # --- dispatch & errors -------------------------------------------------------------------
 
 
@@ -238,6 +344,8 @@ def test_supported_extensions():
     assert set(SUPPORTED_EXTENSIONS) == {
         ".pdf",
         ".docx",
+        ".xlsx",
+        ".pptx",
         ".txt",
         ".md",
         ".png",
@@ -256,7 +364,7 @@ def test_extension_is_case_insensitive(tmp_path):
     assert load_document(path)[0].text == "hello"
 
 
-@pytest.mark.parametrize("name", ["sheet.xlsx", "old.doc", "no_extension"])
+@pytest.mark.parametrize("name", ["old.xls", "old.doc", "no_extension"])
 def test_unsupported_file_type(tmp_path, name):
     path = tmp_path / name
     path.write_text("data", encoding="utf-8")
@@ -283,7 +391,13 @@ SAMPLE_FILES = sorted(p.name for p in SAMPLE_DOCS.iterdir())
 
 
 def test_sample_docs_cover_all_formats():
-    assert {Path(name).suffix for name in SAMPLE_FILES} == {".pdf", ".docx", ".txt"}
+    assert {Path(name).suffix for name in SAMPLE_FILES} == {
+        ".pdf",
+        ".docx",
+        ".xlsx",
+        ".pptx",
+        ".txt",
+    }
 
 
 @pytest.mark.parametrize("name", SAMPLE_FILES)
@@ -302,6 +416,8 @@ def test_sample_docs_load(name):
         ("quality_control_procedure.docx", 2, "500 V DC for 60 s | ≥ 1 MΩ"),
         ("bezbednost_na_radu.docx", 3, "Hitnu pomoć na broj 194"),
         ("faq.txt", 1, "Kantina radi od 10:30 do 13:30"),
+        ("rezervni_delovi.xlsx", 2, "Šifra: PV-400-MR | Naziv: Montažni okvir"),
+        ("pv400_sales_training.pptx", 3, "Notes: Do not promise discounts above 8 %"),
     ],
 )
 def test_sample_docs_facts_are_on_expected_page(name, page_no, fact):

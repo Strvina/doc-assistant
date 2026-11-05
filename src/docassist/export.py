@@ -23,6 +23,7 @@ import pymupdf
 from docx import Document
 from docx.shared import Pt, RGBColor
 
+from docassist.citations import CitationRef, replace_citations
 from docassist.conversations import fold
 
 FORMATS = {
@@ -122,24 +123,22 @@ def inline_runs(text: str) -> list[tuple[str, str]]:
 # --- shared content ----------------------------------------------------------------------
 
 CITE_LABEL = 24  # characters of a file name in a citation inside a table (like the web UI)
-_CITATION = re.compile(
-    r"\[\s*(?P<source>[^\[\],]+?)\.[A-Za-z0-9]{2,5}\s*,\s*"
-    r"(?:str\.?|p\.|pp\.|page|s\.|seite)\s*(?P<page>\d+)\s*\]",
-    re.IGNORECASE,
-)
 
 
 def short_citations(text: str) -> str:
     """ "[Lavazza Belgrade Training Center Cenovnik.pdf, str. 6]" -> "[Lavazza Belgrade Trai…,
     str. 6]": full names are listed under "Izvori", a table column stays narrow."""
 
-    def shorten(match: re.Match[str]) -> str:
-        name = match["source"].strip()
-        if len(name) > CITE_LABEL:
-            name = name[: CITE_LABEL - 1].rstrip() + "…"
-        return f"[{name}, str. {match['page']}]"
+    def shorten(refs: list[CitationRef]) -> str:
+        parts = []
+        for ref in refs:
+            name = ref.source.rsplit(".", 1)[0].strip()
+            if len(name) > CITE_LABEL:
+                name = name[: CITE_LABEL - 1].rstrip() + "…"
+            parts.append(f"{name}, str. {ref.page}")
+        return f"[{'; '.join(parts)}]"
 
-    return _CITATION.sub(shorten, text)
+    return replace_citations(text, shorten)
 
 
 def _date(iso: str) -> str:

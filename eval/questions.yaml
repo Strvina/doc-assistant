@@ -194,6 +194,35 @@
   page: 1
   facts: ["Panelvolt-Staff"]
 
+# Excel: one page per worksheet; PowerPoint: one page per slide (ADR-028).
+- id: xlsx-mcb-c16
+  lang: sr
+  question: Koliko košta zaštitni prekidač C16 i za koliko dana stiže ako ga nema na stanju?
+  source: rezervni_delovi.xlsx
+  page: 1
+  facts: ["1250|1.250|1 250", "3"]
+
+- id: xlsx-mounting-frame
+  lang: de
+  question: Was kostet der Montagerahmen PV-400-MR und wie lang ist die Lieferzeit?
+  source: rezervni_delovi.xlsx
+  page: 2
+  facts: ["23900|23.900|23 900", "21"]
+
+- id: pptx-warranty
+  lang: sr
+  question: Koliko traje standardna garancija na ormane PV-400?
+  source: pv400_sales_training.pptx
+  page: 3
+  facts: ["36"]
+
+- id: pptx-discount-notes
+  lang: sr
+  question: Koliki najveći popust smem da ponudim kupcu za PV-400 bez odobrenja direktora prodaje?
+  source: pv400_sales_training.pptx
+  page: 3
+  facts: ["8"]
+
 - id: none-bonus
   lang: sr
   question: Koliki je bonus za najboljeg radnika meseca?

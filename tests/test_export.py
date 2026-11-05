@@ -201,6 +201,8 @@ def test_table_citations_are_shortened_full_names_stay_in_sources():
         export.short_citations(f"x [{long_name}, str. 6]") == "x [Lavazza Belgrade Traini…, str. 6]"
     )
     assert export.short_citations("[kratko.pdf, p. 2]") == "[kratko, str. 2]"
+    assert export.short_citations("[a.xlsx, str. 2; b.pptx, str. 3]") == "[a, str. 2; b, str. 3]"
+    assert export.short_citations("[not a citation]") == "[not a citation]"
 
     answer = f"| Kafa | Cena | Izvor |\n|---|---|---|\n| Cuba | 3.605,00 | [{long_name}, str. 6] |"
     turn = {

@@ -1,7 +1,8 @@
 # Evaluation results
 
-Question set: [`eval/questions.yaml`](../eval/questions.yaml) — 30 questions (Serbian, German,
-English): 27 with a known source page and key facts, 3 the documents cannot answer.
+Question set: [`eval/questions.yaml`](../eval/questions.yaml) — 34 questions (Serbian, German,
+English): 31 with a known source page and key facts, 3 the documents cannot answer. Runs before
+2026-11-05 used the first 30 (no Excel/PowerPoint documents yet).
 Runner: `uv run python -m docassist.eval` (see the README).
 
 ## Retrieval (no LLM)
@@ -78,6 +79,20 @@ free-tier limits on both Groq (per minute) and the Gemini fallback (per day) and
 `qc-insulation` was answered correctly, but with two sources in one bracket
 (`[quality_control_procedure.docx, str. 2; montageanleitung_pv400.pdf, str. 3]`), which the
 citation parser does not read yet.
+
+**With Excel and PowerPoint** (ADR-028: 34 questions, 4 new on `rezervni_delovi.xlsx` and
+`pv400_sales_training.pptx`, one of them answered only in the speaker notes), clean index, 2026-11-05:
+
+| Run | Correct overall | Page cited | Fact recall | "Not found" correct | Wrong "not found" | Made-up citations | Latency avg / p95 | Cost |
+|---|---|---|---|---|---|---|---|---|
+| groq openai/gpt-oss-120b, RAG | **100 %** | 100 % | 100 % | 100 % | 0 % | 0 | 6.8 s / 11.7 s | free |
+
+Retrieval: expected page and all key facts in the top 5 for every question. Before every slide
+started with the presentation's title, neither PowerPoint question found its slide ("Warranty and
+service" does not say which product) and RAG scored 94 %. The agent run that day answered 15 of 34
+questions, all 15 correctly (the new Excel/PowerPoint ones among them); the other 19 hit the
+free-tier limits of Groq and the Gemini fallback after several runs that day, so it is not a
+measurement. Several sources in one bracket are now read as citations.
 
 **Before** (fixed chunks, embeddings only; the index also held one unrelated uploaded document):
 

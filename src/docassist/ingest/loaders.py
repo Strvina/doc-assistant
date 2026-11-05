@@ -1,4 +1,4 @@
-"""Load PDF, DOCX and plain-text files into a list of `Page` objects.
+"""Load PDF, DOCX, XLSX, PPTX and plain-text files into a list of `Page` objects.
 
 Page numbers are what the user will see in citations, so each loader keeps them as close
 to the original document as the format allows:
@@ -7,6 +7,8 @@ to the original document as the format allows:
 - Images (PNG, JPG, TIFF, BMP): one page per image (several for a multi-page TIFF), via OCR.
 - DOCX: Word files have no stored page layout, so a "page" is the text between explicit
   page breaks (hard page break or "page break before" on a paragraph). See ADR-010.
+- XLSX: one page per visible worksheet, in workbook order (ADR-028).
+- PPTX: one page per slide, speaker notes included (ADR-028).
 - TXT/MD: the whole file is page 1, unless it contains form feeds (``\\f``), which are
   treated as page breaks.
 
@@ -15,15 +17,20 @@ Blank pages are skipped, but numbering is never shifted.
 
 from __future__ import annotations
 
+import datetime as dt
 import re
 import unicodedata
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 import docx
+import openpyxl
+import pptx
 import pymupdf
 from docx.table import Table, _Cell
 from docx.text.paragraph import Paragraph
+from pptx.enum.shapes import MSO_SHAPE_TYPE
 
 from docassist.ingest import ocr
 from docassist.models import Page
@@ -202,10 +209,177 @@ def load_text(path: Path) -> list[str]:
     return text.split("\f")
 
 
+# --- XLSX ----------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Sheet:
+    name: str
+    rows: list[tuple[str, ...]]  # non-empty rows, trailing empty cells removed
+
+    @property
+    def header(self) -> tuple[str, ...] | None:
+        """The first row when it names the columns: two or more cells, none of them a number."""
+        if len(self.rows) < 2:
+            return None
+        first = self.rows[0]
+        filled = [cell for cell in first if cell]
+        if len(filled) < 2 or any(_NUMBER.fullmatch(cell) for cell in filled):
+            return None
+        return first
+
+    def row_text(self, index: int) -> str:
+        """A row as it is indexed: "Column: value | Column: value" under a header row.
+
+        Every row names its columns, so a row is still understood when a long sheet is split
+        into many chunks far away from the header.
+        """
+        row, header = self.rows[index], self.header
+        if header is None or index == 0:
+            return " | ".join(cell for cell in row if cell)
+        parts = []
+        for i, cell in enumerate(row):
+            if not cell:
+                continue
+            name = header[i] if i < len(header) else ""
+            parts.append(f"{name}: {cell}" if name else cell)
+        return " | ".join(parts)
+
+    @property
+    def text(self) -> str:
+        lines = [self.name, *(self.row_text(i) for i in range(len(self.rows)))]
+        return "\n".join(lines) if self.rows else ""
+
+
+_NUMBER = re.compile(r"[-+]?[\d.,\s]+%?")
+
+
+def xlsx_sheets(path: Path) -> list[Sheet]:
+    """Visible worksheets with the values Excel last calculated (not the formulas)."""
+    workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    try:
+        sheets = []
+        for worksheet in workbook.worksheets:
+            if worksheet.sheet_state != "visible":
+                continue
+            rows = []
+            for values in worksheet.iter_rows(values_only=True):
+                cells = [_cell_text(value) for value in values]
+                while cells and not cells[-1]:
+                    cells.pop()
+                if cells:
+                    rows.append(tuple(cells))
+            sheets.append(Sheet(worksheet.title, rows))
+        return sheets
+    finally:
+        workbook.close()
+
+
+def _cell_text(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float):
+        return str(int(value)) if value.is_integer() else f"{value:.12g}"
+    if isinstance(value, dt.datetime):
+        if value.time() == dt.time():
+            return value.date().isoformat()
+        return value.isoformat(sep=" ", timespec="minutes")
+    if isinstance(value, dt.date | dt.time):
+        return value.isoformat()
+    return " ".join(str(value).split())  # line breaks inside a cell
+
+
+def load_xlsx(path: Path) -> list[str]:
+    return [sheet.text for sheet in xlsx_sheets(path)]
+
+
+# --- PPTX ----------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SlideItem:
+    kind: str  # title | p | table | notes
+    text: str = ""
+    rows: tuple[tuple[str, ...], ...] = ()
+
+    @property
+    def plain(self) -> str:
+        if self.kind == "table":
+            return "\n".join(" | ".join(row) for row in self.rows)
+        return self.text
+
+
+def pptx_slides(path: Path) -> list[list[SlideItem]]:
+    """The text of each slide: title, then text boxes and tables top to bottom, then notes."""
+    presentation = pptx.Presentation(str(path))
+    slides = []
+    for slide in presentation.slides:
+        title = slide.shapes.title
+        items: list[SlideItem] = []
+        if title is not None and title.text_frame.text.strip():
+            items.append(SlideItem("title", " ".join(title.text_frame.text.split())))
+        for shape in _shapes_in_reading_order(slide.shapes):
+            if title is not None and shape.shape_id == title.shape_id:
+                continue
+            if shape.has_table:
+                rows = tuple(
+                    tuple(" ".join(cell.text.split()) for cell in row.cells)
+                    for row in shape.table.rows
+                )
+                rows = tuple(row for row in rows if any(row))
+                if rows:
+                    items.append(SlideItem("table", rows=rows))
+            elif shape.has_text_frame:
+                for paragraph in shape.text_frame.paragraphs:
+                    text = paragraph.text.replace("\v", "\n").strip()
+                    if text:
+                        items.append(SlideItem("p", text))
+        if slide.has_notes_slide:
+            notes = slide.notes_slide.notes_text_frame
+            if notes is not None and notes.text.strip():
+                items.append(SlideItem("notes", notes.text.strip()))
+        slides.append(items)
+    return slides
+
+
+def _shapes_in_reading_order(shapes) -> Iterator:
+    def position(shape) -> tuple[int, int]:
+        return (shape.top or 0, shape.left or 0)
+
+    for shape in sorted(shapes, key=position):
+        if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+            yield from _shapes_in_reading_order(shape.shapes)
+        else:
+            yield shape
+
+
+def load_pptx(path: Path) -> list[str]:
+    """Slide texts; every slide after the first starts with the presentation's title.
+
+    A slide rarely repeats what the deck is about ("Warranty and service" — of which
+    product?), so without the title its chunks are not found for a question that names it.
+    """
+    slides = pptx_slides(path)
+    deck = next((i.text for items in slides for i in items if i.kind == "title"), "")
+
+    def text(item: SlideItem) -> str:
+        return f"Notes: {item.text}" if item.kind == "notes" else item.plain
+
+    pages = []
+    for items in slides:
+        lines = [text(item) for item in items]
+        if lines and deck and not any(i.kind == "title" and i.text == deck for i in items):
+            lines.insert(0, deck)
+        pages.append("\n".join(lines))
+    return pages
+
+
 _LOADERS: dict[str, Callable[[Path], list[str]]] = {
     ".pdf": load_pdf,
     **dict.fromkeys(IMAGE_EXTENSIONS, load_pdf),
     ".docx": load_docx,
+    ".xlsx": load_xlsx,
+    ".pptx": load_pptx,
     ".txt": load_text,
     ".md": load_text,
 }

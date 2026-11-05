@@ -33,7 +33,7 @@ jobs:
           git checkout --orphan space
           # The Hub accepts binary files (PDF, DOCX, images) only through Git LFS.
           git lfs install --local
-          git lfs track "*.pdf" "*.docx" "*.png" "*.jpg" "*.jpeg" "*.tif" "*.tiff" "*.bmp"
+          git lfs track "*.pdf" "*.docx" "*.xlsx" "*.pptx" "*.png" "*.jpg" "*.jpeg" "*.tif" "*.tiff" "*.bmp"
           git rm -r -q -f --cached .  # re-add everything so the LFS rules apply to existing files
           git add .gitattributes
           git add -A
