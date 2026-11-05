@@ -32,7 +32,7 @@ from docx.table import Table, _Cell
 from docx.text.paragraph import Paragraph
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 
-from docassist.ingest import ocr
+from docassist.ingest import ocr, vision
 from docassist.models import Page
 
 
@@ -114,11 +114,16 @@ def load_pdf(path: Path) -> list[str]:
     96-page scan: ~4 s per page one at a time); `PROGRESS` shows how far it is.
     """
     settings = ocr.settings_from_env()
+    # Pages a vision model read on request (ADR-029) replace OCR and the page's own text.
+    read_by_model = {page: text for page, text in vision.load_pages(path).items() if text}
     natives, jobs = [], {}
     with open_pdf(path) as pdf:
         if pdf.needs_pass:
             raise DocumentLoadError(f"{path.name} is password-protected")
         for index, page in enumerate(pdf):
+            if index + 1 in read_by_model:
+                natives.append(None)  # the model's lines (table rows) are kept as they are
+                continue
             blocks = _native_blocks(page)
             natives.append(blocks)
             job = ocr.prepare(page, settings, _text_rects(blocks))
@@ -131,7 +136,11 @@ def load_pdf(path: Path) -> list[str]:
     finally:
         PROGRESS.pop(path.name, None)
     return [
-        "\n\n".join(text for _rect, text in _paragraph_blocks(_merge(blocks, found.get(i, []))))
+        read_by_model[i + 1]
+        if blocks is None
+        else "\n\n".join(
+            text for _rect, text in _paragraph_blocks(_merge(blocks, found.get(i, [])))
+        )
         for i, blocks in enumerate(natives)
     ]
 

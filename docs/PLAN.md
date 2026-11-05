@@ -77,7 +77,7 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 ## Dodatno — OCR
 
 - [x] OCR za skenirane PDF-ove i tekst na slikama, upload slika (ADR-024)
-- [ ] Opcioni AI model za fotografije i tabele u slikama
+- [x] Opcioni AI model za fotografije i tabele u slikama — na zahtev, po dokumentu (Gemini, ADR-029)
 
 ## Dodatno — formati
 

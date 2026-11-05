@@ -36,9 +36,11 @@ from docassist.factory import (
     build_llm,
     build_store,
     build_tool_context,
+    build_vision,
 )
 from docassist.ingest import DocumentLoadError
 from docassist.ingest.loaders import IMAGE_EXTENSIONS, PROGRESS, SUPPORTED_EXTENSIONS
+from docassist.ingest.vision import ReadImage, VisionError
 from docassist.library import Library
 from docassist.llm import LLMError, LLMProvider
 from docassist.logs import QueryLog
@@ -151,6 +153,15 @@ class IndexResult(BaseModel):
     error: str | None = None
 
 
+class PicturesResult(BaseModel):
+    source: str
+    pages_total: int  # pages with pictures
+    pages_read: int  # of those, read by the vision model (now or earlier)
+    chunks: int  # chunks of the document after indexing it again
+    model: str
+    error: str | None = None  # why it stopped early, e.g. the free-tier limit
+
+
 # --- dependencies ------------------------------------------------------------------------
 # They live at module level: with `from __future__ import annotations`, FastAPI resolves
 # annotation strings in module globals, so they cannot be local to create_app().
@@ -251,6 +262,7 @@ def create_app(
     settings: Settings | None = None,
     store: VectorStore | None = None,
     llm_factory: Callable[[Settings, str | None], LLMProvider] = build_llm,
+    vision_factory: Callable[[Settings], tuple[ReadImage, str]] = build_vision,
 ) -> FastAPI:
     """Build the app. Arguments are for tests; by default everything comes from `.env`."""
     app = FastAPI(
@@ -266,6 +278,7 @@ def create_app(
     app.state.sessions = {}  # session id -> questions asked
     app.state.cancelled = set()  # request ids of questions the user cancelled
     app.state.ip_hits = defaultdict(deque)  # client ip -> timestamps of recent questions
+    app.state.vision_progress = {}  # source -> (pages read, pages with pictures)
     access = [Depends(client_kind)]
     uploads = [Depends(client_kind), Depends(require_uploads)]
 
@@ -328,6 +341,8 @@ def create_app(
             "allow_uploads": settings.allow_uploads,
             "max_upload_mb": settings.max_upload_mb,
             "extensions": list(SUPPORTED_EXTENSIONS),
+            # Reading pictures with an AI model sends them to Google; off in the public demo.
+            "vision": bool(settings.gemini_api_key) and settings.allow_uploads,
             "max_questions_per_session": settings.max_questions_per_session,
             "top_k": settings.top_k,
             "embedding_model": settings.embedding_model,
@@ -384,10 +399,12 @@ def create_app(
 
     @app.get("/documents/progress", dependencies=access)
     def upload_progress() -> list[dict[str, Any]]:
-        """Documents being read right now: pages read by OCR so far, of how many."""
+        """Documents being read right now: pages read so far (OCR or AI model), of how many."""
+        running = [("ocr", PROGRESS), ("vision", app.state.vision_progress)]
         return [
-            {"source": source, "done": done, "total": total}
-            for source, (done, total) in list(PROGRESS.items())
+            {"source": source, "done": done, "total": total, "kind": kind}
+            for kind, progress in running
+            for source, (done, total) in list(progress.items())
         ]
 
     @app.post("/documents/demo", dependencies=uploads)
@@ -404,6 +421,44 @@ def create_app(
         if not removed:
             raise HTTPException(404, f"No document with id {doc_id}")
         return {"chunks_removed": removed}
+
+    @app.post("/documents/{doc_id}/pictures", dependencies=uploads)
+    def read_pictures(doc_id: str, library: LibraryDep, settings: SettingsDep) -> PicturesResult:
+        """Read the document's picture pages with the AI vision model, then index it again.
+
+        Sends those pages to Google (Gemini), so the UI asks first (ADR-029).
+        """
+        found = library.original(doc_id)
+        if found is None:
+            raise HTTPException(404, "Document or its original file not found")
+        doc, _path = found
+        try:
+            read_image, model = vision_factory(settings)
+        except MissingAPIKeyError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        progress = app.state.vision_progress
+        try:
+            result = library.read_pictures(
+                doc_id,
+                read_image,
+                model,
+                lambda done, total: progress.update({doc.source: (done, total)}),
+            )
+        except VisionError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except DocumentLoadError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        finally:
+            progress.pop(doc.source, None)
+        chunks = len(library.store.document_chunks(doc.source))
+        return PicturesResult(
+            source=doc.source,
+            pages_total=result.pages_total,
+            pages_read=result.pages_read,
+            chunks=chunks,
+            model=model,
+            error=result.error,
+        )
 
     @app.get("/documents/{doc_id}/view", dependencies=access)
     def view_document(

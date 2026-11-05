@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from docassist.agent.tools import Escalator, JsonlFile, ToolContext, WebhookEscalator
 from docassist.config import Settings
+from docassist.ingest.vision import ReadImage
 from docassist.library import Library
 from docassist.llm import FakeProvider, LLMProvider
 from docassist.retrieval import Embedder, FakeEmbedder, LocalEmbedder, OpenAIEmbedder, VectorStore
@@ -71,6 +72,26 @@ def build_free_llm(settings: Settings, service: str) -> LLMProvider:
             client = ep.client  # one HTTP client per service
             endpoints.append(ep)
     return ChatCompletionsProvider(service, endpoints)
+
+
+def build_vision(settings: Settings) -> tuple[ReadImage, str]:
+    """`read_image` for pictures in documents and a label of the models (ADR-029).
+
+    Gemini only: its models read images, and its fallback model takes over when the main
+    one is out of its daily quota. Groq's gpt-oss models read text only.
+    """
+    if not settings.gemini_api_key:
+        raise MissingAPIKeyError(f"{_KEY_HELP['gemini']} and add it to .env.")
+    from docassist.ingest.vision import llm_reader
+    from docassist.llm.chat_completions import ChatCompletionsProvider, endpoint
+
+    models = [m for m in (settings.gemini_model, settings.gemini_fallback_model) if m]
+    endpoints, client = [], None
+    for model in models:
+        ep = endpoint("gemini", model, settings.gemini_api_key, max_tokens=8192, client=client)
+        client = ep.client
+        endpoints.append(ep)
+    return llm_reader(ChatCompletionsProvider("gemini", endpoints)), " / ".join(models)
 
 
 def build_llm(settings: Settings, provider: str | None = None) -> LLMProvider:

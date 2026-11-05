@@ -93,8 +93,89 @@ def test_upload_progress_lists_documents_being_read(client, monkeypatch):
     monkeypatch.setitem(loaders.PROGRESS, "scan.pdf", (23, 96))
 
     assert client.get("/documents/progress").json() == [
-        {"source": "scan.pdf", "done": 23, "total": 96}
+        {"source": "scan.pdf", "done": 23, "total": 96, "kind": "ocr"}
     ]
+
+
+# --- reading pictures with the AI model (ADR-029) ------------------------------------------
+
+
+def picture_pdf_bytes():
+    picture = pymupdf.open()
+    picture.new_page(width=200, height=100).insert_text((20, 50), "picture")
+    pdf = pymupdf.open()
+    pdf.new_page().insert_text((72, 72), "Cenovnik 2026")
+    pdf.new_page().insert_image(pdf[1].rect, pixmap=picture[0].get_pixmap(dpi=72))
+    return pdf.tobytes()
+
+
+def test_read_pictures_with_the_vision_model(settings, tmp_path, monkeypatch):
+    monkeypatch.setenv("OCR", "false")
+    seen = []
+
+    def vision_factory(_settings):
+        return (lambda png: seen.append(png) or "Ristretto | 1.099,00 RSD"), "fake-vision"
+
+    store = VectorStore(tmp_path / "index", FakeEmbedder())
+    app = create_app(
+        settings=replace(settings, gemini_api_key="g-key"),
+        store=store,
+        llm_factory=fake_llm,
+        vision_factory=vision_factory,
+    )
+    client = TestClient(app)
+    assert client.get("/api/config").json()["vision"] is True
+    client.post("/documents", files=[("files", ("cenovnik.pdf", picture_pdf_bytes()))])
+    doc = doc_id(client, "cenovnik.pdf")
+
+    body = client.post(f"/documents/{doc}/pictures").json()
+
+    assert body == {
+        "source": "cenovnik.pdf",
+        "pages_total": 1,
+        "pages_read": 1,
+        "chunks": 2,
+        "model": "fake-vision",
+        "error": None,
+    }
+    assert len(seen) == 1
+    assert client.get("/documents/progress").json() == []
+    assert client.post(f"/documents/{doc}/pictures").json()["pages_read"] == 1
+    assert len(seen) == 1  # already read: nothing is sent again
+
+
+def test_read_pictures_needs_a_gemini_key_and_is_off_in_the_demo(settings, tmp_path):
+    client = make_client(settings, tmp_path)
+    assert client.get("/api/config").json()["vision"] is False
+    upload(client, "faq.txt")
+    doc = doc_id(client, "faq.txt")
+
+    response = client.post(f"/documents/{doc}/pictures")
+    assert response.status_code == 400
+    assert "GEMINI_API_KEY" in response.json()["detail"]
+    assert client.post("/documents/nope/pictures").status_code == 404
+
+    demo = make_client(settings, tmp_path / "demo", allow_uploads=False, gemini_api_key="k")
+    assert demo.get("/api/config").json()["vision"] is False
+    assert demo.post(f"/documents/{doc}/pictures").status_code == 403
+
+
+def test_read_pictures_only_for_pdfs_and_images(settings, tmp_path):
+    def vision_factory(_settings):
+        return (lambda png: "x"), "fake-vision"
+
+    store = VectorStore(tmp_path / "index", FakeEmbedder())
+    client = TestClient(
+        create_app(
+            settings=settings, store=store, llm_factory=fake_llm, vision_factory=vision_factory
+        )
+    )
+    upload(client, "faq.txt")
+
+    response = client.post(f"/documents/{doc_id(client, 'faq.txt')}/pictures")
+
+    assert response.status_code == 400
+    assert "only PDFs and images" in response.json()["detail"]
 
 
 def test_delete_one_question_and_all_questions(client):
