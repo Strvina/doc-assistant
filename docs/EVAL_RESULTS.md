@@ -65,6 +65,20 @@ price list with bottle pictures) Tesseract still produces partial and noisy text
 ¹ The runs send 30 questions back to back and wait out Groq's per-minute token limit; a single
 question takes 1–3 s (agent: 3–7 s). The agent used ~3× the tokens of plain RAG (101k vs 35k in).
 
+**After the table rule** (prompt: short table cells, descriptions under the table), clean index,
+2026-11-05:
+
+| Run | Correct overall | Page cited | Fact recall | "Not found" correct | Wrong "not found" | Made-up citations | Latency avg / p95 | Cost |
+|---|---|---|---|---|---|---|---|---|
+| groq openai/gpt-oss-120b, RAG | **100 %** | 100 % | 100 % | 100 % | 0 % | 0 | 5.1 s / 11.0 s | free |
+| groq openai/gpt-oss-120b, agent | 90 % | 89 % | 93 % | 100 % | 4 % | 0 | 11.2 s / 23.4 s | free |
+
+None of the agent misses come from the new rule. Two questions (`qc-retention`, `qc-aql`) hit
+free-tier limits on both Groq (per minute) and the Gemini fallback (per day) and got no answer.
+`qc-insulation` was answered correctly, but with two sources in one bracket
+(`[quality_control_procedure.docx, str. 2; montageanleitung_pv400.pdf, str. 3]`), which the
+citation parser does not read yet.
+
 **Before** (fixed chunks, embeddings only; the index also held one unrelated uploaded document):
 
 `uv run python -m docassist.eval --provider groq`, 2026-11-04, local MiniLM embeddings, top-5.
