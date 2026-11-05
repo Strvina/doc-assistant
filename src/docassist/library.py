@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from docassist.ingest import (
     DocumentLoadError,
     UnsupportedFileTypeError,
     ingest,
+    vision,
 )
 from docassist.retrieval import DocumentInfo, VectorStore
 
@@ -163,5 +165,27 @@ class Library:
         doc = self.get(doc_id)
         removed = self.store.delete_document(doc_id)
         if doc is not None:
-            (self.files_dir / doc.source).unlink(missing_ok=True)
+            original = self.files_dir / doc.source
+            original.unlink(missing_ok=True)
+            vision.sidecar_path(original).unlink(missing_ok=True)
         return removed
+
+    def read_pictures(
+        self,
+        doc_id: str,
+        read_image: vision.ReadImage,
+        model: str,
+        on_done: Callable[[int, int], None] | None = None,
+    ) -> vision.VisionResult:
+        """Have a vision model read the picture pages of a document, then index it again with
+        that text (ADR-029). Pages read earlier are not sent again."""
+        found = self.original(doc_id)
+        if found is None:
+            raise vision.VisionError("Document or its original file not found")
+        _doc, path = found
+        result = vision.read_document(path, read_image, model, on_done)
+        if result.pages_read:
+            chunks = ingest(path)
+            self.store.delete_document(doc_id)
+            self.store.add_document(chunks)
+        return result

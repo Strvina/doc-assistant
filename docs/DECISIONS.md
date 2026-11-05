@@ -324,3 +324,25 @@ zagradu, pa je tačan odgovor izgledao kao da nema izvora.
 **Cena:** slike u slajdovima i listovima se ne čitaju (to je posao modela za slike). `.xls`, `.ppt`
 (stari binarni formati) nisu podržani. Veliki list daje mnogo delova (više tokena po redu zbog naziva
 kolona). Strana u citatu za Excel je redni broj lista ("str. 2" = drugi list).
+
+### ADR-029 · AI model za slike u dokumentima (na zahtev, po dokumentu)
+**Odluka:** dugme ✨ "Pročitaj slike AI modelom" kod PDF-a i slike → potvrda → `POST
+/documents/{id}/pictures`. Strane na kojima slike pokrivaju ≥ 10 % (isto pravilo kao za OCR) se
+renderuju (najviše 2000 px po dužoj strani) i šalju Gemini-ju, jedna po zahtevu (lanac
+`GEMINI_MODEL` → `GEMINI_FALLBACK_MODEL`; Groq-ovi gpt-oss ne čitaju slike). Prompt: prepiši sav
+tekst redom, tabele kao Markdown redove, proizvod sa cenom u jednom redu, brojevi tačno, "1099⁰⁰" =
+"1099,00", bez prevođenja i opisa slika. Tekst se čuva pored originala u `<fajl>.vision.json` (sha256
+fajla, strana → tekst) i loader ga koristi umesto OCR-a i teksta strane; dokument se ponovo indeksira.
+Pročitane strane se čuvaju jedna po jedna: kad se potroši besplatni limit, sledeći pokušaj nastavlja.
+U javnom demu (`ALLOW_UPLOADS=false`) i bez `GEMINI_API_KEY` dugme ne postoji.
+**Zašto:** Tesseract na Lavazza cenovniku daje "10990," umesto "1099,00", razdvaja naziv i cenu i
+pretvara latinicu u ćirilicu; Gemini Flash-Lite je na strani 4 pročitao svih 6 proizvoda sa tačnim
+cenama (~3,5 s, ~1.300 ulaznih tokena po strani). Na zahtev, a ne automatski: strane tada odlaze
+Google-u, a besplatni nivo ima mali dnevni limit (glavni model ~20 zahteva). Čuvanje teksta pored
+originala znači da `index --rebuild` ne troši limit ponovo, a izmenjen fajl istog imena ne dobija
+stari tekst.
+**Cena:** za strane koje je pročitao model pregled otvara pravu stranu, ali citirani pasus se obično
+ne označava (označavanje traži položaj teksta na strani, a model ga ne daje). Google-ovi uslovi za
+besplatni nivo mogu dozvoliti korišćenje sadržaja — za prave dokumente plaćeni nivo ili Claude
+(kad bude kredita, isti `read_image` interfejs). Sken od 96 strana = 96 zahteva: za skenove je
+Tesseract i dalje pravi izbor.

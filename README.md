@@ -22,7 +22,7 @@ When the answer is not in the documents, it says so instead of guessing.
 | **Highlighted originals** | Sources open in a built-in viewer: PDFs on the right page with the cited blocks highlighted, Word, Excel (one page per worksheet), PowerPoint (one page per slide, with notes) and text documents rendered as pages with the passage or table row marked. Every document can be viewed whole or downloaded. |
 | **Agent with tools** | Native Claude tool use, no framework: search, read a whole document, escalate an unanswered question to a person (n8n → e-mail), draft a leave request. |
 | **Measured, monitored** | 30-question evaluation set and runner; every answer logged with latency, tokens, cost and 👍/👎; a dashboard lists the **gaps in the documentation** (questions the documents could not answer). |
-| **Reads scans and images** | Scanned PDFs, screenshots pasted into PDFs and uploaded photos (PNG/JPG/TIFF) are read with local OCR (Tesseract; Serbian Latin and Cyrillic, German, English). The viewer highlights the cited passage on the scan too — measured: 100 % correct answers with the demo PDFs replaced by image-only scans. |
+| **Reads scans and images** | Scanned PDFs, screenshots pasted into PDFs and uploaded photos (PNG/JPG/TIFF) are read with local OCR (Tesseract; Serbian Latin and Cyrillic, German, English). The viewer highlights the cited passage on the scan too — measured: 100 % correct answers with the demo PDFs replaced by image-only scans. For photos and price lists that OCR misreads, a document's picture pages can be read by an AI vision model (Gemini) on request — the UI asks first, because those pages then leave the server. |
 | **Answers as they are written** | The answer streams in word by word (first text in about 1.5 s with Groq), already formatted — lists, tables, headings — and the full card with clickable sources replaces it when it is complete. |
 | **Saved conversations** | Every question is saved in a conversation you can reopen (answers shown exactly as they were) search (ignoring case and diacritics), rename, download as **PDF or Word** (questions, answers, tables and cited passages) or delete; a question can be stopped while it is being answered and comes back into the input to be corrected. Conversations belong to the browser session — visitors of the public demo never see each other's. |
 | **Privacy-minded** | Documents are indexed locally; only the question and a few retrieved passages go to the model. Demo mode with upload lock and per-session / per-IP limits. |
@@ -149,13 +149,16 @@ Generated from `scripts/sample_docs_src/` by `uv run python scripts/build_sample
   drafts stay on the server running the app (`data/`, or Docker volumes). None of it is in git.
 - **What leaves the server:** only the question and the few retrieved passages (plus tool results in
   agent mode) go to the Claude API. Documents are not sent anywhere for indexing — embeddings are
-  computed by a local model.
+  computed by a local model. Exception, only when a user asks for it per document: "read pictures
+  with the AI model" sends that document's picture pages to Google Gemini (ADR-029); it is off in
+  the public demo.
 - **Model training:** under Anthropic's commercial API terms, inputs and outputs are not used for
   training by default; check the current terms and retention policy before production use.
   The public demo runs on **free tiers (Groq, Gemini)**; their terms may allow using content to
   improve their services — fine for the fictional demo documents, not for real company documents
   (ADR-021, ADR-022).
-- **Deleting data:** deleting a document (UI, API or CLI) removes its chunks and the stored original.
+- **Deleting data:** deleting a document (UI, API or CLI) removes its chunks, the stored original
+  and the text an AI model read from its pictures.
   Deleting a conversation removes it and its answers from the server. The query log (with the
   saved conversations) is one SQLite file: delete it, or rows older than your retention period.
 - **Access:** no user accounts yet (out of scope) — run it on an internal network, or set

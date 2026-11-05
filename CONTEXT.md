@@ -91,14 +91,24 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
      sa označenim redom/pasusom; citati za bilo koju ekstenziju i više izvora u jednoj zagradi
      (`docassist/citations.py` + isti parser u `app.js`); nova demo dokumenta `rezervni_delovi.xlsx`
      i `pv400_sales_training.pptx`, eval 34 pitanja: RAG 100 %.
-   - [ ] **Sledeće:** AI model za fotografije/tabele u slikama (Gemini vision), uključivo po dokumentu
-     jer slike tada odlaze Google-u.
+   - [x] AI model za slike (#26, ADR-029): dugme ✨ kod PDF-a/slike → potvrda → Gemini čita strane sa
+     slikama, tekst u `<fajl>.vision.json` pored originala, dokument se ponovo indeksira. Provereno uživo
+     na Lavazza str. 4 (Flash-Lite: svih 6 cena tačno, "1099,00") i u browseru sa lažnim modelom.
+     **Korisnik treba sam da klikne ✨ na Lavazza cenovniku** (12 strana = 12 zahteva; glavni Gemini
+     model ~20/dan, Flash-Lite preuzima kad se potroši).
+   - Sve 5 (+ ispravke) urađeno. Sledeći predlozi: Claude eval kad bude kredita; označavanje citata na
+     stranama koje je pročitao model (traži položaj teksta).
 2. Eval uvek na čistom indeksu (samo demo dokumenti): `INDEX_DIR`/`DOCUMENTS_DIR`/`LOG_DB` u privremeni folder.
 3. Treniranje modela: korisnik je odložio (opcija A = dotreniranje embeddings modela, kad se vrati na to).
 4. Claude eval (6.3) kad bude moguće platiti kredit.
 
 ## Napomene za sledeću sesiju
 
+- Strane koje je pročitao AI model (ADR-029) dolaze iz `<original>.vision.json` (proverava sha256
+  fajla); loader ih koristi umesto OCR-a, pa `--rebuild` ne troši Gemini limit. Brisanje dokumenta
+  briše i taj fajl.
+- XLSX: strana = list; PPTX: strana = slajd, naslov prezentacije na vrhu svakog slajda (ADR-028).
+  Citati: `docassist/citations.py` i `CITE_PART` u `app.js` — menjati zajedno.
 - `Page.page_no` je pozicija u originalu; prazne strane se preskaču bez pomeranja numeracije.
 - DOCX "strane" su delovi između eksplicitnih preloma strane (ADR-010); demo DOCX-ovi ih imaju.
 - PDF se čita po blokovima (`pdf_page_blocks`) — iste blokove koristi viewer za highlight (ADR-012).
@@ -160,3 +170,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-04 | Ispravke: izvoz kroz `fetch` sa porukom o grešci, kraće tabele (pravilo za model + prikaz), analiza OCR-a Lavazza cenovnika | #24 |
 | 2026-11-05 | Provera izvoza u browseru, eval sa novim pravilom za tabele (RAG 100 %, agent 90 % — limiti i citat sa `;`), restart servera | #24 |
 | 2026-11-05 | Excel i PowerPoint dokumenti, citati sa više izvora u zagradi; eval 34 pitanja, RAG 100 %; ADR-028 | #25 |
+| 2026-11-05 | AI model (Gemini) čita slike u dokumentu na zahtev; tekst se čuva pored originala; ADR-029 | #26 |

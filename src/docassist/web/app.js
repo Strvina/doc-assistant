@@ -25,6 +25,7 @@ const ICONS = {
   download: icon('<path d="M12 4v12M7 11l5 5 5-5M4 20h16"/>'),
   close: icon('<path d="M6 6l12 12M18 6L6 18"/>'),
   pencil: icon('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>'),
+  sparkle: icon('<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>'),
   trash: icon('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>'),
   copy: icon('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>'),
   up: icon('<path d="M7 10v10H4V10zM7 10l4-7c1.7 0 2.5 1 2.2 2.6L12.6 9H19a2 2 0 0 1 2 2.3l-1.2 7A2 2 0 0 1 17.8 20H7"/>'),
@@ -139,6 +140,15 @@ function updateModelDot() {
 // --- library ----------------------------------------------------------------------------
 
 const ext = (name) => (name.split(".").pop() || "").toLowerCase();
+// Documents whose pages can hold pictures: PDFs and images (ADR-029).
+const PICTURE_TYPES = new Set(["pdf", "png", "jpg", "jpeg", "tif", "tiff", "bmp"]);
+
+// Progress of documents being read: OCR during upload, or the AI model on request.
+function progressText(running) {
+  return running
+    .map((p) => `${p.kind === "vision" ? "AI model čita slike" : "Čitam skenirane strane (OCR)"}: ${p.source} — ${p.done} / ${p.total}`)
+    .join(" · ");
+}
 
 async function loadDocuments() {
   state.documents = await api("/documents");
@@ -158,6 +168,9 @@ function renderDocuments() {
           onclick: (e) => { e.stopPropagation(); openViewer({ docId: doc.doc_id, source: doc.source }); } }),
         el("a", { class: "icon-btn", title: "Preuzmi original", "aria-label": `Preuzmi ${doc.source}`, html: ICONS.download,
           href: `/documents/${doc.doc_id}/file`, onclick: (e) => e.stopPropagation() }),
+        state.config.vision && PICTURE_TYPES.has(ext(doc.source)) && el("button", { class: "icon-btn", title: "Pročitaj slike AI modelom",
+          "aria-label": `Pročitaj slike u ${doc.source} AI modelom`, html: ICONS.sparkle,
+          onclick: (e) => { e.stopPropagation(); readPictures(doc); } }),
         state.config.allow_uploads && el("button", { class: "icon-btn danger", title: "Obriši", "aria-label": `Obriši ${doc.source}`, html: ICONS.trash,
           onclick: (e) => { e.stopPropagation(); deleteDocument(doc); } }),
       );
@@ -197,6 +210,36 @@ async function deleteDocument(doc) {
   }
 }
 
+// Pictures leave the server (Google Gemini), so this is asked for, per document, every time.
+async function readPictures(doc) {
+  const question = `Strane sa slikama iz „${doc.source}“ biće poslate Google-u (Gemini), da ih AI model pročita ` +
+    "bolje od OCR-a (fotografije, cenovnici, tabele u slikama). Besplatni nivo dozvoljava oko 20 strana dnevno; " +
+    "već pročitane strane se ne šalju ponovo. Nastaviti?";
+  if (!confirm(question)) return;
+  const status = el("div", { class: "toast info progress", role: "status" }, `AI model čita slike: ${doc.source}…`);
+  $("#toasts").append(status);
+  const poll = setInterval(async () => {
+    try {
+      const running = (await api("/documents/progress")).filter((p) => p.source === doc.source);
+      if (running.length) status.textContent = progressText(running);
+    } catch {}
+  }, 1000);
+  try {
+    const r = await api(`/documents/${doc.doc_id}/pictures`, { method: "POST" });
+    if (r.pages_total === 0) toast(`${r.source}: nema strana sa slikama.`);
+    else if (r.error) toast(`${r.source}: AI model je pročitao ${r.pages_read} od ${r.pages_total} strana sa slikama. ` +
+      `Ostalo kasnije — ${r.error}`, "error");
+    else toast(`${r.source}: AI model je pročitao ${r.pages_read} ${r.pages_read === 1 ? "stranu" : "strana"} sa slikama (${r.chunks} pasusa).`);
+  } catch (error) {
+    toast(`Čitanje slika nije uspelo: ${error.message}`, "error");
+  } finally {
+    clearInterval(poll);
+    status.remove();
+  }
+  await loadDocuments();
+  if (state.viewing === doc.doc_id) openViewer({ docId: doc.doc_id, source: doc.source });
+}
+
 async function uploadFiles(files) {
   if (!files.length) return;
   const form = new FormData();
@@ -208,11 +251,7 @@ async function uploadFiles(files) {
   const poll = setInterval(async () => {
     try {
       const running = await api("/documents/progress");
-      if (running.length) {
-        status.textContent = running
-          .map((p) => `Čitam skenirane strane (OCR): ${p.source} — ${p.done} / ${p.total}`)
-          .join(" · ");
-      }
+      if (running.length) status.textContent = progressText(running);
     } catch {}
   }, 1000);
   try {
