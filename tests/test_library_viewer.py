@@ -53,7 +53,7 @@ def test_failed_upload_leaves_no_file(library):
     with pytest.raises(DocumentLoadError):
         library.add_bytes("broken.pdf", b"not a pdf")
     with pytest.raises(UnsupportedFileTypeError):
-        library.add_bytes("tabela.xlsx", b"x")
+        library.add_bytes("tabela.xls", b"x")
     with pytest.raises(DocumentLoadError, match="no text"):
         library.add_bytes("prazan.txt", b"   ")
 
@@ -84,7 +84,9 @@ def test_language_of_sample_documents(library):
         "faq.txt": "sr",
         "montageanleitung_pv400.pdf": "de",
         "pravilnik_o_radu.pdf": "sr",
+        "pv400_sales_training.pptx": "en",
         "quality_control_procedure.docx": "en",
+        "rezervni_delovi.xlsx": "sr",
     }
 
 
@@ -169,3 +171,27 @@ def test_docx_page_break_before_matches_loader(tmp_path):
 
     assert html.count('class="sheet"') == 2
     assert '<p class="cited">Druga strana.</p>' in html
+
+
+def test_xlsx_html_one_sheet_per_page_marks_cited_row():
+    passage = "Šifra: PV-400-MR | Naziv: Montažni okvir za duple podove | Cena (RSD): 23900"
+
+    html = render_html(SAMPLE_DOCS / "rezervni_delovi.xlsx", 2, passage)
+
+    assert html.count('class="sheet"') == 3
+    assert "<h1>Delovi ormana</h1>" in html
+    assert '<tr class="cited"><td>PV-400-MR</td>' in html
+    assert html.count('<tr class="cited">') == 1
+
+
+def test_pptx_html_one_slide_per_page_with_notes():
+    html = render_html(
+        SAMPLE_DOCS / "pv400_sales_training.pptx",
+        3,
+        "Do not promise discounts above 8 % without approval from the sales director.",
+    )
+
+    assert html.count('class="sheet"') == 4
+    assert "<h1>Warranty and service</h1>" in html
+    assert '<p class="notes cited">Do not promise discounts above 8 %' in html
+    assert "<td>PV-400-M</td>" in html  # the variants table on slide 2

@@ -71,6 +71,7 @@ def test_config(client):
     assert body["providers"][0]["available"] is False
     assert body["default_provider"] == "fake"
     assert body["allow_uploads"] is True
+    assert {".pdf", ".docx", ".xlsx", ".pptx", ".png"} <= set(body["extensions"])
 
 
 def test_config_lists_gemini_when_key_is_set(settings, tmp_path):
@@ -165,7 +166,7 @@ def test_upload_list_delete(client, tmp_path):
 def test_upload_rejects_unsupported_broken_and_large_files(settings, tmp_path):
     client = make_client(settings, tmp_path, max_upload_mb=1)
     files = [
-        ("files", ("a.xlsx", b"x")),
+        ("files", ("a.xls", b"x")),
         ("files", ("b.pdf", b"not a pdf")),
         ("files", ("c.txt", b"a" * (1024 * 1024 + 1))),
     ]
@@ -182,7 +183,7 @@ def test_load_demo_documents(client):
     results = client.post("/documents/demo").json()
 
     assert {r["source"] for r in results} == {p.name for p in SAMPLE_DOCS.iterdir()}
-    assert len(client.get("/documents").json()) == 5
+    assert len(client.get("/documents").json()) == 7
 
 
 def test_view_pdf_with_highlight_and_download(client):
@@ -358,7 +359,7 @@ def test_public_demo_mode(settings, tmp_path):
     client = make_client(settings, tmp_path, allow_uploads=False)
 
     # Demo documents are indexed on first use; changing the library is forbidden.
-    assert len(client.get("/documents").json()) == 5
+    assert len(client.get("/documents").json()) == 7
     assert upload(client, "faq.txt").status_code == 403
     assert client.post("/documents/demo").status_code == 403
     doc = client.get("/documents").json()[0]["doc_id"]

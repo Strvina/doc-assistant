@@ -19,7 +19,7 @@ When the answer is not in the documents, it says so instead of guessing.
 |---|---|
 | **Cross-language search** | A Serbian question finds the answer in a German installation manual. Hybrid search: a local multilingual embedding model plus BM25 keywords for exact words and codes; chunks follow document sections, so a table stays with its heading — measured: every key fact reaches the model for **27/27** evaluation questions. |
 | **Verifiable citations** | Every claim cites `[document, page]`. Citations are checked against the passages the model actually received; a made-up source is flagged in the UI. |
-| **Highlighted originals** | Sources open in a built-in viewer: PDFs on the right page with the cited blocks highlighted, Word/text documents rendered as pages with the passage marked. Every document can be viewed whole or downloaded. |
+| **Highlighted originals** | Sources open in a built-in viewer: PDFs on the right page with the cited blocks highlighted, Word, Excel (one page per worksheet), PowerPoint (one page per slide, with notes) and text documents rendered as pages with the passage or table row marked. Every document can be viewed whole or downloaded. |
 | **Agent with tools** | Native Claude tool use, no framework: search, read a whole document, escalate an unanswered question to a person (n8n → e-mail), draft a leave request. |
 | **Measured, monitored** | 30-question evaluation set and runner; every answer logged with latency, tokens, cost and 👍/👎; a dashboard lists the **gaps in the documentation** (questions the documents could not answer). |
 | **Reads scans and images** | Scanned PDFs, screenshots pasted into PDFs and uploaded photos (PNG/JPG/TIFF) are read with local OCR (Tesseract; Serbian Latin and Cyrillic, German, English). The viewer highlights the cited passage on the scan too — measured: 100 % correct answers with the demo PDFs replaced by image-only scans. |
@@ -34,7 +34,7 @@ When the answer is not in the documents, it says so instead of guessing.
 ```mermaid
 flowchart LR
     subgraph ingest[Indexing — on the server]
-        F[PDF / DOCX / TXT] --> L[Loaders<br/>keep page numbers] --> C[Chunker<br/>500 chars, per page]
+        F[PDF / DOCX / XLSX / PPTX / TXT] --> L[Loaders<br/>keep page numbers] --> C[Chunker<br/>500 chars, per page]
         C --> E[Multilingual embeddings<br/>local ONNX model] --> V[(ChromaDB)]
         F --> O[(Original files<br/>for the viewer)]
     end
@@ -100,8 +100,8 @@ uv run python -m docassist.eval                    # full answers: citations, fa
 uv run python -m docassist.eval --agent            # the same questions through the agent
 ```
 
-[`eval/questions.yaml`](eval/questions.yaml): 30 questions in three languages, including
-cross-language questions and questions the documents cannot answer. Metrics: page and document
+[`eval/questions.yaml`](eval/questions.yaml): 34 questions in three languages, including
+cross-language questions, Excel and PowerPoint (speaker notes) and questions the documents cannot answer. Metrics: page and document
 citation accuracy, key-fact recall, correct "not found", made-up citations, latency, tokens, cost.
 
 | Retrieval (27 answerable questions) | right page in top 5 | on top |
@@ -114,6 +114,7 @@ citation accuracy, key-fact recall, correct "not found", made-up citations, late
 |---|---|---|
 | embeddings only, fixed chunks | 93 % | 0 |
 | **hybrid search + section chunks** (ADR-023) | **100 %** | **0** |
+| same, 34 questions with Excel and PowerPoint (ADR-028) | **100 %** | **0** |
 
 A small set written by the author, so treat these numbers as a sanity check, not a benchmark.
 Details, the agent run and what did not work (rank fusion): [docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md).
@@ -137,6 +138,8 @@ Panelvolt d.o.o. (all people, phone numbers and `*.example` addresses are made u
 | `quality_control_procedure.docx` | English | Quality control procedure and routine tests |
 | `bezbednost_na_radu.docx` | Serbian | Occupational health and safety rules |
 | `faq.txt` | Serbian | Employee FAQ |
+| `rezervni_delovi.xlsx` | Serbian | Spare parts price list (one worksheet per category) |
+| `pv400_sales_training.pptx` | English | Sales training slides for the PV-400, with speaker notes |
 
 Generated from `scripts/sample_docs_src/` by `uv run python scripts/build_sample_docs.py`.
 

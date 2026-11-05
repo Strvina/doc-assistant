@@ -2,22 +2,15 @@
 
 from __future__ import annotations
 
-import re
 import time
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 
+from docassist.citations import find_citations
 from docassist.llm import NOT_FOUND_SR, SYSTEM_PROMPT, LLMProvider, Message, build_user_message
 from docassist.llm.base import ToolCall, stream_complete
 from docassist.models import Chunk
 from docassist.retrieval import SearchResult, VectorStore, retrieve
-
-# [pravilnik_o_radu.pdf, str. 2] — also tolerate "p." / "S." / "page" in case the model translates.
-_CITATION = re.compile(
-    r"\[\s*(?P<source>[^\[\],]+?\.(?:pdf|docx|txt|md))\s*,\s*"
-    r"(?:str\.?|p\.|pp\.|page|s\.|seite)\s*(?P<page>\d+)\s*\]",
-    re.IGNORECASE,
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,14 +161,14 @@ def extract_citations(
     citations: list[Citation] = []
     invalid: list[str] = []
     seen: set[tuple[str, int]] = set()
-    for match in _CITATION.finditer(text):
-        key = (match["source"].strip().lower(), int(match["page"]))
+    for ref in find_citations(text):
+        key = (ref.source.lower(), ref.page)
         if key in seen:
             continue
         seen.add(key)
         chunks = by_page.get(key)
         if chunks is None:
-            invalid.append(match.group(0))
+            invalid.append(ref.text)
         else:
             citations.append(Citation(chunks[0].source, key[1], tuple(chunks)))
     return citations, invalid

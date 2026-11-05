@@ -38,7 +38,7 @@ from docassist.factory import (
     build_tool_context,
 )
 from docassist.ingest import DocumentLoadError
-from docassist.ingest.loaders import IMAGE_EXTENSIONS, PROGRESS
+from docassist.ingest.loaders import IMAGE_EXTENSIONS, PROGRESS, SUPPORTED_EXTENSIONS
 from docassist.library import Library
 from docassist.llm import LLMError, LLMProvider
 from docassist.logs import QueryLog
@@ -327,6 +327,7 @@ def create_app(
             },
             "allow_uploads": settings.allow_uploads,
             "max_upload_mb": settings.max_upload_mb,
+            "extensions": list(SUPPORTED_EXTENSIONS),
             "max_questions_per_session": settings.max_questions_per_session,
             "top_k": settings.top_k,
             "embedding_model": settings.embedding_model,

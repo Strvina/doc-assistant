@@ -79,6 +79,11 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 - [x] OCR za skenirane PDF-ove i tekst na slikama, upload slika (ADR-024)
 - [ ] Opcioni AI model za fotografije i tabele u slikama
 
+## Dodatno — formati
+
+- [x] Excel (`.xlsx`, list = strana) i PowerPoint (`.pptx`, slajd = strana, sa beleškama); citati za
+      bilo koju ekstenziju i više izvora u jednoj zagradi (ADR-028)
+
 ## Dodatno — razgovori
 
 - [x] Sačuvani razgovori: lista, otvaranje, brisanje (ADR-025)

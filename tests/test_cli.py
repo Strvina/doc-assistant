@@ -28,7 +28,7 @@ def _from_env_without_dotenv(load_dotenv_file: bool = True):
 def test_index_search_docs_delete(offline_env, capsys):
     assert cli.main(["index", str(SAMPLE_DOCS)]) == 0
     out = capsys.readouterr().out
-    assert "Index: 5 documents" in out
+    assert "Index: 7 documents" in out
 
     assert cli.main(["index", str(SAMPLE_DOCS / "faq.txt")]) == 0
     assert "unchanged" in capsys.readouterr().out
@@ -40,7 +40,7 @@ def test_index_search_docs_delete(offline_env, capsys):
 
     assert cli.main(["docs"]) == 0
     lines = capsys.readouterr().out.strip().splitlines()
-    assert len(lines) == 5
+    assert len(lines) == 7
     faq_id = next(line.split()[0] for line in lines if line.endswith("faq.txt"))
 
     assert cli.main(["delete", faq_id]) == 0

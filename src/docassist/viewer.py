@@ -2,8 +2,9 @@
 
 - PDF: the original file with highlight annotations on the text blocks of the cited passage;
   the browser's PDF viewer opens it (the UI adds ``#page=N``).
-- DOCX / TXT / MD: an HTML page that looks like paper sheets, one per document page, with
-  headings, lists and tables preserved and the cited paragraphs marked.
+- DOCX / XLSX / PPTX / TXT / MD: an HTML page that looks like paper sheets, one per document
+  page (worksheet, slide), with headings, lists and tables preserved and the cited paragraphs
+  or table rows marked.
 """
 
 from __future__ import annotations
@@ -17,16 +18,19 @@ import docx
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 
-from docassist.ingest.loaders import open_pdf, pdf_page_blocks
+from docassist.ingest.loaders import open_pdf, pdf_page_blocks, pptx_slides, xlsx_sheets
 
 HIGHLIGHT_COLOR = (1.0, 0.82, 0.25)  # amber, same accent as the web UI
 
 
 @dataclass(frozen=True)
 class Block:
-    kind: str  # title | h1 | h2 | h3 | p | li | table
+    kind: str  # title | h1 | h2 | h3 | p | li | table | notes
     text: str = ""
     rows: tuple[tuple[str, ...], ...] = ()
+    # How each table row reads in the index, when that differs from "a | b | c" (XLSX rows
+    # name their columns); used to find the cited rows.
+    row_text: tuple[str, ...] = ()
 
     @property
     def plain(self) -> str:
@@ -133,6 +137,28 @@ def _docx_paragraph(paragraph: Paragraph, pages: list[list[Block]]) -> None:
         pages[-1].append(Block(kind, text))
 
 
+def xlsx_pages(path: Path) -> list[list[Block]]:
+    pages = []
+    for sheet in xlsx_sheets(path):
+        rows = tuple(sheet.rows)
+        width = max((len(row) for row in rows), default=0)
+        rows = tuple(row + ("",) * (width - len(row)) for row in rows)
+        texts = tuple(sheet.row_text(i) for i in range(len(rows)))
+        blocks = [Block("h1", sheet.name)]
+        if rows:
+            blocks.append(Block("table", rows=rows, row_text=texts))
+        pages.append(blocks)
+    return pages
+
+
+def pptx_pages(path: Path) -> list[list[Block]]:
+    kinds = {"title": "h1", "p": "p", "table": "table", "notes": "notes"}
+    return [
+        [Block(kinds[item.kind], item.text, item.rows) for item in items]
+        for items in pptx_slides(path)
+    ]
+
+
 def text_pages(path: Path) -> list[list[Block]]:
     raw = path.read_bytes()
     try:
@@ -184,6 +210,12 @@ tr:first-child td { background:#f5f7fa; font-weight:600; }
          box-shadow:0 0 0 3px var(--mark); }
 tr.cited td { background:var(--mark); }
 .empty { color:var(--muted); font-style:italic; }
+.notes { margin-top:18px; padding:10px 14px; border-left:3px solid var(--line);
+         color:var(--muted); font-size:14px; }
+.notes.cited { color:var(--ink); }
+.notes::before { content:"Beleške"; display:block; font-weight:600; font-size:12px;
+                 text-transform:uppercase; letter-spacing:.06em; }
+.table-scroll { overflow-x:auto; }
 @media (max-width:700px) { .sheet { margin:10px; padding:40px 22px 28px; } }
 """
 
@@ -236,12 +268,15 @@ def _render_blocks(blocks: list[Block], passage: str | None) -> str:
             out.append(f"<li{cls}>{text}</li>")
         elif block.kind == "table":
             rows = []
-            for row in block.rows:
-                row_cited = bool(passage) and is_cited(" | ".join(row), passage or "")
+            for i, row in enumerate(block.rows):
+                match = block.row_text[i] if i < len(block.row_text) else " | ".join(row)
+                row_cited = bool(passage) and is_cited(match, passage or "")
                 row_cls = ' class="cited"' if row_cited else ""
                 cells = "".join(f"<td>{html.escape(cell)}</td>" for cell in row)
                 rows.append(f"<tr{row_cls}>{cells}</tr>")
-            out.append(f"<table>{''.join(rows)}</table>")
+            out.append(f'<div class="table-scroll"><table>{"".join(rows)}</table></div>')
+        elif block.kind == "notes":
+            out.append(f'<p class="notes{" cited" if cited else ""}">{text}</p>')
         else:
             out.append(f"<p{cls}>{text}</p>")
     if in_list:
@@ -250,6 +285,6 @@ def _render_blocks(blocks: list[Block], passage: str | None) -> str:
 
 
 def render_html(path: Path, page_no: int | None, passage: str | None) -> str:
-    suffix = path.suffix.lower()
-    pages = docx_pages(path) if suffix == ".docx" else text_pages(path)
+    readers = {".docx": docx_pages, ".xlsx": xlsx_pages, ".pptx": pptx_pages}
+    pages = readers.get(path.suffix.lower(), text_pages)(path)
     return blocks_to_html(path.name, pages, page_no, passage)

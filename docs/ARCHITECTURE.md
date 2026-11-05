@@ -46,7 +46,7 @@ src/docassist/
   api.py              # FastAPI: web UI, API, sesije i limiti, viewer endpoint-i
   cli.py              # index / search / ask / docs / delete
   web/                # index.html, app.css, app.js, logo.svg (bez build koraka)
-eval/questions.yaml   # 30 pitanja za evaluaciju
+eval/questions.yaml   # 34 pitanja za evaluaciju
 automations/          # n8n workflow + SMTP kredencijal za Mailpit
 scripts/              # build_sample_docs.py, setup_n8n.py
 deploy/               # README za Hugging Face Space
