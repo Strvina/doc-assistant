@@ -121,6 +121,26 @@ def inline_runs(text: str) -> list[tuple[str, str]]:
 
 # --- shared content ----------------------------------------------------------------------
 
+CITE_LABEL = 24  # characters of a file name in a citation inside a table (like the web UI)
+_CITATION = re.compile(
+    r"\[\s*(?P<source>[^\[\],]+?)\.[A-Za-z0-9]{2,5}\s*,\s*"
+    r"(?:str\.?|p\.|pp\.|page|s\.|seite)\s*(?P<page>\d+)\s*\]",
+    re.IGNORECASE,
+)
+
+
+def short_citations(text: str) -> str:
+    """ "[Lavazza Belgrade Training Center Cenovnik.pdf, str. 6]" -> "[Lavazza Belgrade Trai…,
+    str. 6]": full names are listed under "Izvori", a table column stays narrow."""
+
+    def shorten(match: re.Match[str]) -> str:
+        name = match["source"].strip()
+        if len(name) > CITE_LABEL:
+            name = name[: CITE_LABEL - 1].rstrip() + "…"
+        return f"[{name}, str. {match['page']}]"
+
+    return _CITATION.sub(shorten, text)
+
 
 def _date(iso: str) -> str:
     """Stored times are UTC; the file shows the server's local time."""
@@ -217,7 +237,7 @@ def to_docx(conversation: dict[str, Any]) -> bytes:
                 for r, row in enumerate(rows):
                     for c, cell in enumerate(row):
                         paragraph = table.cell(r, c).paragraphs[0]
-                        _add_runs(paragraph, cell)
+                        _add_runs(paragraph, short_citations(cell))
                         if block.head and r == 0:
                             for run in paragraph.runs:
                                 run.bold = True
@@ -279,7 +299,11 @@ def _block_html(block: Block) -> str:
 
     def row(cells: list[str], tag: str) -> str:
         padded = cells + [""] * (block.width - len(cells))
-        return "<tr>" + "".join(f"<{tag}>{_inline_html(c)}</{tag}>" for c in padded) + "</tr>"
+        return (
+            "<tr>"
+            + "".join(f"<{tag}>{_inline_html(short_citations(c))}</{tag}>" for c in padded)
+            + "</tr>"
+        )
 
     head = f"<thead>{row(block.head, 'th')}</thead>" if block.head else ""
     return f"<table>{head}<tbody>{''.join(row(r, 'td') for r in block.rows)}</tbody></table>"

@@ -69,9 +69,28 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
    - [x] Odgovor se ispisuje dok nastaje (#21).
    - [x] Pretraga i preimenovanje razgovora (#22), provereno u browseru (Playwright).
    - [x] Izvoz razgovora u PDF i Word (#23), provereno u browseru.
+   - [x] **Ispravke posle korisnikovog testa (#24):**
+     - "export.json" pri izvozu: uzrok je server na :8000 pokrenut pre #23 bez `--reload` (ruta ne
+       postoji → 404 JSON). Server je restartovan (sa `--reload`). UI sada preuzima kroz `fetch` i
+       pokazuje poruku (404 → "restartuj server") umesto da snimi grešku kao fajl.
+     - Tabele u odgovoru: pravilo za model `TABLE_RULE` (`llm/prompts.py`, i u agentu) — kratke
+       ćelije, opisi ispod tabele; UI: skraćen naziv izvora u čipu (24 znaka, u tabeli 16, ceo u
+       tooltip-u), kolone sa brojevima desno i u jednom redu (`td.num`), tekst kolone min 10em.
+       Izvoz (PDF/Word) takođe skraćuje izvore u tabelama (`export.short_citations`).
+     - Provereno u browseru (pravi server, fake model): tabela; izvoz PDF preuzima fajl sa imenom
+       razgovora; 404 → poruka, bez preuzimanja. Eval sa Groq-om na čistom indeksu (2026-11-05):
+       RAG **100 %**; agent 90 % — 2 pitanja palo na limitu (Groq minutni + Gemini dnevni), 1 tačan
+       odgovor sa dva izvora u jednoj zagradi `[a.docx, str. 2; b.pdf, str. 3]` koji parser ne čita.
+     - **OCR (Lavazza cenovnik, str. 4/10):** Tesseract je na granici — 27 kombinacija (dpi 200/300/400,
+       jezici, psm 3/11/12) bez primetnog poboljšanja. Cene sa malim decimalama ("1099⁰⁰") ispadaju
+       kao "10990,", ćirilica (`srp`) pretvara latinicu u ćirilicu ("Модка"), naziv i cena iz iste
+       kartice se razdvoje. Pravo rešenje = stavka "AI model za slike" ispod → predložiti da ide pre
+       Excel/PowerPoint.
    - [ ] Excel (`.xlsx`) i PowerPoint (`.pptx`) dokumenti (`uv add openpyxl python-pptx`) + **ispravka:**
      citati iz slika/novih formata se ne prepoznaju (`rag._CITATION` i `CITATION` u `app.js` znaju samo
-     pdf|docx|txt|md) → izvesti listu ekstenzija iz `SUPPORTED_EXTENSIONS`.
+     pdf|docx|txt|md) → izvesti listu ekstenzija iz `SUPPORTED_EXTENSIONS`. **Isto mesto:** više izvora
+     u jednoj zagradi odvojenih `;` (`[a.docx, str. 2; b.pdf, str. 3]`) se ne prepoznaje — gpt-oss to
+     ponekad radi (eval agenta, `qc-insulation`); i `export` parsira citate.
    - [ ] AI model za fotografije/tabele u slikama (Gemini vision), uključivo po dokumentu jer slike
      tada odlaze Google-u.
 2. Eval uvek na čistom indeksu (samo demo dokumenti): `INDEX_DIR`/`DOCUMENTS_DIR`/`LOG_DB` u privremeni folder.
@@ -138,3 +157,5 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-04 | Odgovor se ispisuje dok nastaje (`/ask/stream`, NDJSON); Stop prekida i generisanje; ADR-026 | #21 |
 | 2026-11-04 | Pretraga (bez kvačica) i preimenovanje razgovora; provereno u browseru (ispravljeno: korpa je prekrivala olovku) | #22 |
 | 2026-11-04 | Izvoz razgovora u PDF i Word (pitanja, odgovori sa tabelama, izvori); ADR-027 | #23 |
+| 2026-11-04 | Ispravke: izvoz kroz `fetch` sa porukom o grešci, kraće tabele (pravilo za model + prikaz), analiza OCR-a Lavazza cenovnika | #24 |
+| 2026-11-05 | Provera izvoza u browseru, eval sa novim pravilom za tabele (RAG 100 %, agent 90 % — limiti i citat sa `;`), restart servera | #24 |

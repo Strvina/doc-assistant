@@ -48,6 +48,9 @@ const TOOL_LABELS = {
 };
 const CITATION = /\[\s*([^\[\],]+?\.(?:pdf|docx|txt|md|png|jpe?g|tiff?|bmp))\s*,\s*(?:str\.?|p\.|pp\.|page|s\.|seite)\s*(\d+)\s*\]/gi;
 
+const CITE_LABEL = 24;  // characters of a file name shown in a citation chip
+const CITE_LABEL_TABLE = 16;  // … and inside a table cell
+
 const state = {
   config: null,
   documents: [],
@@ -277,25 +280,31 @@ function renderExamples() {
 function renderAnswerText(text, citations, invalid, streaming = false) {
   const byKey = new Map(citations.map((c) => [`${c.source.toLowerCase()}|${c.page}`, c]));
   const invalidSet = new Set(invalid);
-  const inline = (line) =>
+  // Long file names would make every citation chip a wide pill; the full name is in the tooltip.
+  // In a table cell the chip is shorter still, so the source column stays narrow.
+  const label = (source, max) => {
+    const name = source.trim().replace(/\.[^.]+$/, "");
+    return escapeHtml(name.length > max ? `${name.slice(0, max - 1).trimEnd()}…` : name);
+  };
+  const inline = (line, max = CITE_LABEL) =>
     escapeHtml(line)
       .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
       .replace(/`([^`]+)`/g, "<code>$1</code>")
       .replace(CITATION, (match, source, page) => {
         const citation = byKey.get(`${source.trim().toLowerCase()}|${Number(page)}`);
-        if (streaming) return `<span class="cite pending">${escapeHtml(source.replace(/\.[^.]+$/, ""))} · ${page}</span>`;
+        if (streaming) return `<span class="cite pending" title="${escapeHtml(source.trim())}">${label(source, max)} · ${page}</span>`;
         if (!citation) {
           const title = invalidSet.size ? "Ovaj izvor nije među pronađenim pasusima" : "";
-          return `<span class="cite invalid" title="${title}">${escapeHtml(source)} · ${page}</span>`;
+          return `<span class="cite invalid" title="${title}">${label(source, max)} · ${page}</span>`;
         }
-        return `<button class="cite" type="button" data-doc="${citation.doc_id}" data-page="${citation.page}" data-key="${escapeHtml(source.trim().toLowerCase())}|${citation.page}" title="Otvori ${escapeHtml(citation.source)}, strana ${citation.page}">${escapeHtml(citation.source.replace(/\.[^.]+$/, ""))} · ${citation.page}</button>`;
+        return `<button class="cite" type="button" data-doc="${citation.doc_id}" data-page="${citation.page}" data-key="${escapeHtml(source.trim().toLowerCase())}|${citation.page}" title="Otvori ${escapeHtml(citation.source)}, strana ${citation.page}">${label(citation.source, max)} · ${citation.page}</button>`;
       });
 
   // Markdown that models use in answers: tables, headings, lists, **bold**, `code`.
   const blocks = [];
   let list = null;
   let table = null;
-  const cells = (line) => line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => inline(c.trim()));
+  const cells = (line) => line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => inline(c.trim(), CITE_LABEL_TABLE));
   for (const raw of text.split("\n")) {
     const line = raw.trimEnd();
     if (/^\s*\|.*\|\s*$/.test(line)) {
@@ -333,7 +342,14 @@ function renderAnswerText(text, citations, invalid, streaming = false) {
   }
   const renderTable = (t) => {
     const width = Math.max(...[t.head || [], ...t.rows].map((r) => r.length));
-    const row = (r, tag) => `<tr>${Array.from({ length: width }, (_, i) => `<${tag}>${r[i] ?? ""}</${tag}>`).join("")}</tr>`;
+    // Prices and measures ("3.605,00 RSD", "20 Nm") stay on one line, aligned right.
+    const numeric = (cell) => /^[\s\d.,:%+\-–€$]*\d[\s\d.,:%+\-–€$]*(?:[a-zA-Z€]{1,4}\.?)?$/.test(cell.replace(/<[^>]+>/g, ""));
+    const numericColumn = Array.from({ length: width }, (_, i) => {
+      const cells = t.rows.map((r) => r[i] ?? "").filter(Boolean);
+      return cells.length > 0 && cells.every(numeric);
+    });
+    const row = (r, tag) => `<tr>${Array.from({ length: width }, (_, i) =>
+      `<${tag}${numericColumn[i] ? ' class="num"' : ""}>${r[i] ?? ""}</${tag}>`).join("")}</tr>`;
     const head = t.head ? `<thead>${row(t.head, "th")}</thead>` : "";
     return `<div class="table-wrap"><table>${head}<tbody>${t.rows.map((r) => row(r, "td")).join("")}</tbody></table></div>`;
   };
@@ -675,9 +691,8 @@ function closeExportMenu() {
 
 function toggleExportMenu(button, conversation) {
   if (closeExportMenu() === conversation.id) return;  // second click closes it
-  const href = (format) => `/conversations/${encodeURIComponent(conversation.id)}/export?format=${format}`;
-  const item = (format, label) => el("a", { role: "menuitem", href: href(format), download: true,
-    onclick: (event) => { event.stopPropagation(); closeExportMenu(); } }, label);
+  const item = (format, label) => el("button", { type: "button", role: "menuitem",
+    onclick: (event) => { event.stopPropagation(); closeExportMenu(); downloadExport(conversation, format); } }, label);
   const menu = el("div", { class: "export-menu", role: "menu", dataset: { id: conversation.id } },
     item("pdf", "PDF"), item("docx", "Word (.docx)"));
   const box = button.getBoundingClientRect();
@@ -685,7 +700,34 @@ function toggleExportMenu(button, conversation) {
   menu.style.left = `${Math.max(8, box.right - 150)}px`;
   document.body.append(menu);
   button.setAttribute("aria-expanded", "true");
-  menu.querySelector("a").focus();
+  menu.querySelector("button").focus();
+}
+
+// Fetched rather than a plain link: an error (e.g. a server started before export existed)
+// becomes a message instead of a downloaded "export.json" with the error in it.
+async function downloadExport(conversation, format) {
+  let response;
+  try {
+    response = await fetch(`/conversations/${encodeURIComponent(conversation.id)}/export?format=${format}`,
+      { credentials: "same-origin" });
+  } catch {
+    toast("Izvoz nije uspeo: server nije dostupan.", "error");
+    return;
+  }
+  if (!response.ok) {
+    const hint = response.status === 404 ? " Ako je server pokrenut pre ove verzije, restartuj ga." : "";
+    toast(`Izvoz nije uspeo (${response.status}).${hint}`, "error");
+    return;
+  }
+  const header = response.headers.get("content-disposition") || "";
+  const utf8 = header.match(/filename\*=UTF-8''([^;]+)/i);
+  const name = utf8 ? decodeURIComponent(utf8[1]) : `razgovor.${format}`;
+  const url = URL.createObjectURL(await response.blob());
+  const link = el("a", { href: url, download: name });
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 // Rename in place: the title becomes an input; Enter saves, Esc or leaving the field cancels.
