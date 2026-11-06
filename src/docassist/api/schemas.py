@@ -123,6 +123,11 @@ class FolderCheck(BaseModel):
     folder: str = Field(max_length=1000)
 
 
+class NewFolder(BaseModel):
+    parent: str = Field(max_length=1000)
+    name: str = Field(max_length=200)
+
+
 class PicturesResult(BaseModel):
     source: str
     pages_total: int  # pages with pictures

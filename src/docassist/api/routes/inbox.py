@@ -12,16 +12,16 @@ import ipaddress
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from docassist import desktop
+from docassist import desktop, folders
 from docassist.api.deps import (
     LibraryDep,
     SettingsDep,
     app_folders,
     inbox_config_file,
 )
-from docassist.api.schemas import FolderCheck, InboxUpdate
+from docassist.api.schemas import FolderCheck, InboxUpdate, NewFolder
 from docassist.api.security import ACCESS, UPLOADS
 from docassist.config import Settings
 from docassist.inbox import FolderError, Inbox, InboxConfig, check_folder, waiting_in
@@ -88,13 +88,49 @@ def check(body: FolderCheck, settings: SettingsDep) -> dict[str, Any]:
     return {"folder": str(folder), "waiting": waiting_in(folder)}
 
 
-@router.post("/pick", dependencies=LOCAL)
-def pick(watched: InboxDep) -> dict[str, Any]:
-    """Let the user choose a folder in the system dialog (nothing is saved yet)."""
-    if not desktop.available():
-        raise HTTPException(409, "This computer has no desktop to show a folder dialog on")
-    chosen = desktop.pick_folder(watched.folder)
-    return {"folder": str(chosen) if chosen else None}
+NOT_AVAILABLE = "Taj folder ne postoji ili nije dostupan."
+BAD_NAME_CHARS = '\\/:*?"<>|'  # not allowed in a folder name on Windows
+BAD_NAME = "Ime foldera ne sme biti prazno niti imati znakove " + " ".join(BAD_NAME_CHARS)
+BrowsePath = Annotated[str | None, Query(max_length=1000, description="Empty: places, drives")]
+
+
+@router.get("/browse", dependencies=LOCAL)
+def browse(path: BrowsePath = None) -> dict[str, Any]:
+    """Folders to choose the inbox from, in the page's own folder dialog (ADR-038): without a
+    path the user's places (Desktop, Documents, OneDrive …) and the drives, else the
+    subfolders of `path`. Folder names only, never files."""
+    if not path:
+        return {
+            "path": None,
+            "parent": None,
+            "places": [vars(f) for f in folders.places()],
+            "folders": [vars(f) for f in folders.drives()],
+            "truncated": False,
+        }
+    try:
+        listing = folders.list_folders(path)
+    except OSError as exc:  # also NotADirectoryError, FileNotFoundError
+        raise HTTPException(404, NOT_AVAILABLE) from exc
+    return {**vars(listing), "folders": [vars(f) for f in listing.folders], "places": []}
+
+
+@router.post("/folders", dependencies=LOCAL)
+def new_folder(body: NewFolder) -> dict[str, str]:
+    """Create a subfolder (the dialog's "Novi folder")."""
+    name = body.name.strip()
+    if not name or name in (".", "..") or any(c in name for c in BAD_NAME_CHARS):
+        raise HTTPException(422, BAD_NAME)
+    parent = Path(body.parent)
+    if not parent.is_dir():
+        raise HTTPException(404, NOT_AVAILABLE)
+    created = parent / name
+    try:
+        created.mkdir()
+    except FileExistsError as exc:
+        raise HTTPException(409, "Folder sa tim imenom već postoji.") from exc
+    except OSError as exc:
+        raise HTTPException(403, "Aplikacija nema pravo da napravi folder ovde.") from exc
+    return {"path": str(created)}
 
 
 @router.post("/open", dependencies=LOCAL)

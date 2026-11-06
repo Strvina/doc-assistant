@@ -524,3 +524,21 @@ servera (to bi uvezlo tuđe fajlove u biblioteku).
 **Cena:** uvezeni fajlovi zauzimaju mesto dvaput (u "Uvezeno" i u biblioteci) dok ih neko ne obriše.
 Sistemski prozor otvara server — radi kad su browser i server na istom računaru (uobičajeno za ovu
 aplikaciju), inače se putanja kuca. Na Linuxu traži `zenity`, inače polje za putanju.
+
+### ADR-038 · Biranje foldera u stranici umesto sistemskog prozora
+**Odluka:** "Izaberi drugi folder…" otvara prozor u samoj stranici: prečice (Radna površina,
+Dokumenti, Preuzimanja, OneDrive, početni folder — onako kako stvarno postoje, npr. Desktop
+preusmeren u OneDrive) i diskovi (C:, D: …), putanja sa "↑ Gore", lista podfoldera (samo imena
+foldera, nikad fajlovi; skriveni i sistemski se ne prikazuju, najviše 500), "Novi folder", polje
+za putanju ("\server\skenovi") i "Izaberi ovaj folder" (dalje kao ranije: provera, upozorenje
+koliko dokumenata već čeka, potvrda). `docassist/folders.py`, `GET /inbox/browse?path=`,
+`POST /inbox/folders`; isto ograničenje kao ostalo podešavanje (samo sa računara servera).
+Sistemski prozor (`/inbox/pick`, PowerShell `FolderBrowserDialog`) je uklonjen; "Otvori folder" i
+dalje otvara Explorer.
+**Zašto:** Windows ne pušta program u pozadini (server) da svoj prozor stavi ispred onog u kom
+korisnik radi — prozor se otvarao iza browsera i morao je da se traži. Trikovi za to (TopMost,
+simulirani taster, `SetForegroundWindow`) su nepouzdani. Prozor u stranici je uvek ispred, izgleda
+isto na svim sistemima i radi i kad server nema ekran (Docker, Windows servis), gde sistemski prozor
+ne bi mogao ni da se prikaže.
+**Cena:** pregled ne zna za "Brzi pristup"/biblioteke iz Explorer-a i mrežna mesta koja nisu
+mapirana kao disk — za njih se kuca putanja. Lista se učitava po folderu (po jedan zahtev).

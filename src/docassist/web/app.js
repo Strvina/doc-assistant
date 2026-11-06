@@ -17,6 +17,10 @@ const el = (tag, attrs = {}, ...children) => {
   }
   return node;
 };
+// Like node.replaceChildren(...), but skips null/undefined/false as el() does (instead of
+// printing them as text), so children can be written as `condition && el(...)`.
+const fill = (node, ...children) =>
+  node.replaceChildren(...children.flat().filter((c) => c !== null && c !== undefined && c !== false));
 const escapeHtml = (text) =>
   String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const icon = (path) => `<svg viewBox="0 0 24 24">${path}</svg>`;
@@ -27,6 +31,7 @@ const ICONS = {
   pencil: icon('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>'),
   sparkle: icon('<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>'),
   trash: icon('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>'),
+  folder: icon('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
   copy: icon('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>'),
   up: icon('<path d="M7 10v10H4V10zM7 10l4-7c1.7 0 2.5 1 2.2 2.6L12.6 9H19a2 2 0 0 1 2 2.3l-1.2 7A2 2 0 0 1 17.8 20H7"/>'),
   send: icon('<path d="M4 12l16-8-6 16-2.5-6.5z"/><path d="M11.5 13.5 20 4"/>'),
@@ -314,12 +319,10 @@ function renderInbox() {
   const toggle = el("input", { type: "checkbox", onchange: (e) => updateInbox({ enabled: e.target.checked }) });
   toggle.checked = data.enabled;
 
-  const folderActions = data.desktop
-    ? [el("button", { class: "btn small", type: "button", onclick: () => inboxPost("/inbox/open") }, "Otvori folder"),
-       el("button", { class: "btn small primary", type: "button", onclick: pickInboxFolder }, "Izaberi drugi folder…")]
-    : data.local
-      ? [typedFolderForm(data.folder)]
-      : [el("small", { class: "muted" }, "Folder se menja na računaru na kom radi aplikacija.")];
+  const folderActions = data.local
+    ? [data.desktop && el("button", { class: "btn small", type: "button", onclick: () => inboxPost("/inbox/open") }, "Otvori folder"),
+       el("button", { class: "btn small primary", type: "button", onclick: () => openFolderPicker(data.folder) }, "Izaberi drugi folder…")]
+    : [el("small", { class: "muted" }, "Folder se menja na računaru na kom radi aplikacija.")];
 
   const waiting = !data.available
     ? "Folder trenutno nije dostupan (npr. mrežni disk nije povezan)."
@@ -329,7 +332,7 @@ function renderInbox() {
   const scan = el("button", { class: "btn small", type: "button", onclick: scanInboxNow }, "Proveri sada");
   scan.disabled = !data.enabled || !data.available;
 
-  body.replaceChildren(
+  fill(body,
     el("label", { class: "inbox-switch" }, toggle, el("span", {}, "Uvoz je uključen")),
     el("div", { class: "inbox-folder" },
       el("div", { class: "inbox-folder-path" }, el("small", {}, "Folder koji se prati"), el("code", {}, data.folder)),
@@ -368,11 +371,88 @@ function renderImport(item) {
     el("span", {}, el("strong", {}, prettyName(item.source)), el("small", {}, `${when(item.at)} · ${outcome}`)));
 }
 
-// Without a desktop dialog (e.g. the server runs in Docker on this computer): type the path.
-function typedFolderForm(current) {
-  const input = el("input", { type: "text", class: "inbox-path-input", value: current, "aria-label": "Putanja foldera" });
-  return el("form", { class: "inbox-path-form", onsubmit: (e) => { e.preventDefault(); chooseInboxFolder(input.value); } },
-    input, el("button", { class: "btn small primary", type: "submit" }, "Sačuvaj"));
+// The folder dialog inside the page (ADR-038): a dialog opened by the server would show up
+// behind the browser on Windows, and a server without a desktop cannot show one at all.
+const picker = { path: null, places: [], drives: [] };
+
+async function openFolderPicker(start) {
+  $("#folder-picker").hidden = false;
+  try {
+    const roots = await api("/inbox/browse");
+    picker.places = roots.places;
+    picker.drives = roots.folders;
+  } catch (error) {
+    toast(error.message, "error");
+  }
+  if (!(await browseTo(start))) await browseTo(null);
+}
+
+function closeFolderPicker() {
+  $("#folder-picker").hidden = true;
+}
+
+// Show the subfolders of `path` (null: this computer's places and drives); false if it failed.
+async function browseTo(path) {
+  let listing;
+  try {
+    listing = path ? await api(`/inbox/browse?path=${encodeURIComponent(path)}`) : { path: null, parent: null, folders: picker.drives };
+  } catch (error) {
+    toast(error.message, "error");
+    return false;
+  }
+  picker.path = listing.path;
+  renderFolderPicker(listing);
+  return true;
+}
+
+function renderFolderPicker(listing) {
+  const here = listing.path;
+  const up = el("button", { class: "btn small", type: "button", title: "Jedan nivo gore",
+    onclick: () => browseTo(listing.parent) }, "↑ Gore");
+  up.disabled = !here;
+  const choose = el("button", { class: "btn small primary", type: "button", onclick: chooseHere }, "Izaberi ovaj folder");
+  choose.disabled = !here;
+  const typed = el("input", { type: "text", class: "inbox-path-input", placeholder: "ili upiši putanju, npr. \\\\server\\skenovi",
+    "aria-label": "Putanja foldera" });
+
+  $("#picker-places").replaceChildren(
+    ...picker.places.map((p) => el("button", { class: "picker-place" + (here === p.path ? " on" : ""), type: "button",
+      title: p.path, onclick: () => browseTo(p.path) }, p.name)),
+    ...picker.drives.map((d) => el("button", { class: "picker-place" + (here === d.path ? " on" : ""), type: "button",
+      onclick: () => browseTo(d.path) }, d.name)),
+  );
+  $("#picker-where").replaceChildren(up, el("code", { title: here || "" }, here || "Ovaj računar"));
+  fill($("#picker-list"),
+    ...(listing.folders.length
+      ? listing.folders.map((f) => el("li", { class: "clickable", tabindex: 0, title: f.path,
+          onclick: () => browseTo(f.path),
+          onkeydown: (e) => { if (e.key === "Enter") browseTo(f.path); } },
+          el("span", { class: "picker-icon", "aria-hidden": "true", html: ICONS.folder }), f.name))
+      : [el("li", { class: "empty" }, here ? "Ovde nema podfoldera — može da se izabere ovaj folder." : "Nema diskova.")]),
+    listing.truncated && el("li", { class: "empty" }, "Prikazano je prvih 500 foldera."),
+  );
+  $("#picker-actions").replaceChildren(
+    el("button", { class: "btn small", type: "button", onclick: newFolderHere, disabled: !here }, "Novi folder"),
+    el("form", { class: "inbox-path-form", onsubmit: (e) => { e.preventDefault(); if (typed.value.trim()) browseTo(typed.value.trim()); } },
+      typed, el("button", { class: "btn small", type: "submit" }, "Idi")),
+    choose,
+  );
+}
+
+async function newFolderHere() {
+  const name = prompt("Ime novog foldera:", "Skenirano");
+  if (!name) return;
+  try {
+    const { path } = await api("/inbox/folders", { method: "POST", headers: JSON_HEADERS,
+      body: JSON.stringify({ parent: picker.path, name }) });
+    await browseTo(path);
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+async function chooseHere() {
+  if (picker.path && (await chooseInboxFolder(picker.path))) closeFolderPicker();
 }
 
 async function inboxPost(path) {
@@ -393,25 +473,22 @@ async function updateInbox(change) {
   await loadInbox();
 }
 
+// Check the folder, warn about documents already in it, then watch it; true when it is set.
 async function chooseInboxFolder(folder) {
   let checked;
   try {
     checked = await api("/inbox/check", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ folder }) });
   } catch (error) {
     toast(error.message, "error"); // e.g. "To je folder same aplikacije…"
-    return;
+    return false;
   }
-  if (checked.folder === state.inbox.folder) return;
-  if (checked.waiting && !confirm(`U folderu „${folderName(checked.folder)}“ već ima ${checked.waiting} dokumenata. `
-      + "Biće dodati u biblioteku i premešteni u podfolder „Uvezeno“. Nastaviti?")) return;
+  if (checked.folder === state.inbox.folder) return true;
+  const count = `${checked.waiting} ${plural(checked.waiting, "dokument", "dokumenta", "dokumenata")}`;
+  if (checked.waiting && !confirm(`U folderu „${folderName(checked.folder)}“ već ima ${count}. `
+      + "Biće dodati u biblioteku i premešteni u podfolder „Uvezeno“. Nastaviti?")) return false;
   await updateInbox({ folder: checked.folder });
   toast(`Sada se prati folder „${folderName(checked.folder)}“.`);
-}
-
-async function pickInboxFolder() {
-  toast("Izaberi folder u prozoru koji se otvorio.");
-  const picked = await inboxPost("/inbox/pick");
-  if (picked?.folder) await chooseInboxFolder(picked.folder);
+  return true;
 }
 
 async function scanInboxNow() {
@@ -1298,6 +1375,7 @@ function bindEvents() {
       if (closeExportMenu()) return;
       if (state.pending) cancelAsk();
       else if (!$("#insights").hidden) $("#insights").hidden = true;
+      else if (!$("#folder-picker").hidden) closeFolderPicker();
       else if (!$("#inbox").hidden) $("#inbox").hidden = true;
       else if (!$("#viewer").hidden) closeViewer();
       else closeLibraryDrawer();
@@ -1332,6 +1410,8 @@ function bindEvents() {
   $("#inbox-card").addEventListener("click", openInbox);
   $("#inbox-close").addEventListener("click", () => ($("#inbox").hidden = true));
   $("#inbox").addEventListener("click", (event) => { if (event.target.id === "inbox") event.currentTarget.hidden = true; });
+  $("#picker-close").addEventListener("click", closeFolderPicker);
+  $("#folder-picker").addEventListener("click", (event) => { if (event.target.id === "folder-picker") closeFolderPicker(); });
   $("#queries-clear").addEventListener("click", clearQueries);
   $("#insights").addEventListener("click", (event) => { if (event.target.id === "insights") event.currentTarget.hidden = true; });
   $("#theme-toggle").addEventListener("click", () => {

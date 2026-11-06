@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from docassist import desktop
+from docassist import desktop, folders
 from docassist.api import create_app
 from docassist.config import Settings
 from docassist.inbox import (
@@ -331,32 +331,102 @@ def test_only_this_computer_changes_the_folder(client, tmp_path):
     for method, path, body in [
         ("put", "/inbox", {"enabled": False}),
         ("post", "/inbox/check", {"folder": str(tmp_path)}),
-        ("post", "/inbox/pick", None),
+        ("get", "/inbox/browse", None),
+        ("post", "/inbox/folders", {"parent": str(tmp_path), "name": "x"}),
         ("post", "/inbox/open", None),
     ]:
-        response = getattr(client, method)(path, json=body, headers=REMOTE)
+        response = client.request(method.upper(), path, json=body, headers=REMOTE)
         assert response.status_code == 403, path
     assert client.post("/inbox/scan", headers=REMOTE).status_code == 200  # anyone may check
 
 
-def test_pick_and_open_use_the_desktop(client, monkeypatch, tmp_path):
+def test_open_shows_the_folder_on_the_desktop(client, monkeypatch):
     opened = []
     monkeypatch.setattr(desktop, "available", lambda: True)
-    monkeypatch.setattr(desktop, "pick_folder", lambda start: tmp_path / "Izabrano")
     monkeypatch.setattr(desktop, "open_folder", opened.append)
 
-    picked = client.post("/inbox/pick").json()
-    client.post("/inbox/open")
-
-    assert picked == {"folder": str(tmp_path / "Izabrano")}
+    assert client.post("/inbox/open").json() == {"ok": True}
     assert opened == [client.app.state.inbox.folder]
 
 
-def test_no_desktop_no_dialog(client, monkeypatch):
+def test_no_desktop_no_open_button(client, monkeypatch):
     monkeypatch.setattr(desktop, "available", lambda: False)
 
-    assert client.post("/inbox/pick").status_code == 409
+    assert client.post("/inbox/open").status_code == 409
     assert client.get("/inbox").json()["desktop"] is False
+
+
+def test_browse_starts_with_places_and_drives(client, monkeypatch, tmp_path):
+    monkeypatch.setattr(folders, "places", lambda: [folders.Folder("Dokumenti", str(tmp_path))])
+    monkeypatch.setattr(folders, "drives", lambda: [folders.Folder("Disk C:", "C:\\")])
+
+    start = client.get("/inbox/browse").json()
+
+    assert start["path"] is None and start["parent"] is None
+    assert start["places"] == [{"name": "Dokumenti", "path": str(tmp_path)}]
+    assert start["folders"] == [{"name": "Disk C:", "path": "C:\\"}]
+
+
+def test_browse_lists_subfolders_and_makes_new_ones(client, tmp_path):
+    here = tmp_path / "pregled"
+    (here / "Skenovi").mkdir(parents=True)
+    (here / "racun.pdf").write_bytes(b"%PDF")  # files are never listed
+
+    made = client.post("/inbox/folders", json={"parent": str(here), "name": " Ugovori "})
+    listing = client.get("/inbox/browse", params={"path": str(here)}).json()
+
+    assert made.json() == {"path": str(here / "Ugovori")}
+    assert [f["name"] for f in listing["folders"]] == ["Skenovi", "Ugovori"]
+    assert listing["path"] == str(here.resolve())
+    assert listing["parent"] == str(here.resolve().parent)
+
+
+@pytest.mark.parametrize(
+    ("body", "status"),
+    [
+        ({"name": "a/b"}, 422),
+        ({"name": "  "}, 422),
+        ({"name": "Skenovi"}, 409),  # already there
+        ({"name": "x", "parent": "nema/takvog/foldera"}, 404),
+    ],
+)
+def test_new_folder_explains_what_is_wrong(client, tmp_path, body, status):
+    (tmp_path / "Skenovi").mkdir()
+
+    response = client.post("/inbox/folders", json={"parent": str(tmp_path), **body})
+
+    assert response.status_code == status
+
+
+def test_browse_a_missing_folder(client, tmp_path):
+    response = client.get("/inbox/browse", params={"path": str(tmp_path / "nema")})
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Taj folder ne postoji ili nije dostupan."
+
+
+# --- the folders module ------------------------------------------------------------------
+
+
+def test_hidden_folders_are_left_out(tmp_path):
+    for name in ("Vidljiv", ".skriven", "$Recycle.Bin"):
+        (tmp_path / name).mkdir()
+
+    assert [f.name for f in folders.list_folders(tmp_path).folders] == ["Vidljiv"]
+
+
+def test_a_drive_has_no_level_above():
+    root = Path.cwd().anchor
+
+    assert folders.list_folders(root).parent is None
+
+
+def test_places_exist_and_are_listed_once():
+    found = folders.places()
+
+    assert found and all(Path(f.path).is_dir() for f in found)
+    assert len({f.path for f in found}) == len(found)
+    assert folders.drives()
 
 
 @pytest.mark.parametrize("change", [{"inbox_poll_s": 0}, {"allow_uploads": False}])

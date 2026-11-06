@@ -227,6 +227,22 @@
     </div>
   </div>
 
+  <!-- Choosing the import folder, inside the page (ADR-038) -->
+  <div class="modal" id="folder-picker" role="dialog" aria-modal="true" aria-labelledby="picker-title" hidden>
+    <div class="modal-card picker-modal">
+      <div class="modal-head">
+        <h2 id="picker-title">Izaberi folder za automatski uvoz</h2>
+        <button class="icon-btn" id="picker-close" aria-label="Zatvori">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <div class="picker-places" id="picker-places"></div>
+      <div class="picker-where" id="picker-where"></div>
+      <ul class="q-list picker-list" id="picker-list"></ul>
+      <div class="picker-actions" id="picker-actions"></div>
+    </div>
+  </div>
+
   <div class="toasts" id="toasts" aria-live="polite"></div>
   <div class="scrim" id="scrim" hidden></div>
 

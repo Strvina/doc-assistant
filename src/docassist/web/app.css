@@ -223,6 +223,28 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .inbox-mark { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--surface-2); color: var(--muted); }
 .inbox-import.indexed .inbox-mark { background: var(--ok-soft); color: var(--ok); }
 .inbox-import.failed .inbox-mark { background: var(--bad-soft); color: var(--bad); }
+
+/* the folder dialog inside the page (ADR-038) */
+.picker-modal { width: min(640px, 100%); display: grid; gap: 12px; }
+.picker-modal .modal-head { margin-bottom: 0; }
+.picker-modal h2 { font-size: 19px; }
+.picker-places { display: flex; flex-wrap: wrap; gap: 6px; }
+.picker-place {
+  padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface);
+  color: inherit; font: 600 12.5px var(--font); cursor: pointer;
+}
+.picker-place:hover, .picker-place.on { border-color: var(--amber); background: var(--amber-soft); color: var(--amber-ink); }
+.picker-where { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.picker-where .btn { white-space: nowrap; flex: none; }
+.picker-where code { font: 600 13px/1.4 var(--mono); overflow-wrap: anywhere; min-width: 0; }
+.picker-list { max-height: min(46vh, 380px); overflow-y: auto; padding-right: 2px; }
+.picker-list { gap: 4px; }
+.picker-list li.clickable { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; padding: 7px 12px; overflow-wrap: anywhere; }
+.picker-icon svg { width: 18px; height: 18px; color: var(--amber-ink); }
+.picker-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.picker-actions .inbox-path-form { flex: 1 1 220px; }
+.picker-actions .btn.primary { margin-left: auto; }
+[data-theme="dark"] .picker-place.on, [data-theme="dark"] .picker-place:hover { background: rgba(245, 165, 36, .16); color: var(--amber); }
 .link { border: 0; background: none; padding: 0; color: var(--navy-500); font-weight: 600; cursor: pointer; text-decoration: underline; }
 [data-theme="dark"] .link { color: var(--amber); }
 
