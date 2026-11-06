@@ -17,6 +17,10 @@ const el = (tag, attrs = {}, ...children) => {
   }
   return node;
 };
+// Like node.replaceChildren(...), but skips null/undefined/false as el() does (instead of
+// printing them as text), so children can be written as `condition && el(...)`.
+const fill = (node, ...children) =>
+  node.replaceChildren(...children.flat().filter((c) => c !== null && c !== undefined && c !== false));
 const escapeHtml = (text) =>
   String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const icon = (path) => `<svg viewBox="0 0 24 24">${path}</svg>`;
@@ -77,6 +81,7 @@ const state = {
   busy: false,
   viewing: null, // doc_id shown in the viewer
   inbox: null, // GET /inbox: the folder whose files are imported automatically
+  pickingFolder: false, // the Windows folder dialog is open
   scope: loadScope(), // doc_ids to search; empty = all documents
 };
 
@@ -316,7 +321,8 @@ function renderInbox() {
 
   const folderActions = data.desktop
     ? [el("button", { class: "btn small", type: "button", onclick: () => inboxPost("/inbox/open") }, "Otvori folder"),
-       el("button", { class: "btn small primary", type: "button", onclick: pickInboxFolder }, "Izaberi drugi folder…")]
+       el("button", { class: "btn small primary", type: "button", onclick: pickInboxFolder, disabled: state.pickingFolder },
+         state.pickingFolder ? "Otvaram prozor…" : "Izaberi drugi folder…")]
     : data.local
       ? [typedFolderForm(data.folder)]
       : [el("small", { class: "muted" }, "Folder se menja na računaru na kom radi aplikacija.")];
@@ -329,7 +335,7 @@ function renderInbox() {
   const scan = el("button", { class: "btn small", type: "button", onclick: scanInboxNow }, "Proveri sada");
   scan.disabled = !data.enabled || !data.available;
 
-  body.replaceChildren(
+  fill(body,
     el("label", { class: "inbox-switch" }, toggle, el("span", {}, "Uvoz je uključen")),
     el("div", { class: "inbox-folder" },
       el("div", { class: "inbox-folder-path" }, el("small", {}, "Folder koji se prati"), el("code", {}, data.folder)),
@@ -408,10 +414,18 @@ async function chooseInboxFolder(folder) {
   toast(`Sada se prati folder „${folderName(checked.folder)}“.`);
 }
 
+// The Windows dialog takes a second or two to appear: the button says so and cannot open a
+// second one meanwhile; it stays busy until the dialog is closed (also when the panel redraws).
 async function pickInboxFolder() {
-  toast("Izaberi folder u prozoru koji se otvorio.");
-  const picked = await inboxPost("/inbox/pick");
-  if (picked?.folder) await chooseInboxFolder(picked.folder);
+  state.pickingFolder = true;
+  renderInbox();
+  try {
+    const picked = await inboxPost("/inbox/pick");
+    if (picked?.folder) await chooseInboxFolder(picked.folder);
+  } finally {
+    state.pickingFolder = false;
+    renderInbox();
+  }
 }
 
 async function scanInboxNow() {
