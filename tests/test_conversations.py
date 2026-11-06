@@ -9,6 +9,8 @@ from docassist.api import SESSION_COOKIE, create_app
 from docassist.config import Settings
 from docassist.conversations import ConversationStore, make_title
 from docassist.llm import FakeProvider
+from docassist.llm.fake import quote_first_document
+from docassist.llm.prompts import REWRITE_PROMPT
 from docassist.retrieval import FakeEmbedder, VectorStore
 
 
@@ -93,6 +95,23 @@ def test_follow_up_gets_the_saved_history(settings, tmp_path):
     ask(client, "A parking?", conversation_id=first["conversation_id"])
 
     assert seen[-1][0]["content"] == "Kada radi kantina?"  # earlier turn sent along
+
+
+def test_a_follow_up_is_searched_as_the_rewritten_question(settings, tmp_path):
+    def respond(system, messages):
+        if system == REWRITE_PROMPT:
+            return "Gde mogu da parkiram?"
+        return quote_first_document(system, messages)
+
+    client = browser(settings, tmp_path, llm_factory=lambda s, p: FakeProvider(respond))
+    client.post("/documents/demo")
+    first = ask(client, "Kada radi kantina?")
+    second = ask(client, "A parking?", conversation_id=first["conversation_id"])
+
+    assert first["search_query"] == ""
+    assert second["search_query"] == "Gde mogu da parkiram?"
+    saved = client.get(f"/conversations/{first['conversation_id']}").json()
+    assert saved["turns"][1]["response"]["search_query"] == "Gde mogu da parkiram?"
 
 
 def test_conversations_are_private_to_their_browser(settings, tmp_path):

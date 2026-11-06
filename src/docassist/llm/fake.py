@@ -8,7 +8,7 @@ from html import unescape
 from typing import TYPE_CHECKING, Any
 
 from docassist.llm.base import AgentRun, LLMResult, Message, ToolCall
-from docassist.llm.prompts import NOT_FOUND_SR
+from docassist.llm.prompts import NOT_FOUND_SR, REWRITE_PROMPT
 
 if TYPE_CHECKING:
     from docassist.agent.tools import Tool
@@ -23,7 +23,10 @@ _DOCUMENT = re.compile(
 
 
 def quote_first_document(system: str, messages: list[Message]) -> str:
-    """Default fake answer: the first sentence of the best-ranked document, with a citation."""
+    """Default fake answer: the first sentence of the best-ranked document, with a citation.
+    A follow-up question to rewrite (`REWRITE_PROMPT`) comes back unchanged."""
+    if system == REWRITE_PROMPT:
+        return messages[-1]["content"]
     match = _DOCUMENT.search(messages[-1]["content"])
     if match is None:
         return NOT_FOUND_SR

@@ -110,6 +110,7 @@ class AskResponse(BaseModel):
     input_tokens: int
     output_tokens: int
     cost_usd: float | None = None
+    search_query: str = ""  # a follow-up question rewritten for the search (ADR-031)
 
 
 class RenameRequest(BaseModel):
@@ -862,6 +863,7 @@ def to_response(result: Answer) -> AskResponse:
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
         cost_usd=cost_usd(result.model, result.input_tokens, result.output_tokens),
+        search_query=result.search_query,
     )
 
 

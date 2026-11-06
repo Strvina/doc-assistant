@@ -84,6 +84,8 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 - [x] Ceo spisak do modela: susedni delovi uz pogodak, delovi iste strane spojeni, uvodna linija
       sa ":" kao naslov, OCR bez lažne ćirilice i bez reči presečenih crticom, pravilo za spiskove
       u promptu; 2 eval pitanja sa spiskom (ADR-030)
+- [x] Pitanja sa nastavkom ("a u petu?"): model prepiše pitanje u samostalan upit pre pretrage,
+      UI pokazuje šta je traženo (ADR-031)
 
 ## Dodatno — formati
 

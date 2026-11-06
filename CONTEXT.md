@@ -41,6 +41,9 @@ GitHub Actions · Docker / Hugging Face Spaces
   OCR latinične strane bez lažne ćirilice (ponovno čitanje bez `srp`) i bez reči presečenih crticom;
   pravilo `LIST_RULE` u oba prompta. "Kategorije zaraznih bolesti" (sken 96 str.) sada daje svih 8
   kategorija (pre: 1 + pogrešna). Eval 36 pitanja (2 nova sa spiskom): RAG **100 %**, ~1.900 tokena/pitanje.
+- **Pitanja sa nastavkom (ADR-031):** kad razgovor ima istoriju, model prvo prepiše pitanje u samostalan
+  upit ("a u petu?" → "Koje bolesti spadaju u petu kategoriju zaraznih bolesti?"); UI pokazuje
+  "tražio sam: …". Provereno uživo sa Groq-om (nastavak 2/2, nova tema 3/3).
 - **OCR (ADR-024, grana `feat/ocr`):** skenovi, slike u PDF-u i upload slika (PNG/JPG/TIFF/BMP) se čitaju
   Tesseract-om lokalno (srp latinica+ćirilica, deu, eng); pregled označava citat i na skenu. Eval sa
   skeniranim demo PDF-ovima: 100 %. Fotografije proizvoda (Lavazza) daju delimičan tekst.
@@ -140,6 +143,8 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 - Indeks pamti embedder i verziju podele (`CHUNKING` u `ingest/chunker.py`); promena → `--rebuild`.
 - Susedni delovi: `VectorStore.with_neighbors` (`NEIGHBORS`, `LIST_FOLLOW` u `retrieval/store.py`); prompt dobija
   `rag.context_passages` (jedan odlomak po strani); `Answer.retrieved` sadrži i susede (`neighbor=True`).
+- Prepisivanje pitanja: `rag.search_query` (+ `REWRITE_PROMPT`); `FakeProvider` na taj prompt vraća pitanje
+  nepromenjeno. Agent ga ne koristi.
 - Groq: 8.000 tokena/min po modelu → 413 za velike zahteve (agent čita ceo dokument); lanac prelazi dalje.
 - gpt-oss ponekad citira sa `【...】`; `chat_completions._clean` to pretvara u `[...]`.
 - Statika (`app.css`/`app.js`) se u `index.html` servira sa `?v=<hash>` — nema zastarelog CSS-a posle izmene.
@@ -182,3 +187,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-05 | Excel i PowerPoint dokumenti, citati sa više izvora u zagradi; eval 34 pitanja, RAG 100 %; ADR-028 | #25 |
 | 2026-11-05 | AI model (Gemini) čita slike u dokumentu na zahtev; tekst se čuva pored originala; ADR-029 | #26 |
 | 2026-11-06 | Ceo spisak do modela: susedni delovi, odlomak po strani, uvodna linija kao naslov, OCR bez lažne ćirilice i presečenih reči, pravilo za spiskove; eval 36 pitanja, RAG 100 %; ADR-030 | #27 |
+| 2026-11-06 | Pitanja sa nastavkom: model prepiše pitanje pre pretrage (izmereno: 5/5 naspram 3/5 jeftine verzije); ADR-031 | #28 |
