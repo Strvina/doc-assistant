@@ -32,8 +32,10 @@ RUN uv sync --locked --no-dev
 # Bake the embedding model into the image: containers start fast and work offline.
 RUN python -c "from docassist.retrieval import LocalEmbedder; LocalEmbedder(cache_dir='/app/models')"
 
+# /state/inbox exists in the image, owned by the app: a new volume mounted there takes this
+# owner, so the app (and n8n, also uid 1000) can write into it (ADR-040).
 RUN useradd --create-home --uid 1000 app \
-    && mkdir -p /state \
+    && mkdir -p /state/inbox \
     && chown -R app /state /app/data
 USER app
 

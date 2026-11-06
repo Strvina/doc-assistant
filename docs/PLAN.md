@@ -98,6 +98,7 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 - [x] Panel „Automatski uvoz iz foldera“: biranje foldera, uključi/isključi, istorija, neuspeli (ADR-037)
 - [x] Windows prozor za izbor foldera se pojavljuje ispred browsera (ADR-038)
 - [x] „Scroll to reveal“ u Praćenju, razgovorima, dokumentima i dugačkom razgovoru; brže skrolovanje (ADR-039)
+- [x] Spremno za sopstveni server: Caddy (HTTPS + lozinka), n8n, rezervne kopije, auto-ažuriranje (ADR-040) — server nije iznajmljen
 
 ## Dodatno — formati
 

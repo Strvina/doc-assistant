@@ -39,5 +39,14 @@ jobs:
       - name: Type check
         run: uv run mypy
 
+      - name: Check the server deploy files (ADR-040)
+        run: |
+          cp deploy/server/.env.example deploy/server/.env
+          docker compose -f deploy/server/compose.yaml config -q
+          docker run --rm -v "$PWD/deploy/server/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            -e DOMAIN=asistent.example.com -e N8N_DOMAIN=n8n.example.com -e ACME_EMAIL=it@example.com \
+            -e AUTH_USER=firma -e 'AUTH_PASSWORD_HASH=$2a$14$Zkx19XLiW6VYouLHR5NmfOFU0z2GTNmpkT/5qqR7hx4IjWJPDhjvG' \
+            caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile
+
       - name: Tests
         run: uv run pytest

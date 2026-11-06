@@ -1,0 +1,33 @@
+# Caddy in front of Doc Assistant (ADR-040): HTTPS certificates from Let's Encrypt, a password
+# before anything is shown, and the requests passed to the app inside the Docker network.
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# One login for the whole company: the browser asks once and remembers it.
+	basic_auth {
+		{$AUTH_USER} {$AUTH_PASSWORD_HASH}
+	}
+
+	reverse_proxy app:8000 {
+		# Answers arrive as they are written (/ask/stream): pass every piece on at once.
+		flush_interval -1
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+}
+
+# n8n, with its own login (the owner account). Webhooks are only for the app, which calls
+# them inside the Docker network, so they are closed to the internet.
+{$N8N_DOMAIN:n8n.localhost} {
+	@webhooks path /webhook/* /webhook-test/* /webhook-waiting/*
+	respond @webhooks 403
+
+	reverse_proxy n8n:5678
+}

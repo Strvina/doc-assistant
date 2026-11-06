@@ -1,0 +1,37 @@
+name: Deploy server
+
+# Updates your own server (ADR-040) after every merge into main: pulls main there and rebuilds
+# the containers. Runs only after setup (docs/DEPLOY.md, "Sopstveni server"):
+#   repository variable SERVER_HOST = "deploy@asistent.firma.rs" (user@host)
+#   repository variable SERVER_DIR  = folder of the clone on the server (default: doc-assistant)
+#   secret SERVER_SSH_KEY = private key of a deploy key allowed on the server
+#   secret SERVER_KNOWN_HOSTS = output of `ssh-keyscan <host>` (so the host is verified)
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false  # never stop an update half-way
+
+jobs:
+  deploy:
+    if: ${{ vars.SERVER_HOST != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update and restart on the server
+        env:
+          SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.SERVER_KNOWN_HOSTS }}
+          SERVER_HOST: ${{ vars.SERVER_HOST }}
+          SERVER_DIR: ${{ vars.SERVER_DIR || 'doc-assistant' }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key "$SERVER_HOST" "set -e
+            cd '$SERVER_DIR'
+            git pull --ff-only
+            docker compose -f deploy/server/compose.yaml up -d --build  # profiles: COMPOSE_PROFILES in .env
+            docker image prune -f"

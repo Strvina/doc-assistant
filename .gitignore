@@ -38,3 +38,7 @@ Thumbs.db
 # Evaluation reports (summaries go to docs/EVAL_RESULTS.md)
 eval/results/
 data/models/
+
+# Server deploy: the real settings and the backups stay on the server
+deploy/server/.env
+deploy/server/backups/

@@ -55,6 +55,8 @@ GitHub Actions · Docker / Hugging Face Spaces
   stigao u Mailpit. `setup_n8n.py --send-gap-report` šalje odmah.
 - **Pretraga u izabranim dokumentima (ADR-034):** kvačice u biblioteci → traka "Pretraga samo u: …" iznad
   polja; `doc_ids` u `/ask`; odgovor ima `searched_documents`. Provereno u browseru.
+- **Sopstveni server — spremno, nije objavljeno (ADR-040):** `deploy/server/` (Caddy HTTPS + lozinka, n8n, noćne
+  rezervne kopije), uputstvo i cene u `docs/DEPLOY.md` ("Sopstveni server"). Probano lokalno u Docker-u celo.
 - **Scroll to reveal (ADR-039):** Praćenje (po 20), razgovori (po 30), dokumenti (po 50) i dugačak razgovor
   (poslednjih 10, starija pri skrolovanju nagore) se učitavaju dok se skroluje; bez blur-a iza prozora,
   `content-visibility` za poruke. Pomoćnik `whenReached`/`revealList` u `app.js`.
@@ -224,3 +226,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-06 | Windows prozor za izbor foldera dolazi ispred browsera (potvrdio korisnik), jedan prozor odjednom; ispravka „false“ u panelu; ADR-038 | #37 |
 | 2026-11-06 | `data/inbox.json` (lokalni izbor foldera) izbačen iz repoa i dodat u `.gitignore` | #38 |
 | 2026-11-06 | „Scroll to reveal“ svuda (Praćenje, razgovori, dokumenti, dugačak razgovor) i brže skrolovanje; ADR-039 | #39 |
+| 2026-11-07 | Priprema za sopstveni server (Caddy HTTPS + lozinka, n8n, rezervne kopije, deploy Action), probano lokalno; ADR-040 | #40 |
