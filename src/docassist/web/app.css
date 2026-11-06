@@ -180,9 +180,11 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .doc-list { list-style: none; margin: 0; padding: 4px 10px; overflow-y: auto; flex: 1; }
 .doc {
   position: relative;
-  display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px;
+  display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 10px;
   padding: 10px; border-radius: 11px; cursor: pointer; border: 1px solid transparent;
 }
+.doc-pick { width: 16px; height: 16px; margin: 0; accent-color: var(--amber); cursor: pointer; }
+.doc.picked { border-color: rgba(245, 165, 36, .5); }
 .doc:hover { background: var(--surface-2); border-color: var(--line); }
 .doc.active { background: var(--amber-soft); border-color: rgba(245, 165, 36, .5); }
 .doc-name {
@@ -458,6 +460,24 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   background: var(--surface); border: 1.5px solid var(--line-strong); box-shadow: var(--shadow-2);
 }
 .composer-box:focus-within { border-color: var(--amber); }
+.scope-bar {
+  max-width: 780px; margin: 0 auto 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  font-size: 12.5px; color: var(--muted);
+}
+.scope-bar[hidden] { display: none; }
+.scope-label { font-weight: 600; color: var(--ink-2); }
+.scope-chip {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 260px;
+  padding: 3px 4px 3px 10px; border-radius: 999px;
+  background: var(--amber-soft); color: var(--amber-ink); font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.scope-chip button {
+  border: 0; background: none; color: inherit; cursor: pointer;
+  width: 20px; height: 20px; border-radius: 50%; font-size: 15px; line-height: 1;
+}
+.scope-chip button:hover { background: rgba(0, 0, 0, .08); }
+[data-theme="dark"] .scope-chip { background: rgba(245, 165, 36, .16); color: var(--amber); }
 .composer textarea {
   flex: 1; border: 0; outline: none; resize: none; background: transparent;
   padding: 8px 0; max-height: 180px; line-height: 1.5;

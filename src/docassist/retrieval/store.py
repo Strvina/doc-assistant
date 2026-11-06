@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -130,26 +130,30 @@ class VectorStore:
         self._keywords = None
         return len(chunks)
 
-    def search(self, query: str, k: int = 5) -> list[SearchResult]:
+    def search(
+        self, query: str, k: int = 5, doc_ids: Collection[str] | None = None
+    ) -> list[SearchResult]:
         """The `k` chunks most similar in meaning, best first; in hybrid mode (default) plus
         up to `KEYWORD_EXTRA` chunks that keyword search ranks first but embeddings missed.
+        With `doc_ids`, only the chunks of those documents are searched.
 
         Keyword hits are added, not merged into the ranking: merging (tried: Reciprocal Rank
         Fusion, also with lower keyword weight) pushed correct German passages for Serbian
         questions out of the top k, because keywords cannot match across languages
         (measured in docs/EVAL_RESULTS.md, ADR-023). `score` is always the cosine similarity.
         """
-        if k <= 0 or self.count() == 0:
+        if k <= 0 or self.count() == 0 or (doc_ids is not None and not doc_ids):
             return []
         query_embedding = self._embedder.embed_query(query)
-        hits = self._vector_search(query_embedding, min(k, self.count()))
+        hits = self._vector_search(query_embedding, min(k, self.count()), doc_ids)
         if not self._hybrid:
             return hits
 
         seen = {hit.chunk.chunk_id for hit in hits}
+        keyword_hits = self._keyword_index().search(query, k, doc_ids)
         extra = [
             (rank, chunk)
-            for rank, (chunk, _) in enumerate(self._keyword_index().search(query, k), start=1)
+            for rank, (chunk, _) in enumerate(keyword_hits, start=1)
             if chunk.chunk_id not in seen
         ][:KEYWORD_EXTRA]
         if extra:
@@ -205,10 +209,14 @@ class VectorStore:
                     added.append(SearchResult(nearby[chunk_id], hit.score, neighbor=True))
         return [*results, *added]
 
-    def _vector_search(self, query_embedding: list[float], n: int) -> list[SearchResult]:
+    def _vector_search(
+        self, query_embedding: list[float], n: int, doc_ids: Collection[str] | None = None
+    ) -> list[SearchResult]:
+        where = None if doc_ids is None else {"doc_id": {"$in": sorted(doc_ids)}}
         result = self._collection.query(
             query_embeddings=[query_embedding],
             n_results=n,
+            where=where,
             include=["documents", "metadatas", "distances"],
         )
         return [

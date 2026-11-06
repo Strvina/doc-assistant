@@ -80,7 +80,7 @@ uv run python -m docassist.cli docs                              # list · delet
 ## REST API
 
 The same app serves the API (OpenAPI docs at `/docs`):
-`POST /ask` (`"agent": true` for tools) · `GET|POST /documents` · `DELETE /documents/{id}` ·
+`POST /ask` (`"agent": true` for tools, `"doc_ids": [...]` to search only those documents) · `GET|POST /documents` · `DELETE /documents/{id}` ·
 `GET /documents/{id}/view?page=&chunk=` (highlighted original) · `GET /documents/{id}/file` ·
 `POST /feedback` · `GET /insights` · `GET /health`.
 

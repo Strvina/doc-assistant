@@ -40,6 +40,7 @@ class ToolContext:
     leave_requests: LeaveRequestSink
     top_k: int = 5
     teams: tuple[Team, ...] = (Team("hr", "HR"),)
+    doc_ids: frozenset[str] | None = None  # search only these documents (the user chose them)
     retrieved: list[SearchResult] = field(default_factory=list)
 
 
@@ -145,14 +146,15 @@ def build_tools(ctx: ToolContext) -> list[Tool]:
     team_ids = ", ".join(t.id for t in ctx.teams)
 
     def search_documents(args: dict[str, Any]) -> str:
-        results = ctx.store.with_neighbors(retrieve(ctx.store, args["query"], k=ctx.top_k))
+        hits = retrieve(ctx.store, args["query"], k=ctx.top_k, doc_ids=ctx.doc_ids)
+        results = ctx.store.with_neighbors(hits)
         if not results:
             return "No matching passages found."
         ctx.retrieved.extend(results)
         return format_context(context_passages(results))
 
     def list_documents(args: dict[str, Any]) -> str:
-        docs = ctx.store.documents()
+        docs = [d for d in ctx.store.documents() if ctx.doc_ids is None or d.doc_id in ctx.doc_ids]
         if not docs:
             return "No documents are indexed."
         return "\n".join(f"- {d.source} ({d.pages} pages)" for d in docs)

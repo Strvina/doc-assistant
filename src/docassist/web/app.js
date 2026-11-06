@@ -76,7 +76,50 @@ const state = {
   provider: null,
   busy: false,
   viewing: null, // doc_id shown in the viewer
+  scope: loadScope(), // doc_ids to search; empty = all documents
 };
+
+// --- search scope: which documents the questions search ---------------------------------
+
+function loadScope() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem("da-scope") || "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+function saveScope() {
+  try { localStorage.setItem("da-scope", JSON.stringify([...state.scope])); } catch {}
+}
+
+function toggleScope(docId) {
+  if (state.scope.has(docId)) state.scope.delete(docId);
+  else state.scope.add(docId);
+  saveScope();
+  renderDocuments();
+}
+
+function clearScope() {
+  state.scope.clear();
+  saveScope();
+  renderDocuments();
+}
+
+// The chosen documents above the question box; documents deleted meanwhile are dropped.
+function renderScope() {
+  const known = new Map(state.documents.map((d) => [d.doc_id, d]));
+  for (const id of [...state.scope]) if (!known.has(id)) state.scope.delete(id);
+  const bar = $("#scope-bar");
+  bar.hidden = state.scope.size === 0;
+  bar.replaceChildren(
+    el("span", { class: "scope-label" }, "Pretraga samo u:"),
+    ...[...state.scope].map((id) => el("span", { class: "scope-chip", title: known.get(id).source },
+      prettyName(known.get(id).source),
+      el("button", { type: "button", "aria-label": `Ukloni ${known.get(id).source} iz pretrage`, onclick: () => toggleScope(id) }, "×"))),
+    el("button", { class: "link", type: "button", onclick: clearScope }, "svi dokumenti"),
+  );
+}
 
 // --- api --------------------------------------------------------------------------------
 
@@ -211,11 +254,20 @@ function renderDocuments() {
         state.config.allow_uploads && el("button", { class: "icon-btn danger", title: "Obriši", "aria-label": `Obriši ${doc.source}`, html: ICONS.trash,
           onclick: (e) => { e.stopPropagation(); deleteDocument(doc); } }),
       );
+      const picked = state.scope.has(doc.doc_id);
+      const pick = el("input", {
+        type: "checkbox", class: "doc-pick", title: "Pretraži samo izabrane dokumente",
+        "aria-label": `Pretraži samo u ${doc.source}`,
+        onclick: (e) => e.stopPropagation(),
+        onchange: () => toggleScope(doc.doc_id),
+      });
+      pick.checked = picked;
       return el("li", {
-          class: "doc" + (state.viewing === doc.doc_id ? " active" : ""), tabindex: 0,
+          class: "doc" + (state.viewing === doc.doc_id ? " active" : "") + (picked ? " picked" : ""), tabindex: 0,
           onclick: () => openViewer({ docId: doc.doc_id, source: doc.source }),
-          onkeydown: (e) => { if (e.key === "Enter") openViewer({ docId: doc.doc_id, source: doc.source }); },
+          onkeydown: (e) => { if (e.key === "Enter" && e.target === e.currentTarget) openViewer({ docId: doc.doc_id, source: doc.source }); },
         },
+        pick,
         el("span", { class: `file-badge ${ext(doc.source)}` }, ext(doc.source).toUpperCase()),
         el("div", {},
           el("div", { class: "doc-name", title: doc.source }, prettyName(doc.source)),
@@ -227,6 +279,7 @@ function renderDocuments() {
       );
     }),
   );
+  renderScope();
 }
 
 function prettyName(source) {
@@ -560,6 +613,7 @@ function renderAnswer(question, data, mode) {
   if (data.input_tokens + data.output_tokens) meta.push(`${(data.input_tokens + data.output_tokens).toLocaleString("sr-RS")} tokena`);
   if (data.cost_usd !== null && data.cost_usd !== undefined) meta.push(`≈ $${data.cost_usd.toFixed(4)}`);
   if (data.search_query && data.search_query !== question) meta.push(`tražio sam: „${data.search_query}“`);
+  if (data.searched_documents?.length) meta.push(`samo u: ${data.searched_documents.map(prettyName).join(", ")}`);
   const up = el("button", { class: "icon-btn", title: "Koristan odgovor", "aria-label": "Koristan odgovor", html: ICONS.up });
   const down = el("button", { class: "icon-btn", title: "Nije koristan", "aria-label": "Nije koristan", html: ICONS.down });
   const rate = async (rating) => {
@@ -643,6 +697,7 @@ async function ask(question) {
       conversation_id: state.conversationId,
       request_id: requestId,
       history: state.history.slice(-3).map((h) => [h.question, h.answer]),
+      doc_ids: state.scope.size ? [...state.scope] : undefined, // undefined: all documents
     }, pending.controller.signal, showPiece);
     (live || waiting).replaceWith(renderAnswer(question, data, mode));
     state.history.push({ question, answer: data.answer });

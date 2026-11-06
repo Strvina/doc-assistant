@@ -46,14 +46,17 @@ def ask(
     llm_factory: LLMFactoryDep,
 ) -> AskResponse:
     llm, history = _prepare(body, request, kind, who, settings, conversations, llm_factory)
+    scope = _scope(body, store)
     try:
         if body.agent:
-            result = _run_agent(body, settings, store, llm, history)
+            result = _run_agent(body, settings, store, llm, history, scope)
         else:
-            result = answer(body.question, store, llm, k=_top_k(body, settings), history=history)
+            k = _top_k(body, settings)
+            doc_ids = None if scope is None else scope.keys()
+            result = answer(body.question, store, llm, k=k, history=history, doc_ids=doc_ids)
     except LLMError as exc:
         raise HTTPException(502, str(exc)) from exc
-    response = _finish(result, body, request, kind, who, log, conversations)
+    response = _finish(result, body, request, kind, who, log, conversations, scope)
     if response is None:
         raise HTTPException(409, "The question was cancelled")
     return response
@@ -79,15 +82,21 @@ def ask_stream(
     generating and nothing is saved.
     """
     llm, history = _prepare(body, request, kind, who, settings, conversations, llm_factory)
+    scope = _scope(body, store)
 
     def events() -> Iterator[bytes]:
         result: Answer | None = None
         try:
             if body.agent:
-                result = _run_agent(body, settings, store, llm, history)
+                result = _run_agent(body, settings, store, llm, history, scope)
             else:
                 stream = answer_stream(
-                    body.question, store, llm, k=_top_k(body, settings), history=history
+                    body.question,
+                    store,
+                    llm,
+                    k=_top_k(body, settings),
+                    history=history,
+                    doc_ids=None if scope is None else scope.keys(),
                 )
                 for item in stream:
                     if isinstance(item, str):
@@ -100,7 +109,7 @@ def ask_stream(
         if result is None:  # the answer stream always ends with an Answer
             yield _event({"type": "error", "status": 500, "message": "no answer"})
             return
-        response = _finish(result, body, request, kind, who, log, conversations)
+        response = _finish(result, body, request, kind, who, log, conversations, scope)
         if response is None:
             yield _event({"type": "error", "status": 409, "message": "cancelled"})
             return
@@ -155,15 +164,28 @@ def _top_k(body: AskRequest, settings: Settings) -> int:
     return body.top_k or settings.top_k
 
 
+def _scope(body: AskRequest, store: VectorStore) -> dict[str, str] | None:
+    """The documents the user chose to search (doc id -> file name), or None for all."""
+    if body.doc_ids is None:
+        return None
+    names = {doc.doc_id: doc.source for doc in store.documents()}
+    unknown = sorted(set(body.doc_ids) - names.keys())
+    if unknown:
+        raise HTTPException(422, f"No document with id {', '.join(unknown)}")
+    return {doc_id: names[doc_id] for doc_id in body.doc_ids}
+
+
 def _run_agent(
     body: AskRequest,
     settings: Settings,
     store: VectorStore,
     llm: LLMProvider,
     history: list[tuple[str, str]],
+    scope: dict[str, str] | None,
 ) -> Answer:
     ctx = build_tool_context(settings, store)
     ctx.top_k = _top_k(body, settings)
+    ctx.doc_ids = None if scope is None else frozenset(scope)
     return run_agent(body.question, ctx, llm, history=history)
 
 
@@ -175,6 +197,7 @@ def _finish(
     who: str,
     log: QueryLog,
     conversations: ConversationStore,
+    scope: dict[str, str] | None,
 ) -> AskResponse | None:
     """Log the answer and save it in the conversation; None if the user cancelled it."""
     cancelled = request.app.state.cancelled
@@ -183,6 +206,7 @@ def _finish(
         cancelled.discard(body.request_id)
         return None
     response = to_response(result)
+    response.searched_documents = sorted(scope.values(), key=str.lower) if scope else []
     channel = "web" if kind == "web" else "api"
     mode = "agent" if body.agent else "rag"
     response.log_id = log.log(result, channel=channel, mode=mode)
