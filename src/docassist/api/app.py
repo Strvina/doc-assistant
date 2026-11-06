@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from docassist import __version__
 from docassist.api.deps import LLMFactory, VisionFactory
-from docassist.api.routes import ask, conversations, documents, monitoring, web
+from docassist.api.routes import ask, conversations, documents, monitoring, reports, web
 from docassist.api.security import security_headers
 from docassist.config import Settings
 from docassist.factory import build_llm, build_vision
@@ -47,6 +47,6 @@ def create_app(
     app.middleware("http")(security_headers)
     app.include_router(web.router)
     app.mount("/static", StaticFiles(directory=web.WEB_DIR), name="static")
-    for module in (documents, ask, conversations, monitoring):
+    for module in (documents, ask, conversations, monitoring, reports):
         app.include_router(module.router)
     return app

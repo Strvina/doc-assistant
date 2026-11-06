@@ -42,6 +42,25 @@ To send real e-mail, edit the *Mailpit* credential in n8n (or create a new SMTP 
 your mail server. If Doc Assistant itself runs in Docker Compose, use
 `http://n8n:5678/webhook/doc-assistant-escalation` as the webhook URL.
 
+## `gap_report_workflow.json` — weekly report of the gaps in the documentation
+
+Every Monday at 8:00 (or with the *Run now* node) the workflow fetches
+`GET /reports/gaps?days=7&classify=true` from Doc Assistant and sends **one e-mail per team**:
+the questions of the last week that the documents could not answer, or whose answer was rated 👎.
+The same question asked several times is listed once with a count; a follow-up such as
+"a u petu?" is shown in the standalone form the search used.
+
+Which team gets a question: the team it was already forwarded to; otherwise, with `classify=true`,
+the team the AI model picks from the team names (`ESCALATION_TEAMS`); otherwise the first team.
+The app writes the subject, text and HTML of each e-mail, so the workflow only splits the list
+and sends. Preview the same report in the browser: `/reports/gaps?format=html` (link in the
+*Praćenje* panel).
+
+The workflow reaches the app at `DOC_ASSISTANT_URL` (default `http://host.docker.internal:8000`,
+the app on this PC; `http://app:8000` when the app runs in compose) and sends `API_TOKEN` as
+`X-API-Key` if it is set. `setup_n8n.py` imports and activates it; send one report right away with
+`uv run python scripts/setup_n8n.py --send-gap-report`.
+
 ## Calling Doc Assistant from n8n
 
 Any workflow can ask questions through the REST API (`uv run uvicorn docassist.api:app`):

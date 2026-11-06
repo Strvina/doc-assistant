@@ -21,6 +21,13 @@ services:
       N8N_DIAGNOSTICS_ENABLED: "false"
       N8N_PERSONALIZATION_ENABLED: "false"
       N8N_SECURE_COOKIE: "false"  # plain http on localhost
+      # The weekly gap report workflow reads these (ADR-035). The app on this PC is reached as
+      # host.docker.internal; when it also runs in compose, use http://app:8000.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      DOC_ASSISTANT_URL: ${DOC_ASSISTANT_URL:-http://host.docker.internal:8000}
+      DOC_ASSISTANT_API_KEY: ${API_TOKEN:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Linux; Docker Desktop has it already
     volumes:
       - n8n:/home/node/.n8n
       - ./automations:/automations:ro

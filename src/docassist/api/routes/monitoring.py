@@ -56,7 +56,7 @@ def escalate(body: EscalateRequest, settings: SettingsDep, log: LogDep) -> Escal
         reference = build_escalator(settings).escalate(payload)
     except (ToolError, OSError) as exc:  # webhook unreachable, outbox not writable
         raise HTTPException(502, f"Could not forward the question: {exc}") from exc
-    log.set_escalation(body.log_id, reference)
+    log.set_escalation(body.log_id, reference, team_id)
     return EscalateResponse(reference=reference, team=team_id)
 
 
