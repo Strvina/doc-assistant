@@ -5,9 +5,17 @@ import pytest
 from docassist.agent.prompts import AGENT_SYSTEM_PROMPT
 from docassist.ingest import ingest
 from docassist.llm import NOT_FOUND_SR, SYSTEM_PROMPT, FakeProvider, LLMResult
-from docassist.llm.prompts import LIST_RULE
+from docassist.llm.base import LLMError
+from docassist.llm.fake import quote_first_document
+from docassist.llm.prompts import LIST_RULE, REWRITE_PROMPT
 from docassist.models import Chunk
-from docassist.rag import answer, context_passages, extract_citations, merge_passages
+from docassist.rag import (
+    answer,
+    context_passages,
+    extract_citations,
+    merge_passages,
+    search_query,
+)
 from docassist.retrieval import FakeEmbedder, SearchResult, VectorStore
 
 SAMPLE_DOCS = Path(__file__).resolve().parent.parent / "data" / "sample_docs"
@@ -147,7 +155,7 @@ def test_history_is_sent_before_the_question(store):
         history=[("Koliko traje odmor?", "20 dana [pravilnik_o_radu.pdf, str. 2]")],
     )
 
-    messages = llm.calls[0][1]
+    messages = llm.calls[-1][1]  # the answer; the first call rewrote the follow-up question
     assert [m["role"] for m in messages] == ["user", "assistant", "user"]
     assert messages[0]["content"] == "Koliko traje odmor?"
     assert "<documents>" not in messages[0]["content"]
@@ -223,3 +231,87 @@ def test_the_model_gets_the_whole_list_around_a_hit(tmp_path):
 def test_prompts_ask_for_whole_lists():
     assert LIST_RULE in SYSTEM_PROMPT
     assert LIST_RULE in AGENT_SYSTEM_PROMPT
+
+
+# --- follow-up questions (ADR-031) --------------------------------------------------------
+
+HISTORY = [("Koje kategorije zaraznih bolesti postoje?", "1. Imunizacija; 2. Hrana i voda")]
+
+
+def rewriting(query):
+    """A fake model that rewrites follow-ups into `query` and answers like the default fake."""
+
+    def respond(system, messages):
+        return query if system == REWRITE_PROMPT else quote_first_document(system, messages)
+
+    return FakeProvider(respond)
+
+
+def test_first_question_is_searched_as_it_is_without_a_model_call():
+    llm = FakeProvider()
+
+    assert search_query("Kada radi kantina?", [], llm) == ("Kada radi kantina?", None)
+    assert llm.calls == []
+
+
+def test_follow_up_is_rewritten_with_the_conversation():
+    llm = rewriting("Koje bolesti spadaju u kategoriju 2, hrana i voda?")
+
+    query, result = search_query("a koje spadaju u drugu?", HISTORY, llm)
+
+    assert query == "Koje bolesti spadaju u kategoriju 2, hrana i voda?"
+    assert result is not None
+    [(system, messages)] = llm.calls
+    assert system == REWRITE_PROMPT
+    assert [m["content"] for m in messages] == [*HISTORY[0], "a koje spadaju u drugu?"]
+
+
+def test_only_the_last_turns_and_the_start_of_long_answers_are_sent():
+    history = [(f"Pitanje {i}", "x" * 5000) for i in range(6)]
+    llm = rewriting("upit")
+
+    search_query("a to?", history, llm)
+
+    [(_, messages)] = llm.calls
+    assert len(messages) == 2 * 3 + 1
+    assert messages[0]["content"] == "Pitanje 3"
+    assert max(len(m["content"]) for m in messages) == 1500
+
+
+@pytest.mark.parametrize("reply", ["", "   ", '""', "x" * 400])
+def test_a_reply_that_is_not_a_query_falls_back_to_the_question(reply):
+    query, _ = search_query("a u petu?", HISTORY, rewriting(reply))
+    assert query == "a u petu?"
+
+
+def test_quotes_around_the_query_are_removed():
+    query, _ = search_query("a u petu?", HISTORY, rewriting("„Polno prenosive bolesti“"))
+    assert query == "Polno prenosive bolesti"
+
+
+def test_a_failed_rewrite_falls_back_to_the_question():
+    class Failing(FakeProvider):
+        def complete(self, system, messages):
+            if system == REWRITE_PROMPT:
+                raise LLMError("rate limit")
+            return super().complete(system, messages)
+
+    assert search_query("a u petu?", HISTORY, Failing()) == ("a u petu?", None)
+
+
+def test_answer_searches_with_the_rewritten_follow_up(store):
+    llm = rewriting("Kada radi kantina?")
+
+    result = answer("A ona?", store, llm, history=[("Gde je kantina?", "U hali B.")])
+
+    assert result.search_query == "Kada radi kantina?"
+    assert result.citations[0].source == "faq.txt"
+    assert [system for system, _ in llm.calls] == [REWRITE_PROMPT, SYSTEM_PROMPT]
+    assert llm.calls[-1][1][-1]["content"].endswith("Question: A ona?")  # model sees the original
+
+    alone = answer("Kada radi kantina?", store, rewriting("-"))
+    assert result.input_tokens > alone.input_tokens  # the rewrite call is counted too
+
+
+def test_answer_without_history_has_no_search_query(store):
+    assert answer("Kada radi kantina?", store, FakeProvider()).search_query == ""

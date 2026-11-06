@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 
 from docassist.citations import find_citations
 from docassist.llm import NOT_FOUND_SR, SYSTEM_PROMPT, LLMProvider, Message, build_user_message
-from docassist.llm.base import ToolCall, stream_complete
+from docassist.llm.base import LLMError, LLMResult, ToolCall, stream_complete
+from docassist.llm.prompts import REWRITE_PROMPT
 from docassist.models import Chunk
 from docassist.retrieval import SearchResult, VectorStore, retrieve
 from docassist.retrieval.store import NEIGHBORS
@@ -40,6 +41,7 @@ class Answer:
     stop_reason: str = "end"
     invalid_citations: list[str] = field(default_factory=list)
     tool_calls: list[ToolCall] = field(default_factory=list)  # agent mode only
+    search_query: str = ""  # what was searched, when a follow-up question was rewritten
 
     @property
     def found(self) -> bool:
@@ -86,7 +88,8 @@ def answer_stream(
 ) -> Iterator[str | Answer]:
     """Like `answer`, but yields the text as the model writes it, then the `Answer` last."""
     started = time.perf_counter()
-    results = store.with_neighbors(retrieve(store, question, k=k, min_score=min_score), neighbors)
+    query, rewrite = search_query(question, history, llm)
+    results = store.with_neighbors(retrieve(store, query, k=k, min_score=min_score), neighbors)
     if not results:
         yield NOT_FOUND_SR
         yield Answer(
@@ -95,8 +98,11 @@ def answer_stream(
             citations=[],
             retrieved=[],
             provider=llm.name,
-            model="",
+            model=rewrite.model if rewrite else "",
             latency_s=time.perf_counter() - started,
+            input_tokens=rewrite.input_tokens if rewrite else 0,
+            output_tokens=rewrite.output_tokens if rewrite else 0,
+            search_query=query if rewrite else "",
         )
         return
 
@@ -128,11 +134,44 @@ def answer_stream(
         provider=llm.name,
         model=result.model,
         latency_s=time.perf_counter() - started,
-        input_tokens=result.input_tokens,
-        output_tokens=result.output_tokens,
+        input_tokens=result.input_tokens + (rewrite.input_tokens if rewrite else 0),
+        output_tokens=result.output_tokens + (rewrite.output_tokens if rewrite else 0),
         stop_reason=result.stop_reason,
         invalid_citations=invalid,
+        search_query=query if rewrite else "",
     )
+
+
+# Follow-up rewriting sees only the last turns, with long answers cut (fewer tokens).
+REWRITE_TURNS = 3
+REWRITE_ANSWER_CHARS = 1500
+MAX_QUERY_CHARS = 300
+
+
+def search_query(
+    question: str, history: Sequence[tuple[str, str]], llm: LLMProvider
+) -> tuple[str, LLMResult | None]:
+    """What to search for: a follow-up question ("a u petu?") rewritten by the model into a
+    standalone query using the conversation (ADR-031), or the question itself.
+
+    Without history there is no extra model call. When the call fails or returns something
+    that is not a query (empty, too long), the question itself is searched.
+    """
+    if not history:
+        return question, None
+    messages: list[Message] = []
+    for previous_question, previous_answer in history[-REWRITE_TURNS:]:
+        messages.append({"role": "user", "content": previous_question})
+        messages.append({"role": "assistant", "content": previous_answer[:REWRITE_ANSWER_CHARS]})
+    messages.append({"role": "user", "content": question})
+    try:
+        result = llm.complete(REWRITE_PROMPT, messages)
+    except LLMError:
+        return question, None
+    query = result.text.strip().strip("\"'„“”«»").strip()
+    if not query or len(query) > MAX_QUERY_CHARS:
+        return question, result
+    return query, result
 
 
 def merge_passages(chunks: Sequence[Chunk]) -> str:

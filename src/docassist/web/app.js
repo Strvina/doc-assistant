@@ -519,6 +519,7 @@ function renderAnswer(question, data, mode) {
   const meta = [data.provider === "fake" ? "offline demo" : data.model, `${data.latency_s.toFixed(1)} s`];
   if (data.input_tokens + data.output_tokens) meta.push(`${(data.input_tokens + data.output_tokens).toLocaleString("sr-RS")} tokena`);
   if (data.cost_usd !== null && data.cost_usd !== undefined) meta.push(`≈ $${data.cost_usd.toFixed(4)}`);
+  if (data.search_query && data.search_query !== question) meta.push(`tražio sam: „${data.search_query}“`);
   const up = el("button", { class: "icon-btn", title: "Koristan odgovor", "aria-label": "Koristan odgovor", html: ICONS.up });
   const down = el("button", { class: "icon-btn", title: "Nije koristan", "aria-label": "Nije koristan", html: ICONS.down });
   const rate = async (rating) => {

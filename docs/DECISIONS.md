@@ -380,3 +380,30 @@ naslov — tada se ponavlja u delovima bez potrebe. Strane sa lažnom ćirilicom
 "well-known" → "wellknown") ili ostavi presečenu reč na "-o" ("epidemiolo-gija"). Stranica sa pravim mešanim pismom (latinica + malo ćirilice) gubi
 ćirilicu. Novi indeks menja ID-jeve delova, pa označavanje citata u **starim** sačuvanim razgovorima
 može da pokaže pogrešan pasus.
+
+### ADR-031 · Pitanje sa nastavkom se prepisuje pre pretrage
+**Odluka:** kad razgovor već ima pitanja, model prvo prepiše novo pitanje u samostalan upit za
+pretragu (`rag.search_query`, prompt `REWRITE_PROMPT`): "a u petu?" → "Koje bolesti spadaju u petu
+kategoriju zaraznih bolesti?". Pitanje na novu temu ostaje isto. Model za prepisivanje vidi poslednja
+3 para pitanje–odgovor, odgovore skraćene na 1.500 znakova. Model koji odgovara i dalje dobija
+originalno pitanje i istoriju; prepisani upit služi samo pretrazi. Ako poziv ne uspe (limit, mreža)
+ili vrati nešto što nije upit (prazno, duže od 300 znakova), pretražuje se originalno pitanje. Tokeni
+oba poziva se sabiraju (praćenje i cena). Upit se vraća u odgovoru (`search_query`), a UI ga
+prikazuje ispod odgovora ("tražio sam: …") kad se razlikuje od pitanja. Prvo pitanje u razgovoru i
+Agent nemaju dodatni poziv (agent sam sastavlja upit za `search_documents`).
+**Zašto:** pretraga je gledala samo poslednje pitanje. Na "a koje bolesti spadaju u drugu" posle
+"Koje kategorije zaraznih bolesti postoje" odgovor je bio "Nema toga u ubačenim dokumentima".
+Izmereno na korisnikovom skenu, 5 pitanja posle pitanja o kategorijama (2 sa nastavkom, 3 na novu
+temu), da li tražene činjenice stižu do modela:
+
+| Pretraga | Nastavak (2) | Nova tema (3) |
+|---|---|---|
+| samo poslednje pitanje (pre) | 0/2 | 3/3 |
+| prethodno + poslednje pitanje (bez poziva modelu) | 2/2 | 1/3 |
+| model prepiše pitanje | **2/2** | **3/3** |
+
+Lepljenje prethodnog pitanja ništa ne košta, ali kvari pitanja na novu temu: reči o bolestima
+pretegnu "kantinu" i "M8".
+**Cena:** jedan mali poziv modelu više po pitanju sa nastavkom: ~0,6 s i ~400 tokena (Groq
+besplatno, ali troši minutni/dnevni limit; na Claude-u delić centa). Model može pogrešno da
+"razreši" pitanje, što se vidi u "tražio sam: …" ispod odgovora.
