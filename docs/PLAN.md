@@ -95,6 +95,7 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 - [x] Pretraga u izabranim dokumentima: kvačice u biblioteci, `doc_ids` u API-ju (ADR-034)
 - [x] Nedeljni izveštaj o prazninama u dokumentaciji mejlom timovima (n8n, ADR-035)
 - [x] Automatski uvoz dokumenata iz foldera `data/inbox` (ADR-036)
+- [x] Panel „Automatski uvoz iz foldera“: biranje foldera, uključi/isključi, istorija, neuspeli (ADR-037)
 
 ## Dodatno — formati
 

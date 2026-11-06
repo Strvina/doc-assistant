@@ -138,3 +138,21 @@ def get_vision_factory(request: Request) -> VisionFactory:
 
 
 VisionFactoryDep = Annotated[VisionFactory, Depends(get_vision_factory)]
+
+
+# --- the inbox folder (ADR-036, ADR-037) -------------------------------------------------
+
+INBOX_CONFIG = "inbox.json"
+
+
+def inbox_config_file(settings: Settings) -> Path:
+    """Where the folder chosen in the UI is kept: next to the query log (the app's state)."""
+    return settings.log_db.parent / INBOX_CONFIG
+
+
+def app_folders(settings: Settings) -> tuple[list[Path], list[Path]]:
+    """The app's own folders, which cannot be the inbox (`inbox.check_folder`): folders that
+    cannot hold it at all, and folders that cannot be it exactly (the app root, the data)."""
+    protected = [settings.documents_dir, settings.index_dir, settings.embedding_cache_dir]
+    exact = [Path.cwd(), SAMPLE_DOCS.parent.parent, settings.log_db.parent, SAMPLE_DOCS]
+    return protected, exact
