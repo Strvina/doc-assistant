@@ -21,6 +21,59 @@ const el = (tag, attrs = {}, ...children) => {
 // printing them as text), so children can be written as `condition && el(...)`.
 const fill = (node, ...children) =>
   node.replaceChildren(...children.flat().filter((c) => c !== null && c !== undefined && c !== false));
+// --- scroll to reveal ---------------------------------------------------------------------
+// Long lists show one page and load the next when the user scrolls near the end, like a chat:
+// no page buttons. `onReach` runs when `marker` comes within 300 px of `root`'s visible area,
+// and again after each load while the marker is still in view (a short first page).
+function whenReached(marker, root, onReach) {
+  let busy = false;
+  const observer = new IntersectionObserver(async (entries) => {
+    if (busy || !entries.some((entry) => entry.isIntersecting)) return;
+    busy = true;
+    try {
+      await onReach();
+    } finally {
+      busy = false;
+    }
+    if (!marker.isConnected) return observer.disconnect();
+    observer.unobserve(marker); // observing again reports whether it is still in view
+    observer.observe(marker);
+  }, { root, rootMargin: "300px" });
+  observer.observe(marker);
+  return observer;
+}
+
+// A list filled page by page from the server: `loadPage(cursor)` returns { items, next }, and
+// next is null after the last page. Calling it again starts the list from the top.
+function revealList(list, { root, loadPage, render, empty }) {
+  list.reveal?.disconnect();
+  let cursor = null;
+  const marker = el("li", { class: "reveal-more" }, "Učitavam…");
+  list.replaceChildren(marker);
+  list.reveal = whenReached(marker, root, async () => {
+    let page;
+    try {
+      page = await loadPage(cursor);
+    } catch (error) {
+      marker.replaceWith(el("li", { class: "empty" }, `Nije učitano: ${error.message}`));
+      return;
+    }
+    marker.before(...page.items.map(render));
+    cursor = page.next;
+    if (cursor === null || cursor === undefined) {
+      marker.remove();
+      if (!list.children.length) list.append(el("li", { class: "empty" }, empty));
+    }
+  });
+}
+
+// Page sizes: monitoring lists, saved conversations, documents in the library, and the turns
+// of an opened conversation shown at first (older ones appear when scrolling up).
+const LIST_PAGE = 20;
+const CONVERSATION_PAGE = 30;
+const DOCUMENT_PAGE = 50;
+const THREAD_PAGE = 10;
+
 const escapeHtml = (text) =>
   String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const icon = (path) => `<svg viewBox="0 0 24 24">${path}</svg>`;
@@ -82,6 +135,10 @@ const state = {
   viewing: null, // doc_id shown in the viewer
   inbox: null, // GET /inbox: the folder whose files are imported automatically
   pickingFolder: false, // the Windows folder dialog is open
+  conversationsMore: false, // more saved conversations to load when the list is scrolled
+  docFilter: "", // the library search the list was drawn for
+  docsShown: DOCUMENT_PAGE, // documents drawn so far (more appear when scrolling)
+  olderTurns: [], // turns of the opened conversation not drawn yet, oldest first
   scope: loadScope(), // doc_ids to search; empty = all documents
 };
 
@@ -461,9 +518,15 @@ async function discardFailed(name) {
 function renderDocuments() {
   const filter = $("#doc-filter").value.trim().toLowerCase();
   const list = $("#doc-list");
-  const docs = state.documents.filter((d) => d.source.toLowerCase().includes(filter));
+  if (filter !== state.docFilter) {  // a new search starts from the first page
+    state.docFilter = filter;
+    state.docsShown = DOCUMENT_PAGE;
+  }
+  const matching = state.documents.filter((d) => d.source.toLowerCase().includes(filter));
+  const docs = matching.slice(0, state.docsShown);
   $("#doc-count").textContent = state.documents.length;
   $("#library-empty").hidden = state.documents.length > 0 || !state.config.allow_uploads;
+  list.reveal?.disconnect();
   list.replaceChildren(
     ...docs.map((doc) => {
       const actions = el("div", { class: "doc-actions" },
@@ -502,6 +565,14 @@ function renderDocuments() {
       );
     }),
   );
+  if (matching.length > docs.length) {  // the rest is drawn when the list is scrolled down
+    const marker = el("li", { class: "reveal-more" }, `Još ${matching.length - docs.length} dokumenata…`);
+    list.append(marker);
+    list.reveal = whenReached(marker, list, async () => {
+      state.docsShown += DOCUMENT_PAGE;
+      renderDocuments();
+    });
+  }
   renderScope();
 }
 
@@ -868,9 +939,22 @@ function renderAnswer(question, data, mode) {
   return card;
 }
 
-function scrollToBottom() {
+// Smooth while an answer is being written; `instant` when a conversation opens, so the view is
+// at the end before "scroll to reveal" checks whether the top of the thread is visible.
+function scrollToBottom({ instant = false } = {}) {
   const thread = $("#thread");
-  thread.scrollTop = thread.scrollHeight;
+  thread.scrollTo({ top: thread.scrollHeight, behavior: instant ? "instant" : "auto" });
+}
+
+// After opening a conversation: messages out of view are drawn only when needed (CSS
+// content-visibility), so the last ones get their real height only once they are on screen,
+// which moves the end. Scroll again after they are drawn.
+function settleAtBottom() {
+  scrollToBottom({ instant: true });
+  return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
+    scrollToBottom({ instant: true });
+    resolve();
+  })));
 }
 
 async function ask(question) {
@@ -1012,15 +1096,40 @@ function setSideTab(tab) {
   try { localStorage.setItem("da-side-tab", tab); } catch {}
 }
 
+// The first page of saved conversations; the next ones load when the list is scrolled down.
 async function loadConversations() {
   const query = $("#conv-filter").value.trim();
+  let page;
   try {
-    state.conversations = await api(`/conversations${query ? `?q=${encodeURIComponent(query)}` : ""}`);
+    page = await api(conversationsUrl(query, 0));
   } catch {
     return;
   }
+  state.conversations = page;
+  state.conversationsMore = page.length === CONVERSATION_PAGE;
   state.conversationQuery = query;
   renderConversations();
+}
+
+async function loadMoreConversations() {
+  const query = state.conversationQuery;
+  let page;
+  try {
+    page = await api(conversationsUrl(query, state.conversations.length));
+  } catch {
+    return;
+  }
+  if (query !== state.conversationQuery) return; // the search changed meanwhile
+  const known = new Set(state.conversations.map((c) => c.id));
+  state.conversations.push(...page.filter((c) => !known.has(c.id)));
+  state.conversationsMore = page.length === CONVERSATION_PAGE;
+  renderConversations();
+}
+
+function conversationsUrl(query, offset) {
+  const params = new URLSearchParams({ limit: CONVERSATION_PAGE, offset });
+  if (query) params.set("q", query);
+  return `/conversations?${params}`;
 }
 
 function when(iso) {
@@ -1035,7 +1144,10 @@ function when(iso) {
 
 function renderConversations() {
   const list = $("#conv-list");
-  if (!state.conversationQuery) $("#conv-count").textContent = state.conversations.length;
+  list.reveal?.disconnect();
+  if (!state.conversationQuery) {
+    $("#conv-count").textContent = `${state.conversations.length}${state.conversationsMore ? "+" : ""}`;
+  }
   const empty = $("#conv-empty");
   empty.hidden = state.conversations.length > 0;
   empty.innerHTML = state.conversationQuery
@@ -1060,6 +1172,11 @@ function renderConversations() {
       remove);
     return item;
   }));
+  if (state.conversationsMore) {
+    const marker = el("li", { class: "reveal-more" }, "Učitavam starije razgovore…");
+    list.append(marker);
+    list.reveal = whenReached(marker, list, loadMoreConversations);
+  }
 }
 
 // Export (ADR-027): a small menu under the download button; the links download the file.
@@ -1148,7 +1265,32 @@ function startRename(item, conversation) {
 }
 
 function clearThread() {
-  for (const node of [...$("#thread").querySelectorAll(".msg")]) node.remove();
+  const thread = $("#thread");
+  thread.reveal?.disconnect();
+  state.olderTurns = [];
+  for (const node of [...thread.querySelectorAll(".msg, .reveal-older")]) node.remove();
+}
+
+function turnNode(turn) {
+  return el("div", { class: "msg" },
+    el("div", { class: "msg-user" }, turn.question),
+    renderAnswer(turn.question, turn.response, turn.mode));
+}
+
+// A long conversation opens with its last turns; older ones appear when scrolling up, and the
+// view stays on the same message while they are added above it.
+function showOlderTurns() {
+  const thread = $("#thread");
+  const marker = thread.querySelector(".reveal-older");
+  const turns = state.olderTurns.splice(-THREAD_PAGE);
+  const height = thread.scrollHeight;
+  marker.after(...turns.map(turnNode));
+  // Stay on the same message: move down by what was added above, without animation.
+  thread.scrollTo({ top: thread.scrollTop + thread.scrollHeight - height, behavior: "instant" });
+  if (!state.olderTurns.length) {
+    thread.reveal?.disconnect();
+    marker.remove();
+  }
 }
 
 function newConversation() {
@@ -1178,16 +1320,18 @@ async function openConversation(id) {
   clearThread();
   $("#welcome").hidden = conversation.turns.length > 0;
   const thread = $("#thread");
-  for (const turn of conversation.turns) {
-    thread.append(el("div", { class: "msg" },
-      el("div", { class: "msg-user" }, turn.question),
-      renderAnswer(turn.question, turn.response, turn.mode)));
+  state.olderTurns = conversation.turns.slice(0, -THREAD_PAGE);
+  if (state.olderTurns.length) {
+    thread.append(el("div", { class: "reveal-older" }, "Starija pitanja se učitavaju dok skroluješ nagore…"));
   }
+  thread.append(...conversation.turns.slice(-THREAD_PAGE).map(turnNode));
   state.conversationId = conversation.id;
   state.history = conversation.turns.map((t) => ({ question: t.question, answer: t.response.answer }));
   renderConversations();
   closeLibraryDrawer();
-  scrollToBottom();
+  await settleAtBottom();
+  const marker = thread.querySelector(".reveal-older");  // watched once the view is at the end
+  if (marker) thread.reveal = whenReached(marker, thread, async () => showOlderTurns());
 }
 
 async function deleteConversation(conversation) {
@@ -1233,9 +1377,11 @@ async function openInsights() {
         "aria-label": `Obriši pitanje: ${q.question}`, html: ICONS.close,
         onclick: (event) => { event.stopPropagation(); deleteQuery(q); } }));
     $("#queries-clear").hidden = !canDelete || !s.queries;
-    const fill = (id, rows, empty) => $(id).replaceChildren(...(rows.length ? rows.map(item) : [el("li", { class: "empty" }, empty)]));
-    fill("#gaps", data.gaps, "Nema praznina — svako pitanje je imalo odgovor.");
-    fill("#recent", data.recent, "Još nema pitanja.");
+    // Both lists load page by page while the panel is scrolled (GET /queries).
+    const root = $("#insights .modal-card");
+    const pages = (kind) => (before) => api(`/queries?kind=${kind}&limit=${LIST_PAGE}${before ? `&before=${before}` : ""}`);
+    revealList($("#gaps"), { root, loadPage: pages("gaps"), render: item, empty: "Nema praznina — svako pitanje je imalo odgovor." });
+    revealList($("#recent"), { root, loadPage: pages("recent"), render: item, empty: "Još nema pitanja." });
   } catch (error) {
     toast(`Statistika nije dostupna: ${error.message}`, "error");
   }

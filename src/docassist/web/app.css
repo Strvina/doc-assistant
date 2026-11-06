@@ -374,7 +374,12 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .example small { font: 600 10.5px/1 var(--mono); color: var(--muted); letter-spacing: .04em; }
 
 /* messages */
-.msg { margin-top: 22px; display: grid; gap: 8px; }
+.msg {
+  margin-top: 22px; display: grid; gap: 8px;
+  /* Messages out of view are not drawn while scrolling (long answers, tables); "auto" keeps
+     the size measured last time, so the scroll bar does not jump. */
+  content-visibility: auto; contain-intrinsic-size: auto 320px;
+}
 .msg-user {
   justify-self: end; max-width: 82%;
   background: var(--navy-800); color: #fff; padding: 11px 16px;
@@ -562,9 +567,11 @@ kbd { font: 600 10.5px/1 var(--mono); padding: 2px 5px; border-radius: 4px; bord
 .viewer iframe { flex: 1; width: 100%; border: 0; background: #eef1f5; }
 
 /* --- modal: insights ------------------------------------------------------------------- */
-.modal { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px; background: rgba(8, 18, 32, .55); backdrop-filter: blur(3px); }
+/* No blur behind the dialog: the browser would recompute it on every scrolled frame (choppy
+   scrolling on laptops); a slightly darker backdrop instead. */
+.modal { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px; background: rgba(8, 18, 32, .66); }
 .modal-card {
-  width: min(980px, 100%); max-height: calc(100vh - 48px); overflow-y: auto;
+  width: min(980px, 100%); max-height: calc(100vh - 48px); overflow-y: auto; overscroll-behavior: contain;
   background: var(--surface); border-radius: 18px; box-shadow: var(--shadow-2); padding: 24px;
 }
 .modal-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
@@ -636,3 +643,9 @@ kbd { font: 600 10.5px/1 var(--mono); padding: 2px 5px; border-radius: 4px; bord
   .mode-switch button { padding: 6px 10px; font-size: 13px; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+
+/* --- scroll to reveal: "loading more" at the end of a list, older turns at the top -------- */
+.reveal-more { list-style: none; padding: 10px 12px; text-align: center; font-size: 12.5px; color: var(--muted); }
+.q-list .reveal-more { border: 0; display: block; }
+.reveal-older { margin: 10px auto 0; max-width: 780px; text-align: center; font-size: 12.5px; color: var(--muted); }
+.doc-list, .conv-list, .q-list { overscroll-behavior: contain; }

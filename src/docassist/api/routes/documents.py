@@ -29,7 +29,7 @@ def list_documents(library: LibraryDep) -> list[DocumentOut]:
         DocumentOut(
             **fields_of(d),
             has_file=(library.files_dir / d.source).is_file(),
-            language=library.language(d.source),
+            language=library.language(d),
         )
         for d in library.documents()
     ]

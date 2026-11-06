@@ -202,3 +202,22 @@ def test_rename_a_conversation(settings, tmp_path):
 
     assert bob.patch(f"/conversations/{cid}", json={"title": "Moje"}).status_code == 404
     assert alice.patch(f"/conversations/{cid}", json={"title": ""}).status_code == 422
+
+
+# --- pages for scrolling (the list loads more at its end) --------------------------------
+
+
+def test_conversations_come_page_by_page(settings, tmp_path):
+    client = browser(settings, tmp_path)
+    for n in range(5):
+        ask(client, f"Pitanje broj {n}")
+
+    first = client.get("/conversations", params={"limit": 2}).json()
+    second = client.get("/conversations", params={"limit": 2, "offset": 2}).json()
+    last = client.get("/conversations", params={"limit": 2, "offset": 4}).json()
+
+    titles = [c["title"] for c in first + second + last]
+    assert titles == [f"Pitanje broj {n}" for n in (4, 3, 2, 1, 0)]
+    assert len(last) == 1  # fewer than the limit: no more pages
+    searched = client.get("/conversations", params={"q": "broj", "limit": 2, "offset": 3})
+    assert [c["title"] for c in searched.json()] == ["Pitanje broj 1", "Pitanje broj 0"]
