@@ -16,6 +16,7 @@ Ovaj fajl se automatski učitava u Claude Code. Za druge asistente, nalepi ga na
   ```bash
   uv run ruff check .
   uv run ruff format --check .
+  uv run mypy
   uv run pytest
   ```
 - Testovi **nikad ne zovu prave API-je** (Claude/OpenAI). Koristi fake/mock implementacije.

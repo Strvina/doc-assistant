@@ -169,8 +169,8 @@ def text_pages(path: Path) -> list[list[Block]]:
     pages = []
     for page_text in content.replace("\r\n", "\n").split("\f"):
         blocks = []
-        for paragraph in re.split(r"\n\s*\n", page_text):
-            paragraph = paragraph.strip()
+        for block_text in re.split(r"\n\s*\n", page_text):
+            paragraph = block_text.strip()
             if not paragraph:
                 continue
             heading = re.match(r"^(#{1,3})\s+(.*)", paragraph) if markdown else None

@@ -124,7 +124,7 @@ def starts_with_list_item(text: str) -> bool:
 def _sections(text: str) -> list[tuple[str, str]]:
     """(heading, section text including the heading) pairs; the first may have no heading."""
     sections: list[tuple[str, str]] = []
-    heading, lines = "", []
+    heading, lines = "", list[str]()
     for line in text.splitlines(keepends=True):
         if _is_heading(line) and "".join(lines).strip():
             sections.append((heading, "".join(lines)))

@@ -12,7 +12,15 @@ if TYPE_CHECKING:
 
 class Message(TypedDict):
     role: Literal["user", "assistant"]
-    content: str
+    # Text, or text and image parts for a model that reads pictures (ADR-029).
+    content: str | list[dict[str, Any]]
+
+
+def text_of(content: str | list[dict[str, Any]]) -> str:
+    """The text of a message, without its image parts."""
+    if isinstance(content, str):
+        return content
+    return "\n".join(str(part.get("text", "")) for part in content if part.get("type") == "text")
 
 
 StopReason = Literal["end", "max_tokens", "refusal", "other"]

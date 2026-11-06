@@ -92,7 +92,9 @@ class QueryLog:
                 " cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 row,
             )
-            return int(cursor.lastrowid)
+            row_id = cursor.lastrowid
+            assert row_id is not None  # set by every INSERT
+            return row_id
 
     def set_feedback(self, query_id: int, rating: int | None) -> bool:
         """Store 👍 (1), 👎 (-1) or clear it (None). Returns False for an unknown id."""

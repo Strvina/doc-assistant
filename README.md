@@ -170,7 +170,8 @@ Generated from `scripts/sample_docs_src/` by `uv run python scripts/build_sample
 
 ## Development
 
-`uv run ruff check . && uv run ruff format --check . && uv run pytest` — CI runs the same on every
-pull request; tests use fake models and never call real APIs.
+`uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest` — CI runs the
+same on every pull request (mypy in strict mode: every function typed); tests use fake models and
+never call real APIs.
 Workflow: [docs/WORKFLOW.md](docs/WORKFLOW.md) · deployment: [docs/DEPLOY.md](docs/DEPLOY.md) ·
 roadmap: [docs/PLAN.md](docs/PLAN.md).

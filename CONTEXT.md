@@ -44,6 +44,8 @@ GitHub Actions · Docker / Hugging Face Spaces
 - **Pitanja sa nastavkom (ADR-031):** kad razgovor ima istoriju, model prvo prepiše pitanje u samostalan
   upit ("a u petu?" → "Koje bolesti spadaju u petu kategoriju zaraznih bolesti?"); UI pokazuje
   "tražio sam: …". Provereno uživo sa Groq-om (nastavak 2/2, nova tema 3/3).
+- **Kvalitet koda (ADR-033):** `api.py` podeljen na paket `docassist/api/` (ruteri po oblastima, `deps`,
+  `security`, `schemas`); strogi `mypy` obavezan (CI + pre commita); šira ruff pravila. Pokrivenost 95 %.
 - **Samoosvežavanje indeksa (ADR-032):** zastareo ili nedovršen indeks web aplikacija pravi sama iz
   `DOCUMENTS_DIR` u pozadini; UI traka "Osvežavam indeks… dokument 3 / 7"; bez originala za neki
   dokument ne briše ništa. Pregled proverava stare citate po početku teksta (`q`). Provereno sa pravim
@@ -72,7 +74,8 @@ GitHub Actions · Docker / Hugging Face Spaces
 
 ## Sledeći korak
 
-**Odluka (2026-11-04): online demo se za sada NE objavljuje — samo razvoj aplikacije.**
+**Odluka (2026-11-06): nema demo videa ni online dema, i za sada nema Claude-a — samo razvoj aplikacije
+(besplatni Groq/Gemini).** (Ranije, 2026-11-04: online demo se ne objavljuje.)
 Sve za Hugging Face je spremno (`docs/DEPLOY.md`: Groq/Gemini, `EMBED_ORIGINS`, LFS u workflow-u);
 deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljena.
 
@@ -150,6 +153,8 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
   nepromenjeno. Agent ga ne koristi.
 - Osvežavanje: `reindex.py` (nit, `Rebuild` status, oznaka `rebuilding` u `INDEX_DIR`); `api._open_library` pod
   `rebuild_lock`. Test server za proveru: `INDEX_DIR`/`DOCUMENTS_DIR` u scratch + `--port 8765`.
+- Nova ruta → odgovarajući modul u `api/routes/`; zavisnosti iz `api/deps.py`, pristup `ACCESS`/`UPLOADS` iz
+  `api/security.py`. `ConversationStore.list` se sada zove `summaries`.
 - Groq: 8.000 tokena/min po modelu → 413 za velike zahteve (agent čita ceo dokument); lanac prelazi dalje.
 - gpt-oss ponekad citira sa `【...】`; `chat_completions._clean` to pretvara u `[...]`.
 - Statika (`app.css`/`app.js`) se u `index.html` servira sa `?v=<hash>` — nema zastarelog CSS-a posle izmene.
@@ -194,3 +199,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-06 | Ceo spisak do modela: susedni delovi, odlomak po strani, uvodna linija kao naslov, OCR bez lažne ćirilice i presečenih reči, pravilo za spiskove; eval 36 pitanja, RAG 100 %; ADR-030 | #27 |
 | 2026-11-06 | Pitanja sa nastavkom: model prepiše pitanje pre pretrage (izmereno: 5/5 naspram 3/5 jeftine verzije); ADR-031 | #28 |
 | 2026-11-06 | Aplikacija sama osvežava zastareo indeks (napredak u UI-ju), stari citati se proveravaju po tekstu; ADR-032 | #29 |
+| 2026-11-06 | Kvalitet koda: API po ruterima, strogi mypy u CI-ju, šira ruff pravila; ADR-033 | #30 |

@@ -91,7 +91,7 @@ def test_corrupted_pdf_raises_document_load_error(tmp_path):
     path = tmp_path / "broken.pdf"
     path.write_bytes(b"this is not a pdf")
 
-    with pytest.raises(DocumentLoadError, match="broken.pdf"):
+    with pytest.raises(DocumentLoadError, match=r"broken\.pdf"):
         load_document(path)
 
 

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import csv
 import io
+import itertools
 import os
 import re
 import shutil
@@ -291,7 +292,7 @@ def _token_kind(token: str) -> int:
     # Noise often mixes cases at random ("krYzYzYıh"); real words change case at most twice.
     changes = sum(
         1
-        for a, b in zip(core, core[1:], strict=False)
+        for a, b in itertools.pairwise(core)
         if a.isalpha() and b.isalpha() and a.islower() != b.islower()
     )
     if changes > 2:

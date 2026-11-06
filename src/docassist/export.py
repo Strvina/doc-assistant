@@ -244,10 +244,10 @@ def to_docx(conversation: dict[str, Any]) -> bytes:
         if sources:
             doc.add_paragraph().add_run("Izvori").bold = True
             for where, quote in sources:
-                item = doc.add_paragraph(style="List Bullet")
-                item.add_run(where).bold = True
+                entry = doc.add_paragraph(style="List Bullet")
+                entry.add_run(where).bold = True
                 if quote:
-                    item.add_run(f" — „{quote}“").italic = True
+                    entry.add_run(f" — „{quote}“").italic = True
 
     out = io.BytesIO()
     doc.save(out)
@@ -330,14 +330,14 @@ def to_html(conversation: dict[str, Any]) -> str:
 
 
 def to_pdf(conversation: dict[str, Any]) -> bytes:
-    page = pymupdf.paper_rect("a4")
-    content = page + (56, 56, -56, -56)  # 2 cm margins
+    a4 = pymupdf.paper_rect("a4")
+    content = a4 + (56, 56, -56, -56)  # 2 cm margins
     story = pymupdf.Story(html=to_html(conversation), user_css=_CSS)
     out = io.BytesIO()
     writer = pymupdf.DocumentWriter(out)
     more = True
     while more:
-        device = writer.begin_page(page)
+        device = writer.begin_page(a4)
         more, _ = story.place(content)
         story.draw(device)
         writer.end_page()
@@ -346,9 +346,9 @@ def to_pdf(conversation: dict[str, Any]) -> bytes:
     # Page numbers and the document title, added after layout.
     doc = pymupdf.open(stream=out.getvalue(), filetype="pdf")
     doc.set_metadata({"title": conversation["title"], "creator": "Doc Assistant"})
-    for number, pdf_page in enumerate(doc, start=1):
-        footer = pymupdf.Rect(56, page.height - 40, page.width - 56, page.height - 24)
-        pdf_page.insert_textbox(
-            footer, f"{number} / {doc.page_count}", fontsize=8, color=(0.42, 0.45, 0.5), align=1
+    footer = pymupdf.Rect(56, a4.height - 40, a4.width - 56, a4.height - 24)
+    for index in range(doc.page_count):
+        doc[index].insert_textbox(
+            footer, f"{index + 1} / {doc.page_count}", fontsize=8, color=(0.42, 0.45, 0.5), align=1
         )
     return doc.tobytes(garbage=3, deflate=True)

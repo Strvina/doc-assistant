@@ -22,8 +22,11 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "mypy>=2.4.1",
     "pytest>=9.2.0",
     "ruff>=0.17.3",
+    "types-openpyxl>=3.1.5.20261017",
+    "types-pyyaml>=6.0.12.20261103",
 ]
 
 [build-system]
@@ -38,7 +41,24 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP", "SIM"]
+# pycodestyle, pyflakes, isort, bugbear, pyupgrade, simplify, comprehensions, misc. lints,
+# return values, ruff's own rules, performance, pathlib, pylint errors and warnings.
+select = ["E", "F", "I", "B", "UP", "SIM", "C4", "PIE", "RET", "RUF", "PERF", "PTH", "PLE", "PLW"]
+# The documents and answers are in Serbian and German: their letters are not "ambiguous".
+ignore = ["RUF001", "RUF002", "RUF003"]
+# `rect + (56, 56, -56, -56)` moves the edges of a PyMuPDF Rect; it is not tuple concatenation.
+extend-ignore = ["RUF005"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src"]
+check_untyped_defs = true
+disallow_untyped_defs = true
+disallow_any_generics = true
+strict_equality = true
+warn_unreachable = true
+warn_unused_ignores = true
+warn_redundant_casts = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

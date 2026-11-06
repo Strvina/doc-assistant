@@ -57,8 +57,8 @@ def test_store_keeps_turns_in_order_per_owner(tmp_path):
     store.add_turn("a", cid, "Drugo", "agent", {"answer": "Drugi"})
 
     assert store.history("a", cid) == [("Prvo pitanje", "Prvi odgovor"), ("Drugo", "Drugi")]
-    assert [c["turns"] for c in store.list("a")] == [2]
-    assert store.list("b") == [] and store.get("b", cid) is None
+    assert [c["turns"] for c in store.summaries("a")] == [2]
+    assert store.summaries("b") == [] and store.get("b", cid) is None
     assert store.add_turn("b", cid, "q", "rag", {}) is False
     assert store.delete("b", cid) is False and store.delete("a", cid) is True
     assert store.get("a", cid) is None
@@ -180,14 +180,14 @@ def test_search_finds_titles_questions_and_answers_without_diacritics(tmp_path):
     store.add_turn("a", leave, "Godišnji odmor", "rag", {"answer": "Najmanje 20 radnih dana."})
 
     def ids(query):
-        return [c["id"] for c in store.list("a", query=query)]
+        return [c["id"] for c in store.summaries("a", query=query)]
 
     assert ids("KANTINA") == [canteen]
     assert ids("caj besplatan") == [canteen]  # words from a later turn, without diacritics
     assert ids("godisnji 20") == [leave]
     assert ids("parking") == []
     assert len(ids("")) == 2
-    assert store.list("b", query="kantina") == []
+    assert store.summaries("b", query="kantina") == []
 
 
 def test_rename_a_conversation(settings, tmp_path):

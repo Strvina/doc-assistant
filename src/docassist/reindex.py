@@ -82,7 +82,7 @@ def missing_originals(settings: Settings) -> list[str]:
     if DEFAULT_COLLECTION not in {c.name for c in client.list_collections()}:
         return []
     metadatas = client.get_collection(DEFAULT_COLLECTION).get(include=["metadatas"])["metadatas"]
-    sources = {meta["source"] for meta in metadatas or []}
+    sources = {str(meta["source"]) for meta in metadatas or []}
     stored = {p.name for p in originals(settings.documents_dir)}
     return sorted(sources - stored, key=str.lower)
 

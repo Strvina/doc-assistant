@@ -50,7 +50,7 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 - [x] 4.1 Upload dokumenata, lista ubačenih dokumenata, brisanje dokumenta
 - [x] 4.2 Chat sa istorijom; citati prikazani ispod odgovora (klik → tekst chunk-a)
 - [x] 4.3 Izbor modela u sidebar-u (Claude / ChatGPT)
-- [ ] 4.4 Deploy online demo + link u README — Hugging Face Space + GitHub Action spremni (`docs/DEPLOY.md`)
+- [ ] ~~4.4 Deploy online demo~~ — odustano (2026-11-06); + link u README — Hugging Face Space + GitHub Action spremni (`docs/DEPLOY.md`)
 - [x] 4.5 README: opis, screenshot, kako pokrenuti
 - [x] 4.7 Sopstveni web UI: pregled originala sa označenim citatom, preuzimanje, panel za praćenje (ADR-020)
 - [ ] **4.6 PRIJAVA NA OGLAS** (CV na srpskom + link na demo i GitHub)
@@ -89,6 +89,13 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 - [x] Aplikacija sama osvežava zastareo indeks (traka sa napretkom u UI-ju), stari citati ne
       označavaju pogrešan pasus (ADR-032)
 
+## Dodatno — kvalitet koda i automatizacija (2026-11-06)
+
+- [x] Kvalitet koda: API po ruterima, strogi mypy, šira ruff pravila (ADR-033)
+- [ ] Pretraga u izabranom dokumentu
+- [ ] Nedeljni izveštaj o prazninama u dokumentaciji mejlom timovima (n8n)
+- [ ] Automatski uvoz dokumenata iz foldera
+
 ## Dodatno — formati
 
 - [x] Excel (`.xlsx`, list = strana) i PowerPoint (`.pptx`, slajd = strana, sa beleškama); citati za
@@ -103,7 +110,7 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 
 - [x] 7.1 Dockerfile + `docker compose up` pokreće sve — `compose config` proveren, build nije pokrenut (Docker Desktop nije radio)
 - [ ] 7.2 README na engleskom: arhitektura (dijagram), odluke, rezultati evaluacije — urađeno osim rezultata sa Claude-om (6.3)
-- [ ] 7.3 Demo video 2–3 min
+- [ ] ~~7.3 Demo video 2–3 min~~ — odustano (2026-11-06)
 - [x] 7.4 Sekcija "Data protection": gde su podaci, brisanje, bez treniranja na podacima
 
 ---

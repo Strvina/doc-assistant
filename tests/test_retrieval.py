@@ -208,7 +208,7 @@ def test_index_from_an_older_chunking_must_be_rebuilt(tmp_path, monkeypatch):
     VectorStore(tmp_path, FakeEmbedder()).add_document([chunk("a.txt", 1, 0, "old chunks")])
     monkeypatch.setattr(store_module, "CHUNKING", "sections-v2-ocr1")
 
-    with pytest.raises(EmbedderMismatchError, match="chunking 'fixed-v1'.*--rebuild"):
+    with pytest.raises(EmbedderMismatchError, match=r"chunking 'fixed-v1'.*--rebuild"):
         VectorStore(tmp_path, FakeEmbedder())
     assert VectorStore(tmp_path, FakeEmbedder(), rebuild=True).count() == 0
 

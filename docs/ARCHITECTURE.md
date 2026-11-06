@@ -4,7 +4,7 @@
 
 ```
    browser ──▶ web UI (src/docassist/web: HTML/CSS/JS) ─┐
-                                                        ├──▶ FastAPI app (api.py) ◀── n8n / druge aplikacije
+                                                        ├──▶ FastAPI app (api/)    ◀── n8n / druge aplikacije
    terminal ──▶ cli.py ─────────────────────────────────┘          │      (X-API-Key)
                                                                    ▼
                         ┌──────────────────────── docassist (core) ────────────────────────┐
@@ -44,10 +44,16 @@ src/docassist/
   pricing.py          # cene modela → procena troška
   eval.py             # python -m docassist.eval
   factory.py          # pravi embedder/store/library/LLM/tool context iz Settings
-  api.py              # FastAPI: web UI, API, sesije i limiti, viewer endpoint-i
+  api/                # FastAPI aplikacija (paket)
+    __init__.py       # create_app, SESSION_COOKIE, app (za uvicorn)
+    app.py            # sastavlja aplikaciju: stanje, middleware, statika, ruteri
+    deps.py           # zavisnosti: settings, biblioteka (+ osvežavanje), log, razgovori, modeli
+    security.py       # pristup (X-API-Key / sesija), limiti pitanja, kolačić, bezbednosna zaglavlja
+    schemas.py        # Pydantic modeli zahteva/odgovora, to_response
+    routes/           # web (UI, config, health) · documents · ask · conversations · monitoring
   cli.py              # index / search / ask / docs / delete
   web/                # index.html, app.css, app.js, logo.svg (bez build koraka)
-eval/questions.yaml   # 34 pitanja za evaluaciju
+eval/questions.yaml   # 36 pitanja za evaluaciju
 automations/          # n8n workflow + SMTP kredencijal za Mailpit
 scripts/              # build_sample_docs.py, setup_n8n.py
 deploy/               # README za Hugging Face Space

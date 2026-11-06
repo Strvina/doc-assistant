@@ -20,10 +20,15 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pymupdf
 
 from docassist.ingest import ocr
+
+if TYPE_CHECKING:
+    from docassist.llm import LLMProvider
+    from docassist.llm.base import Message
 
 SIDECAR_SUFFIX = ".vision.json"
 MAX_SIDE_PX = 2000  # the longer side of a rendered page; enough for small print
@@ -131,12 +136,12 @@ def read_document(
     return VisionResult(len(pictures), len(done))
 
 
-def llm_reader(provider) -> ReadImage:
+def llm_reader(provider: LLMProvider) -> ReadImage:
     """`read_image` for a Chat Completions provider (Gemini): one page per request."""
 
     def read_image(png: bytes) -> str:
         url = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
-        message = {
+        message: Message = {
             "role": "user",
             "content": [
                 {"type": "text", "text": "Transcribe this page."},

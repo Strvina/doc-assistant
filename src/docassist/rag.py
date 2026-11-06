@@ -179,11 +179,12 @@ def merge_passages(chunks: Sequence[Chunk]) -> str:
     and the section heading a chunk repeats from the one before it. "[…]" marks left-out
     text between chunks that are not next to each other."""
     ordered = sorted({c.chunk_id: c for c in chunks}.values(), key=_chunk_index)
-    merged, previous = "", None
+    merged = ""
+    previous: Chunk | None = None
     for chunk in ordered:
         text = chunk.text
         adjacent = previous is not None and _chunk_index(chunk) == _chunk_index(previous) + 1
-        if adjacent:
+        if previous is not None and adjacent:
             heading = _first_line(previous.text)
             if _first_line(text) == heading and len(heading) < len(text):
                 text = text[len(heading) :].lstrip("\n")
