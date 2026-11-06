@@ -217,7 +217,11 @@ def ocr_blocks(
 
 
 def _run(args: list[str], data: bytes) -> subprocess.CompletedProcess[bytes]:
-    flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0  # no console popup
+    # A platform check as a statement, so the type checker knows the flag exists (Windows).
+    if sys.platform == "win32":
+        flags = subprocess.CREATE_NO_WINDOW  # no console popup
+    else:
+        flags = 0
     # One thread per Tesseract process: pages already run in parallel (run_jobs).
     env = {**os.environ, "OMP_THREAD_LIMIT": "1"}
     return subprocess.run(
