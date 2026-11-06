@@ -367,3 +367,11 @@ def test_no_inbox_when_turned_off_or_in_the_public_demo(settings, tmp_path, chan
     with TestClient(app) as client:
         assert client.get("/inbox").json() == {"watched": False, "local": True}
         assert client.post("/inbox/scan").status_code in (403, 409)
+
+
+def test_a_relative_default_folder_is_shown_as_a_full_path(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    config = InboxConfig.load(tmp_path / "inbox.json", Path("data/inbox"))
+
+    assert config.folder == tmp_path / "data" / "inbox"

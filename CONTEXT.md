@@ -217,3 +217,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-06 | Nedeljni izveštaj o prazninama mejlom po timu (n8n), AI raspodela po timovima; ADR-035 | #32 |
 | 2026-11-06 | Automatski uvoz dokumenata iz foldera `data/inbox` (skener, n8n); ADR-036 | #33 |
 | 2026-11-06 | Panel „Automatski uvoz iz foldera“ (izbor foldera, istorija, neuspeli; premeštanje umesto brisanja); ADR-037 | #34 |
+| 2026-11-06 | Panel prikazuje punu putanju foldera (ne relativnu `data/inbox`) | #35 |
