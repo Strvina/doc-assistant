@@ -489,3 +489,25 @@ def test_streamed_and_agent_answers_use_the_chosen_documents(client):
 
     assert streamed["searched_documents"] == agent["searched_documents"] == ["faq.txt"]
     assert {c["source"] for c in streamed["citations"] + agent["citations"]} <= {"faq.txt"}
+
+
+# --- monitoring lists, page by page --------------------------------------------------------
+
+
+def test_monitoring_lists_come_page_by_page(client):
+    upload(client, "faq.txt")
+    for n in range(5):
+        client.post("/ask", json={"question": f"Kada radi kantina {n}?"})
+    rated = client.post("/ask", json={"question": "Kvantna gravitacija?"}).json()
+    client.post("/feedback", json={"log_id": rated["log_id"], "rating": -1})  # 👎: a gap
+
+    first = client.get("/queries", params={"kind": "recent", "limit": 4}).json()
+    rest = client.get("/queries", params={"kind": "recent", "limit": 4, "before": first["next"]})
+
+    questions = [q["question"] for q in first["items"] + rest.json()["items"]]
+    assert questions[0] == "Kvantna gravitacija?" and len(questions) == 6
+    assert len(set(questions)) == 6  # no question twice across pages
+    assert first["next"] == first["items"][-1]["id"] and rest.json()["next"] is None
+    gaps = client.get("/queries", params={"kind": "gaps"}).json()
+    assert "Kvantna gravitacija?" in [q["question"] for q in gaps["items"]]
+    assert client.get("/queries", params={"kind": "sve"}).status_code == 422

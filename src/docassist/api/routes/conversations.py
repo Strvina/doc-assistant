@@ -19,9 +19,12 @@ def list_conversations(
     who: OwnerDep,
     conversations: ConversationsDep,
     q: Annotated[str, Query(max_length=200, description="Search titles, questions, answers")] = "",
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
+    offset: Annotated[int, Query(ge=0, description="Skip that many (the next page)")] = 0,
 ) -> list[dict[str, Any]]:
-    """Your saved conversations, most recently used first."""
-    return conversations.summaries(who, query=q)
+    """Your saved conversations, most recently used first; fewer than `limit` means there
+    are no more."""
+    return conversations.summaries(who, limit=limit, query=q, offset=offset)
 
 
 @router.patch("/{conversation_id}")

@@ -539,3 +539,24 @@ ispred.
 **Cena:** prozor se pojavi za 1–2 s (PowerShell, WinForms i mali C# deo ~0,5 s, ostalo sam prozor
 dok učita stablo foldera). Problem se nije mogao ponoviti automatski (zabrana važi samo posle pravog
 klika korisnika), pa je proveren ručno.
+
+### ADR-039 · "Scroll to reveal" umesto stranica, i brže skrolovanje
+**Odluka:** dugačke liste prikazuju jednu stranicu i učitavaju sledeću kad korisnik skroluje blizu
+kraja (kao u ChatGPT-u, bez dugmadi za stranice): zajednički pomoćnik `whenReached`/`revealList` u
+`app.js` (IntersectionObserver na oznaci na kraju liste, 300 px unapred). Praćenje: "Praznine" i
+"Poslednja pitanja" po 20 (`GET /queries?kind=recent|gaps&before=<id>&limit=` — kursor po id-ju,
+stabilan i kad stižu nova pitanja; `next` je `before` sledeće stranice). Razgovori: po 30
+(`GET /conversations?limit=&offset=`; brojač pokazuje "30+" dok ima još). Dokumenti: crta se po 50
+(svi su već učitani; filter počinje od prve stranice). Otvoren razgovor: poslednjih 10 pitanja,
+starija se dodaju kad se skroluje nagore, a pogled ostaje na istoj poruci. Brže crtanje: bez
+zamućenja (`backdrop-filter: blur`) iza prozora, poruke van ekrana se ne crtaju
+(`content-visibility: auto`), `overscroll-behavior: contain` na listama. Jezik dokumenta se pogađa
+jednom po sadržaju (`doc_id`), ne pri svakom osvežavanju liste.
+**Zašto:** korisnik je osetio seckanje pri skrolovanju. Liste su bile male (Praćenje je prikazivalo
+po 15), pa glavni uzrok nije broj stavki nego crtanje: zamućena pozadina se preračunava pri svakom
+pomeraju, a dugačak razgovor crta sve odgovore i tabele odjednom. Učitavanje po stranicama drži broj
+elemenata malim kad liste porastu. Izmereno na probnom serveru: lista dokumenata (127) na 15 s
+0,39 s → 0,21 s.
+**Cena:** skok na kraj razgovora mora da sačeka da se poslednje poruke iscrtaju (dva frame-a), jer
+poruke van ekrana imaju procenjenu visinu. Pretraga po stranici razgovora i dalje čita sve razgovore
+vlasnika (u Pythonu, ADR-025) — za jednog korisnika ih je malo.

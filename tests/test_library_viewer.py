@@ -77,7 +77,7 @@ def test_language_of_sample_documents(library):
     for path in SAMPLE_DOCS.iterdir():
         library.add_file(path)
 
-    languages = {d.source: library.language(d.source) for d in library.documents()}
+    languages = {d.source: library.language(d) for d in library.documents()}
 
     assert languages == {
         "bezbednost_na_radu.docx": "sr",
@@ -195,3 +195,14 @@ def test_pptx_html_one_slide_per_page_with_notes():
     assert "<h1>Warranty and service</h1>" in html
     assert '<p class="notes cited">Do not promise discounts above 8 %' in html
     assert "<td>PV-400-M</td>" in html  # the variants table on slide 2
+
+
+def test_language_is_guessed_once_per_content(library, monkeypatch):
+    library.add_file(SAMPLE_DOCS / "faq.txt")
+    [doc] = library.documents()
+    reads = []
+    real = library.store.document_chunks
+    monkeypatch.setattr(library.store, "document_chunks", lambda s: reads.append(s) or real(s))
+
+    assert library.language(doc) == library.language(doc) == "sr"
+    assert reads == ["faq.txt"]  # the document list asks often; the text is read once

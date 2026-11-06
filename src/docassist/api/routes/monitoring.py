@@ -3,9 +3,9 @@ question log and the gaps in the documentation."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from docassist.agent.tools import ToolError, new_escalation
 from docassist.api.deps import LogDep, SettingsDep
@@ -65,6 +65,20 @@ def stats(log: LogDep) -> dict[str, Any]:
     return fields_of(log.stats())
 
 
+@router.get("/queries", dependencies=ACCESS)
+def list_queries(
+    log: LogDep,
+    kind: Annotated[Literal["recent", "gaps"], Query(description="All questions or the gaps")],
+    before: Annotated[int | None, Query(ge=1, description="Only older than this id")] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> dict[str, Any]:
+    """One page of the monitoring lists, newest first: `next` is the `before` of the next
+    page, or None after the last one (the UI loads it when the list is scrolled down)."""
+    rows = (log.recent if kind == "recent" else log.gaps)(limit, before)
+    items = _slim(rows)
+    return {"items": items, "next": items[-1]["id"] if len(items) == limit else None}
+
+
 @router.delete("/queries/{query_id}", dependencies=UPLOADS)
 def delete_query(query_id: int, log: LogDep) -> dict[str, bool]:
     """Remove one question from the log (monitoring lists and statistics)."""
@@ -81,16 +95,17 @@ def clear_queries(log: LogDep) -> dict[str, int]:
 
 @router.get("/insights", dependencies=ACCESS)
 def insights(log: LogDep) -> dict[str, Any]:
-    """Monitoring: usage numbers, latest questions and the gaps in the documentation."""
-
-    def slim(rows: list[dict[str, object]]) -> list[dict[str, object]]:
-        return [{key: row.get(key) for key in INSIGHT_FIELDS} for row in rows]
-
+    """Monitoring: usage numbers, latest questions and the gaps in the documentation (the
+    first page of each; more with GET /queries)."""
     return {
         "stats": fields_of(log.stats()),
-        "recent": slim(log.recent(LIST_LIMIT)),
-        "gaps": slim(log.gaps(LIST_LIMIT)),
+        "recent": _slim(log.recent(LIST_LIMIT)),
+        "gaps": _slim(log.gaps(LIST_LIMIT)),
     }
+
+
+def _slim(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    return [{key: row.get(key) for key in INSIGHT_FIELDS} for row in rows]
 
 
 def _no_query(log_id: int) -> HTTPException:

@@ -129,8 +129,11 @@ class ConversationStore:
             )
         return True
 
-    def summaries(self, owner: str, limit: int = 100, query: str = "") -> list[dict[str, Any]]:
-        """The owner's conversations, most recently used first.
+    def summaries(
+        self, owner: str, limit: int = 100, query: str = "", offset: int = 0
+    ) -> list[dict[str, Any]]:
+        """The owner's conversations, most recently used first; `offset` skips that many
+        (the next page when scrolling the list).
 
         `query` keeps the conversations whose title, questions or answers contain every word
         of it, ignoring case and diacritics ("cesta" finds "česta"). Done in Python: SQLite's
@@ -148,12 +151,15 @@ class ConversationStore:
                 (owner,),
             ).fetchall()
         found = []
+        skipped = 0
         for row in rows:
             text = fold(f"{row['title']} {row['content'] or ''}")
-            if all(word in text for word in words):
-                found.append(
-                    {k: row[k] for k in ("id", "title", "created_at", "updated_at", "turns")}
-                )
+            if not all(word in text for word in words):
+                continue
+            if skipped < offset:
+                skipped += 1
+                continue
+            found.append({k: row[k] for k in ("id", "title", "created_at", "updated_at", "turns")})
             if len(found) == limit:
                 break
         return found

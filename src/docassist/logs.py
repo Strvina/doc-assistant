@@ -45,6 +45,9 @@ _MIGRATIONS = {
 }
 
 
+_NO_LIMIT = 2**63 - 1  # larger than any SQLite row id: the first page
+
+
 @dataclass(frozen=True)
 class UsageStats:
     queries: int
@@ -149,16 +152,24 @@ class QueryLog:
             cost_usd=round(cost, 4),
         )
 
-    def recent(self, limit: int = 20) -> list[dict[str, object]]:
-        return self._select("SELECT * FROM queries ORDER BY id DESC LIMIT ?", limit)
+    def recent(self, limit: int = 20, before: int | None = None) -> list[dict[str, object]]:
+        """The latest questions, newest first; with `before`, those older than that id (the
+        next page when scrolling)."""
+        return self._page("1 = 1", limit, before)
 
-    def gaps(self, limit: int = 20) -> list[dict[str, object]]:
-        """Questions the documents did not answer, or answers users rated 👎.
+    def gaps(self, limit: int = 20, before: int | None = None) -> list[dict[str, object]]:
+        """Questions the documents did not answer, or answers users rated 👎, newest first
+        (pages as in `recent`).
 
         This is the to-do list for whoever maintains the documents.
         """
+        return self._page("(found = 0 OR feedback = -1)", limit, before)
+
+    def _page(self, where: str, limit: int, before: int | None) -> list[dict[str, object]]:
+        # `where` is one of the fixed conditions above, never user input.
         return self._select(
-            "SELECT * FROM queries WHERE found = 0 OR feedback = -1 ORDER BY id DESC LIMIT ?",
+            f"SELECT * FROM queries WHERE {where} AND id < ? ORDER BY id DESC LIMIT ?",
+            _NO_LIMIT if before is None else before,
             limit,
         )
 

@@ -105,6 +105,7 @@ class Library:
     def __init__(self, store: VectorStore, files_dir: str | Path) -> None:
         self.store = store
         self.files_dir = Path(files_dir)
+        self._languages: dict[str, str | None] = {}  # doc_id -> guessed language
 
     def add_file(self, path: str | Path) -> AddResult:
         """Index a file and keep a copy of it (no copy if it already lives in files_dir)."""
@@ -145,9 +146,13 @@ class Library:
     def documents(self) -> list[DocumentInfo]:
         return self.store.documents()
 
-    def language(self, source: str) -> str | None:
-        chunks = self.store.document_chunks(source)[:6]
-        return guess_language(" ".join(c.text for c in chunks))
+    def language(self, doc: DocumentInfo) -> str | None:
+        """The document's language, guessed once per content: `doc_id` is a hash of the file,
+        so it is the same until the file changes (the document list asks every few seconds)."""
+        if doc.doc_id not in self._languages:
+            chunks = self.store.document_chunks(doc.source)[:6]
+            self._languages[doc.doc_id] = guess_language(" ".join(c.text for c in chunks))
+        return self._languages[doc.doc_id]
 
     def get(self, doc_id: str) -> DocumentInfo | None:
         return next((d for d in self.store.documents() if d.doc_id == doc_id), None)

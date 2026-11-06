@@ -97,6 +97,7 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 - [x] Automatski uvoz dokumenata iz foldera `data/inbox` (ADR-036)
 - [x] Panel „Automatski uvoz iz foldera“: biranje foldera, uključi/isključi, istorija, neuspeli (ADR-037)
 - [x] Windows prozor za izbor foldera se pojavljuje ispred browsera (ADR-038)
+- [x] „Scroll to reveal“ u Praćenju, razgovorima, dokumentima i dugačkom razgovoru; brže skrolovanje (ADR-039)
 
 ## Dodatno — formati
 
