@@ -500,3 +500,27 @@ je uobičajeno za "consume" foldere (npr. Paperless) i znači da je prazan folde
 **Cena:** provera na 10 s (ne trenutno; bez zavisnosti za praćenje fajl sistema). Više kopija
 servera na istom folderu bi se otimalo za iste fajlove (jedna kopija je dovoljna). Fajl koji se
 menja sporije od 5 s mogao bi biti pročitan pre kraja — tada završi u `failed/` ili se ponovo ubaci.
+
+### ADR-037 · Automatski uvoz kao panel u aplikaciji (menja delove ADR-036)
+**Odluka:** uvoz iz foldera se podešava u aplikaciji: kartica u biblioteci ("Automatski uvoz iz
+foldera · Uključen · Skenirano", tačka u boji, broj neuspelih) otvara panel sa: uključi/isključi,
+folder koji se prati, "Otvori folder" (Explorer/Finder), "Izaberi drugi folder…" (sistemski prozor
+za biranje foldera, `docassist/desktop.py`), "Proveri sada", "Nije uspelo" (razlog na srpskom,
+"Pokušaj ponovo", "Ukloni") i "Poslednji uvozi" (klik otvara dokument). Izbor se čuva u `inbox.json`
+pored loga, istorija u tabeli `imports` (ostaje posle restarta). Promena foldera, otvaranje i prozor
+rade samo sa računara na kom radi aplikacija (loopback, bez proxy-ja); sa drugog računara panel
+prikazuje stanje, a neuspele fajlove i "Proveri sada" može svako ko sme da otprema. Bez desktopa
+(Docker) umesto prozora je polje za putanju. **Ništa se ne briše:** uvezen fajl ide u podfolder
+"Uvezeno", neuspeo u "Nije uspelo" (+ `.txt` sa razlogom), ista imena → "ime (2).pdf". Pre promene
+foldera aplikacija kaže koliko dokumenata već čeka u njemu i traži potvrdu. Folder ne sme biti
+folder biblioteke, indeksa ili modela (ni unutar njih), niti tačno koren aplikacije ili `data`.
+API: `GET|PUT /inbox`, `POST /inbox/check|pick|open|scan`, `POST /inbox/failed/{ime}/retry`,
+`DELETE /inbox/failed/{ime}` (zamenjuje `GET /documents/inbox`).
+**Zašto:** "ubaci fajl u `data\inbox`" je zahtevalo da korisnik zna folder projekta. Kad korisnik
+sam bira folder (npr. Desktop ili OneDrive), brisanje posle uvoza (ADR-036) bi izgledalo kao da
+fajlovi nestaju — premeštanje u "Uvezeno" je razumljivo i bezbedno. Ograničenje na isti računar:
+folder je putanja na serveru, a udaljeni korisnik ne sme da usmeri aplikaciju na bilo koji folder
+servera (to bi uvezlo tuđe fajlove u biblioteku).
+**Cena:** uvezeni fajlovi zauzimaju mesto dvaput (u "Uvezeno" i u biblioteci) dok ih neko ne obriše.
+Sistemski prozor otvara server — radi kad su browser i server na istom računaru (uobičajeno za ovu
+aplikaciju), inače se putanja kuca. Na Linuxu traži `zenity`, inače polje za putanju.

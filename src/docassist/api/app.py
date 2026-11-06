@@ -7,15 +7,22 @@ import logging
 import threading
 from collections import defaultdict, deque
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
 from docassist import __version__, inbox
-from docassist.api.deps import LLMFactory, VisionFactory, app_settings_of, library_of
+from docassist.api.deps import (
+    LLMFactory,
+    VisionFactory,
+    app_settings_of,
+    inbox_config_file,
+    library_of,
+)
 from docassist.api.routes import ask, conversations, documents, monitoring, reports, web
+from docassist.api.routes import inbox as inbox_routes
 from docassist.api.security import security_headers
 from docassist.config import Settings
 from docassist.factory import build_llm, build_vision
@@ -57,7 +64,7 @@ def create_app(
     app.middleware("http")(security_headers)
     app.include_router(web.router)
     app.mount("/static", StaticFiles(directory=web.WEB_DIR), name="static")
-    for module in (documents, ask, conversations, monitoring, reports):
+    for module in (documents, inbox_routes, ask, conversations, monitoring, reports):
         app.include_router(module.router)
     return app
 
@@ -71,13 +78,18 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def _watch_inbox(state: Any, stop: threading.Event) -> None:
-    """Import files dropped into INBOX_DIR while the server runs; off in the public demo
-    (no uploads) and with INBOX_POLL_S=0."""
+    """Import files dropped into the inbox folder while the server runs: the folder chosen in
+    the UI (`inbox.json`), else INBOX_DIR. Off in the public demo (no uploads) and with
+    INBOX_POLL_S=0."""
     settings = app_settings_of(state)
     if not settings.allow_uploads or settings.inbox_poll_s <= 0:
         return
-    state.inbox = inbox.Inbox(settings.inbox_dir)
-    state.inbox.folder.mkdir(parents=True, exist_ok=True)
+    config = inbox.InboxConfig.load(inbox_config_file(settings), settings.inbox_dir)
+    with suppress(OSError):  # e.g. a network drive that is not connected: the panel says so
+        config.folder.mkdir(parents=True, exist_ok=True)
+    state.inbox = inbox.Inbox(
+        config.folder, enabled=config.enabled, history=inbox.ImportLog(settings.log_db)
+    )
 
     def library() -> Library | None:
         try:
@@ -86,4 +98,4 @@ def _watch_inbox(state: Any, stop: threading.Event) -> None:
             return None
 
     inbox.watch(state.inbox, library, settings.inbox_poll_s, stop)
-    log.info("Watching %s for new documents", settings.inbox_dir)
+    log.info("Watching %s for new documents", config.folder)

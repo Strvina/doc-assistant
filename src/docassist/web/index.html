@@ -79,8 +79,15 @@
         <svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
         <div><strong>Prevuci fajlove</strong> ili <button class="link" id="browse">izaberi</button></div>
         <small id="dropzone-hint">PDF, Word, Excel, PowerPoint, TXT, slike</small>
-        <small id="inbox-hint" class="inbox-hint" hidden></small>
       </div>
+      <button class="inbox-card" id="inbox-card" type="button" hidden>
+        <span class="inbox-dot" id="inbox-dot" aria-hidden="true"></span>
+        <span class="inbox-card-text">
+          <strong>Automatski uvoz iz foldera</strong>
+          <small id="inbox-card-status"></small>
+        </span>
+        <span class="open-hint" aria-hidden="true">›</span>
+      </button>
       <ul class="doc-list" id="doc-list"></ul>
       <div class="library-empty" id="library-empty" hidden>
         <p>Biblioteka je prazna.</p>
@@ -199,6 +206,24 @@
           <ul class="q-list" id="recent"></ul>
         </section>
       </div>
+    </div>
+  </div>
+
+  <!-- Automatic import from a folder (ADR-037) -->
+  <div class="modal" id="inbox" role="dialog" aria-modal="true" aria-labelledby="inbox-title" hidden>
+    <div class="modal-card inbox-modal">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">Biblioteka</p>
+          <h2 id="inbox-title">Automatski uvoz iz foldera</h2>
+        </div>
+        <button class="icon-btn" id="inbox-close" aria-label="Zatvori">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <p class="muted inbox-intro">Sve što se stavi u ovaj folder — sa skenera, deljenog diska ili OneDrive-a — samo se
+        doda u biblioteku, za par sekundi. Uvezeni fajlovi se premeštaju u podfolder „Uvezeno“, pa se vidi šta je već dodato.</p>
+      <div id="inbox-body"></div>
     </div>
   </div>
 

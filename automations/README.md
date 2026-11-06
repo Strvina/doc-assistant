@@ -63,12 +63,14 @@ the app on this PC; `http://app:8000` when the app runs in compose) and sends `A
 
 ## Feeding the inbox folder
 
-Doc Assistant imports every supported file that appears in `INBOX_DIR` (default `data/inbox`,
-checked every `INBOX_POLL_S` = 10 s; ADR-036). Any workflow can feed it: e.g. an **Email Trigger
+Doc Assistant imports every supported file that appears in the watched folder (chosen in the
+web UI under *Automatski uvoz iz foldera*, default `INBOX_DIR` = `data/inbox`; checked every
+`INBOX_POLL_S` = 10 s; ADR-036, ADR-037). Any workflow can feed it: e.g. an **Email Trigger
 (IMAP)** node for a shared mailbox like `dokumenti@firma.rs` → **Write Binary File** of each
 attachment into the folder (mounted into the n8n container). A scanner that saves to that folder
-works the same way, without n8n. Imported files leave the folder; unreadable ones move to
-`failed/` with a `.txt` that says why. `GET /documents/inbox` lists the latest imports.
+works the same way, without n8n. Imported files move to the subfolder `Uvezeno`; unreadable ones
+to `Nije uspelo` with a `.txt` that says why (retry or remove them in the panel). `GET /inbox`
+returns the status and the latest imports.
 
 ## Calling Doc Assistant from n8n
 

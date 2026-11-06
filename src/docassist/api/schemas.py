@@ -114,6 +114,15 @@ class IndexResult(BaseModel):
         return cls(source=Path(name).name, chunks_added=0, status="failed", error=error)
 
 
+class InboxUpdate(BaseModel):
+    folder: str | None = Field(default=None, max_length=1000, description="Folder to watch")
+    enabled: bool | None = Field(default=None, description="Import automatically or not")
+
+
+class FolderCheck(BaseModel):
+    folder: str = Field(max_length=1000)
+
+
 class PicturesResult(BaseModel):
     source: str
     pages_total: int  # pages with pictures

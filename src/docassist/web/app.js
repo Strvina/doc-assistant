@@ -76,6 +76,7 @@ const state = {
   provider: null,
   busy: false,
   viewing: null, // doc_id shown in the viewer
+  inbox: null, // GET /inbox: the folder whose files are imported automatically
   scope: loadScope(), // doc_ids to search; empty = all documents
 };
 
@@ -167,11 +168,6 @@ async function loadConfig() {
   const zone = $("#dropzone");
   zone.hidden = !state.config.allow_uploads;
   $("#dropzone-hint").textContent = `PDF, Word, Excel, PowerPoint, TXT, slike · do ${state.config.max_upload_mb} MB`;
-  const inboxHint = $("#inbox-hint");
-  inboxHint.hidden = !state.config.inbox;
-  if (state.config.inbox) {
-    inboxHint.replaceChildren("ili ih ubaci u folder ", el("code", {}, state.config.inbox), " — dodaju se sami");
-  }
   if (state.config.extensions) $("#file-input").accept = state.config.extensions.join(",");
 }
 
@@ -247,6 +243,7 @@ const LIBRARY_REFRESH_MS = 15000;
 function watchLibrary() {
   setInterval(async () => {
     if (document.hidden || state.pending || rebuildWatch) return;
+    loadInbox();
     const known = new Set(state.documents.map((d) => d.doc_id));
     let documents;
     try {
@@ -260,6 +257,191 @@ function watchLibrary() {
     renderDocuments();
     for (const doc of added) toast(`Novi dokument u biblioteci: ${prettyName(doc.source)}`);
   }, LIBRARY_REFRESH_MS);
+}
+
+// --- automatic import from a folder (ADR-037) -------------------------------------------
+
+const JSON_HEADERS = { "Content-Type": "application/json" };
+const folderName = (path) => path.split(/[\\/]/).filter(Boolean).pop() || path;
+
+// Serbian plural: count("dokument", "dokumenta", "dokumenata") → 1 dokument, 3 dokumenta, 5 dokumenata.
+function plural(n, one, few, many) {
+  if (n % 10 === 1 && n % 100 !== 11) return one;
+  if ([2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100)) return few;
+  return many;
+}
+
+const failedFiles = (n) => `${n} ${plural(n, "fajl nije uspeo", "fajla nisu uspela", "fajlova nije uspelo")}`;
+
+async function loadInbox() {
+  try {
+    state.inbox = await api("/inbox");
+  } catch {
+    state.inbox = null;
+  }
+  renderInboxCard();
+  if (!$("#inbox").hidden) renderInbox();
+}
+
+// The card in the library: is it on, which folder, did something fail.
+function renderInboxCard() {
+  const card = $("#inbox-card");
+  const data = state.inbox;
+  card.hidden = !data?.watched || !state.config.allow_uploads;
+  if (card.hidden) return;
+  let status = `Uključen · ${folderName(data.folder)}`;
+  let tone = "ok";
+  if (!data.enabled) [status, tone] = ["Isključen", "off"];
+  else if (!data.available) [status, tone] = [`Folder „${folderName(data.folder)}“ nije dostupan`, "bad"];
+  else if (data.failed.length) [status, tone] = [`${folderName(data.folder)} · ${failedFiles(data.failed.length)}`, "warn"];
+  $("#inbox-card-status").textContent = status;
+  $("#inbox-dot").className = `inbox-dot ${tone}`;
+  card.title = data.folder;
+}
+
+async function openInbox() {
+  $("#inbox").hidden = false;
+  await loadInbox();
+}
+
+function renderInbox() {
+  const data = state.inbox;
+  const body = $("#inbox-body");
+  if (!data?.watched) {
+    body.replaceChildren(el("p", { class: "muted" }, "Automatski uvoz je isključen u podešavanjima servera (INBOX_POLL_S=0)."));
+    return;
+  }
+  const toggle = el("input", { type: "checkbox", onchange: (e) => updateInbox({ enabled: e.target.checked }) });
+  toggle.checked = data.enabled;
+
+  const folderActions = data.desktop
+    ? [el("button", { class: "btn small", type: "button", onclick: () => inboxPost("/inbox/open") }, "Otvori folder"),
+       el("button", { class: "btn small primary", type: "button", onclick: pickInboxFolder }, "Izaberi drugi folder…")]
+    : data.local
+      ? [typedFolderForm(data.folder)]
+      : [el("small", { class: "muted" }, "Folder se menja na računaru na kom radi aplikacija.")];
+
+  const waiting = !data.available
+    ? "Folder trenutno nije dostupan (npr. mrežni disk nije povezan)."
+    : data.waiting
+      ? `U folderu čeka ${data.waiting} ${plural(data.waiting, "dokument", "dokumenta", "dokumenata")}.`
+      : "U folderu nema novih dokumenata — sve je uvezeno.";
+  const scan = el("button", { class: "btn small", type: "button", onclick: scanInboxNow }, "Proveri sada");
+  scan.disabled = !data.enabled || !data.available;
+
+  body.replaceChildren(
+    el("label", { class: "inbox-switch" }, toggle, el("span", {}, "Uvoz je uključen")),
+    el("div", { class: "inbox-folder" },
+      el("div", { class: "inbox-folder-path" }, el("small", {}, "Folder koji se prati"), el("code", {}, data.folder)),
+      el("div", { class: "inbox-folder-actions" }, ...folderActions)),
+    el("div", { class: "inbox-status" },
+      el("span", {}, waiting, el("small", {}, ` Proverava se na ${data.every_s} s.`)), scan),
+    data.failed.length > 0 && el("section", {},
+      el("h3", {}, "Nije uspelo"),
+      el("ul", { class: "q-list" }, ...data.failed.map((f) => el("li", { class: "inbox-failed" },
+        el("strong", {}, f.name),
+        el("span", {}, f.reason || "Fajl nije mogao da se pročita."),
+        el("div", { class: "inbox-row-actions" },
+          el("small", {}, when(f.at)),
+          el("button", { class: "link", type: "button", onclick: () => retryFailed(f.name) }, "Pokušaj ponovo"),
+          el("button", { class: "link danger", type: "button", onclick: () => discardFailed(f.name) }, "Ukloni")))))),
+    el("section", {},
+      el("h3", {}, "Poslednji uvozi"),
+      el("ul", { class: "q-list" }, ...(data.recent.length ? data.recent.map(renderImport)
+        : [el("li", { class: "empty" }, "Još ništa nije uvezeno iz foldera.")]))),
+  );
+}
+
+function renderImport(item) {
+  const doc = state.documents.find((d) => d.source === item.source);
+  const outcome = item.status === "indexed"
+    ? `dodato · ${item.chunks_added} ${plural(item.chunks_added, "pasus", "pasusa", "pasusa")}`
+    : item.status === "unchanged" ? "već je bilo u biblioteci"
+      : item.error || "nije uspelo";
+  const mark = { indexed: "✓", unchanged: "=", failed: "✕" }[item.status] || "·";
+  return el("li", {
+      class: `inbox-import ${item.status}` + (doc ? " clickable" : ""),
+      title: doc ? "Otvori dokument" : undefined,
+      onclick: doc ? () => { $("#inbox").hidden = true; openViewer({ docId: doc.doc_id, source: doc.source }); } : undefined,
+    },
+    el("span", { class: "inbox-mark", "aria-hidden": "true" }, mark),
+    el("span", {}, el("strong", {}, prettyName(item.source)), el("small", {}, `${when(item.at)} · ${outcome}`)));
+}
+
+// Without a desktop dialog (e.g. the server runs in Docker on this computer): type the path.
+function typedFolderForm(current) {
+  const input = el("input", { type: "text", class: "inbox-path-input", value: current, "aria-label": "Putanja foldera" });
+  return el("form", { class: "inbox-path-form", onsubmit: (e) => { e.preventDefault(); chooseInboxFolder(input.value); } },
+    input, el("button", { class: "btn small primary", type: "submit" }, "Sačuvaj"));
+}
+
+async function inboxPost(path) {
+  try {
+    return await api(path, { method: "POST" });
+  } catch (error) {
+    toast(error.message, "error");
+    return null;
+  }
+}
+
+async function updateInbox(change) {
+  try {
+    state.inbox = await api("/inbox", { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify(change) });
+  } catch (error) {
+    toast(error.message, "error");
+  }
+  await loadInbox();
+}
+
+async function chooseInboxFolder(folder) {
+  let checked;
+  try {
+    checked = await api("/inbox/check", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ folder }) });
+  } catch (error) {
+    toast(error.message, "error"); // e.g. "To je folder same aplikacije…"
+    return;
+  }
+  if (checked.folder === state.inbox.folder) return;
+  if (checked.waiting && !confirm(`U folderu „${folderName(checked.folder)}“ već ima ${checked.waiting} dokumenata. `
+      + "Biće dodati u biblioteku i premešteni u podfolder „Uvezeno“. Nastaviti?")) return;
+  await updateInbox({ folder: checked.folder });
+  toast(`Sada se prati folder „${folderName(checked.folder)}“.`);
+}
+
+async function pickInboxFolder() {
+  toast("Izaberi folder u prozoru koji se otvorio.");
+  const picked = await inboxPost("/inbox/pick");
+  if (picked?.folder) await chooseInboxFolder(picked.folder);
+}
+
+async function scanInboxNow() {
+  const result = await inboxPost("/inbox/scan");
+  if (!result) return;
+  state.inbox = result;
+  const added = result.imported.filter((i) => i.status === "indexed").length;
+  const failed = result.imported.filter((i) => i.status === "failed").length;
+  const parts = [
+    added && `Dodato u biblioteku: ${added} ${plural(added, "dokument", "dokumenta", "dokumenata")}`,
+    failed && failedFiles(failed),
+  ].filter(Boolean);
+  toast(parts.length ? parts.join(" · ") : "Nema novih dokumenata u folderu.", failed ? "error" : "info");
+  await loadDocuments();
+  renderInboxCard();
+  renderInbox();
+}
+
+async function retryFailed(name) {
+  if (await inboxPost(`/inbox/failed/${encodeURIComponent(name)}/retry`)) await scanInboxNow();
+}
+
+async function discardFailed(name) {
+  if (!confirm(`Obrisati „${name}“ iz foldera „Nije uspelo“? Fajl se briše i sa diska.`)) return;
+  try {
+    await api(`/inbox/failed/${encodeURIComponent(name)}`, { method: "DELETE" });
+  } catch (error) {
+    toast(error.message, "error");
+  }
+  await loadInbox();
 }
 
 function renderDocuments() {
@@ -1116,6 +1298,7 @@ function bindEvents() {
       if (closeExportMenu()) return;
       if (state.pending) cancelAsk();
       else if (!$("#insights").hidden) $("#insights").hidden = true;
+      else if (!$("#inbox").hidden) $("#inbox").hidden = true;
       else if (!$("#viewer").hidden) closeViewer();
       else closeLibraryDrawer();
     }
@@ -1146,6 +1329,9 @@ function bindEvents() {
   $("#load-demo").addEventListener("click", loadDemo);
   $("#insights-open").addEventListener("click", openInsights);
   $("#insights-close").addEventListener("click", () => ($("#insights").hidden = true));
+  $("#inbox-card").addEventListener("click", openInbox);
+  $("#inbox-close").addEventListener("click", () => ($("#inbox").hidden = true));
+  $("#inbox").addEventListener("click", (event) => { if (event.target.id === "inbox") event.currentTarget.hidden = true; });
   $("#queries-clear").addEventListener("click", clearQueries);
   $("#insights").addEventListener("click", (event) => { if (event.target.id === "insights") event.currentTarget.hidden = true; });
   $("#theme-toggle").addEventListener("click", () => {
@@ -1193,6 +1379,7 @@ async function main() {
   } catch (error) {
     toast(`Razgovori: ${error.message}`, "error");
   }
+  loadInbox();
   watchLibrary();
 }
 
