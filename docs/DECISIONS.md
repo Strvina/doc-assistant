@@ -481,3 +481,22 @@ Prvi pravi izveštaj je pokazao da je "a u 9" bez razgovora nerazumljivo — zat
 da dođe do aplikacije (`DOC_ASSISTANT_URL`, `host.docker.internal` na Docker Desktop-u; na Linuxu
 `extra_hosts`), a n8n 2.x mora da dozvoli `$env` u izrazima (`N8N_BLOCK_ENV_ACCESS_IN_NODE=false`).
 Pitanja zabeležena pre ove verzije nemaju `search_query`, pa ostaju kako su postavljena.
+
+### ADR-036 · Automatski uvoz iz foldera (inbox)
+**Odluka:** dok server radi, pozadinska nit na svakih `INBOX_POLL_S` (10) s pregleda `INBOX_DIR`
+(`data/inbox`; Docker: `/state/inbox`, u compose-u vezan za `./data/inbox`) i svaki podržan fajl koji
+se nije menjao bar 5 s (`SETTLE_S`, da se ne čita skener na pola upisa) ubacuje kao upload: OCR,
+indeks, kopija originala u biblioteci (`docassist/inbox.py`). Posle uspeha fajl se briše iz foldera
+(original je u biblioteci); fajl koji ne može da se pročita ide u `failed/` uz `.txt` sa razlogom i
+ne pokušava se ponovo. Isti fajl ponovo = "unchanged"; isto ime, nov sadržaj = nova verzija.
+Skriveni fajlovi i nepodržani tipovi se ne diraju. Dok se indeks osvežava (ADR-032), uvoz čeka.
+Isključeno sa `INBOX_POLL_S=0` i u javnom demu (`ALLOW_UPLOADS=false`). `GET /documents/inbox` vraća
+poslednjih 20 uvoza; UI ispod polja za otpremanje kaže koji folder se prati, a lista dokumenata se
+na 15 s osvežava i javlja "Novi dokument u biblioteci: …".
+**Zašto:** u firmi dokumenti stižu iz skenera ("scan to folder"), sa deljenog diska ili mejlom —
+otvaranje aplikacije i ručni upload je korak koji se zaboravi. Folder je najprostiji dogovor koji
+razume i skener i n8n (prilog iz mejla → upis u folder), bez novog API ključa. Brisanje posle uvoza
+je uobičajeno za "consume" foldere (npr. Paperless) i znači da je prazan folder = sve je uvezeno.
+**Cena:** provera na 10 s (ne trenutno; bez zavisnosti za praćenje fajl sistema). Više kopija
+servera na istom folderu bi se otimalo za iste fajlove (jedna kopija je dovoljna). Fajl koji se
+menja sporije od 5 s mogao bi biti pročitan pre kraja — tada završi u `failed/` ili se ponovo ubaci.

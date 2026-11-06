@@ -76,6 +76,18 @@ def upload_progress(request: Request) -> list[dict[str, Any]]:
     return items
 
 
+@router.get("/inbox", dependencies=ACCESS)
+def inbox_status(request: Request, settings: SettingsDep) -> dict[str, Any]:
+    """The inbox folder (ADR-036): whether it is watched, and the latest imports."""
+    watched = request.app.state.inbox
+    return {
+        "enabled": watched is not None,
+        "folder": str(settings.inbox_dir),
+        "every_s": settings.inbox_poll_s,
+        "recent": [vars(item) for item in reversed(watched.recent)] if watched else [],
+    }
+
+
 @router.post("/demo", dependencies=UPLOADS)
 def load_demo_documents(library: LibraryDep) -> list[IndexResult]:
     results = []

@@ -10,6 +10,7 @@ services:
     ports: ["8000:8000"]
     volumes:
       - state:/state  # index, original documents, query log, outbox
+      - ./data/inbox:/state/inbox  # drop files here on the host: they are imported (ADR-036)
 
   n8n:
     profiles: ["automation"]

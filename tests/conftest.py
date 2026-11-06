@@ -9,6 +9,7 @@ def isolated_data(tmp_path, monkeypatch):
     for name, value in {
         "INDEX_DIR": tmp_path / "index",
         "DOCUMENTS_DIR": tmp_path / "documents",
+        "INBOX_DIR": tmp_path / "inbox",
         "LOG_DB": tmp_path / "logs.sqlite",
         "OUTBOX_DIR": tmp_path / "outbox",
         "EMBEDDING_CACHE_DIR": tmp_path / "models",
