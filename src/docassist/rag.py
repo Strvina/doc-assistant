@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Iterator, Sequence
+from collections.abc import Collection, Iterator, Sequence
 from dataclasses import dataclass, field
 
 from docassist.citations import find_citations
@@ -58,16 +58,25 @@ def answer(
     min_score: float = 0.0,
     history: Sequence[tuple[str, str]] = (),
     neighbors: int = NEIGHBORS,
+    doc_ids: Collection[str] | None = None,
 ) -> Answer:
     """Answer a question from the indexed documents.
 
     `history` is a list of earlier (question, answer) pairs for follow-up questions; only
     the current question gets document context. The `k` best chunks go to the model with
     the chunks around them (`VectorStore.with_neighbors`, `neighbors` before and after).
+    `doc_ids` limits the search to those documents.
     """
     final = None
     events = answer_stream(
-        question, store, llm, k=k, min_score=min_score, history=history, neighbors=neighbors
+        question,
+        store,
+        llm,
+        k=k,
+        min_score=min_score,
+        history=history,
+        neighbors=neighbors,
+        doc_ids=doc_ids,
     )
     for event in events:
         if isinstance(event, Answer):
@@ -85,11 +94,13 @@ def answer_stream(
     min_score: float = 0.0,
     history: Sequence[tuple[str, str]] = (),
     neighbors: int = NEIGHBORS,
+    doc_ids: Collection[str] | None = None,
 ) -> Iterator[str | Answer]:
     """Like `answer`, but yields the text as the model writes it, then the `Answer` last."""
     started = time.perf_counter()
     query, rewrite = search_query(question, history, llm)
-    results = store.with_neighbors(retrieve(store, query, k=k, min_score=min_score), neighbors)
+    hits = retrieve(store, query, k=k, min_score=min_score, doc_ids=doc_ids)
+    results = store.with_neighbors(hits, neighbors)
     if not results:
         yield NOT_FOUND_SR
         yield Answer(

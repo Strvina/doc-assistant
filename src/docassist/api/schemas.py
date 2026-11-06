@@ -26,6 +26,12 @@ class AskRequest(BaseModel):
     request_id: str | None = Field(
         default=None, max_length=64, description="Client id for POST /ask/cancel"
     )
+    doc_ids: list[str] | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+        description="Search only these documents (ids from GET /documents); empty: all",
+    )
 
 
 class CitationOut(BaseModel):
@@ -58,6 +64,9 @@ class AskResponse(BaseModel):
     output_tokens: int
     cost_usd: float | None = None
     search_query: str = ""  # a follow-up question rewritten for the search (ADR-031)
+    searched_documents: list[str] = Field(
+        default_factory=list, description="File names the search was limited to; empty: all"
+    )
 
 
 class RenameRequest(BaseModel):

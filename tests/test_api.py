@@ -446,3 +446,46 @@ def test_public_demo_mode(settings, tmp_path):
     doc = client.get("/documents").json()[0]["doc_id"]
     assert client.delete(f"/documents/{doc}").status_code == 403
     assert client.get("/api/config").json()["allow_uploads"] is False
+
+
+# --- search in chosen documents ------------------------------------------------------------
+
+
+def test_ask_only_in_the_chosen_documents(client):
+    upload(client, "faq.txt", "montageanleitung_pv400.pdf")
+    faq = doc_id(client, "faq.txt")
+    question = {"question": "Anzugsmoment M8 Sammelschienen"}
+
+    everywhere = client.post("/ask", json=question).json()
+    chosen = client.post("/ask", json={**question, "doc_ids": [faq]}).json()
+
+    assert everywhere["citations"][0]["source"] == "montageanleitung_pv400.pdf"
+    assert everywhere["searched_documents"] == []
+    assert {c["source"] for c in chosen["citations"]} <= {"faq.txt"}
+    assert chosen["searched_documents"] == ["faq.txt"]
+    saved = client.get(f"/conversations/{chosen['conversation_id']}").json()
+    assert saved["turns"][0]["response"]["searched_documents"] == ["faq.txt"]
+
+
+def test_ask_rejects_unknown_or_empty_document_choices(client):
+    upload(client, "faq.txt")
+
+    unknown = client.post("/ask", json={"question": "Kantina?", "doc_ids": ["nema"]})
+    empty = client.post("/ask", json={"question": "Kantina?", "doc_ids": []})
+
+    assert unknown.status_code == 422
+    assert "No document with id nema" in unknown.json()["detail"]
+    assert empty.status_code == 422
+
+
+def test_streamed_and_agent_answers_use_the_chosen_documents(client):
+    upload(client, "faq.txt", "montageanleitung_pv400.pdf")
+    faq = doc_id(client, "faq.txt")
+    body = {"question": "Anzugsmoment M8 Sammelschienen", "doc_ids": [faq]}
+
+    lines = client.post("/ask/stream", json=body).text.strip().splitlines()
+    streamed = json.loads(lines[-1])["response"]
+    agent = client.post("/ask", json={**body, "agent": True}).json()
+
+    assert streamed["searched_documents"] == agent["searched_documents"] == ["faq.txt"]
+    assert {c["source"] for c in streamed["citations"] + agent["citations"]} <= {"faq.txt"}

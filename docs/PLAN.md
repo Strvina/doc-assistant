@@ -92,7 +92,7 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 ## Dodatno — kvalitet koda i automatizacija (2026-11-06)
 
 - [x] Kvalitet koda: API po ruterima, strogi mypy, šira ruff pravila (ADR-033)
-- [ ] Pretraga u izabranom dokumentu
+- [x] Pretraga u izabranim dokumentima: kvačice u biblioteci, `doc_ids` u API-ju (ADR-034)
 - [ ] Nedeljni izveštaj o prazninama u dokumentaciji mejlom timovima (n8n)
 - [ ] Automatski uvoz dokumenata iz foldera
 

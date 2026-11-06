@@ -15,6 +15,7 @@ from docassist.retrieval import (
     VectorStore,
     retrieve,
 )
+from docassist.retrieval.keywords import KeywordIndex
 
 SAMPLE_DOCS = Path(__file__).resolve().parent.parent / "data" / "sample_docs"
 
@@ -362,3 +363,27 @@ def test_no_neighbors_when_turned_off(store):
 
     assert store.with_neighbors(hits, window=0) == hits
     assert store.with_neighbors([]) == []
+
+
+# --- search in chosen documents ------------------------------------------------------------
+
+
+def test_search_only_in_the_chosen_documents(store):
+    for path in sorted(SAMPLE_DOCS.iterdir()):
+        store.add_document(ingest(path))
+    faq = next(d.doc_id for d in store.documents() if d.source == "faq.txt")
+
+    everywhere = retrieve(store, "Anzugsmoment Sammelschienen M8 Schrauben", k=3)
+    only_faq = retrieve(store, "Anzugsmoment Sammelschienen M8 Schrauben", k=3, doc_ids={faq})
+
+    assert everywhere[0].chunk.source == "montageanleitung_pv400.pdf"
+    assert only_faq and {r.chunk.source for r in only_faq} == {"faq.txt"}
+    assert retrieve(store, "M8", k=3, doc_ids=set()) == []
+
+
+def test_keyword_search_only_in_the_chosen_documents():
+    chunks = [chunk("a.txt", 1, 0, "kantina radi", "A"), chunk("b.txt", 1, 0, "kantina", "B")]
+    index = KeywordIndex(chunks)
+
+    assert {c.doc_id for c, _ in index.search("kantina", 5)} == {"A", "B"}
+    assert [c.doc_id for c, _ in index.search("kantina", 5, doc_ids={"B"})] == ["B"]

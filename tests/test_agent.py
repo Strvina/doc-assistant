@@ -420,3 +420,16 @@ def test_n8n_workflow_matches_escalation_payload(ctx):
     used = set(re.findall(r"\$json\.body\.(\w+)", template))
     assert used and used <= payload_fields
     assert set(workflow["connections"]) == {"Escalation webhook"}
+
+
+def test_tools_see_only_the_chosen_documents(ctx):
+    faq = next(d.doc_id for d in ctx.store.documents() if d.source == "faq.txt")
+    ctx.doc_ids = frozenset({faq})
+    tools = build_tools(ctx)
+
+    found, _ = execute_tool(tools, "search_documents", {"query": "Anzugsmoment M8"})
+    listing, _ = execute_tool(tools, "list_documents", {})
+
+    assert {r.chunk.source for r in ctx.retrieved} == {"faq.txt"}
+    assert 'source="faq.txt"' in found
+    assert listing == "- faq.txt (1 pages)"

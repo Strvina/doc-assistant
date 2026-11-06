@@ -446,3 +446,18 @@ koji nije dozvoljavao sliku (model za slike, ADR-029), i sudar imena promenljive
 Pokrivenost testovima je 95 %, pa se podela proverava postojećim testovima.
 **Cena:** `--warn-return-any` nije uključen: prijavljuje uglavnom biblioteke bez tipova i `app.state`.
 Nekoliko mesta ima `Any` gde biblioteke (PyMuPDF, python-pptx) nemaju tipove.
+
+### ADR-034 · Pretraga samo u izabranim dokumentima
+**Odluka:** `POST /ask` i `/ask/stream` primaju opciono `doc_ids` (id-jevi iz `GET /documents`):
+vektorska pretraga dobija Chroma filter `where={"doc_id": {"$in": …}}`, pretraga po ključnim rečima
+preskače ostale delove, a Agent vidi samo te dokumente (`search_documents`, `list_documents`).
+Nepoznat id → 422. Odgovor vraća `searched_documents` (imena fajlova) i čuva se tako u razgovoru. UI:
+kvačica pored dokumenta u biblioteci, iznad polja za pitanje traka "Pretraga samo u: … ×" i "svi
+dokumenti"; izbor se pamti u browseru (`localStorage`), obrisani dokumenti ispadaju iz njega; ispod
+odgovora piše "samo u: …". Bez izbora sve je kao pre.
+**Zašto:** kad su u biblioteci i firmeni dokumenti i velika knjiga (sken od 96 strana), pitanja sa
+opštim rečima ("kategorije", "mere") mogu da povuku pasus iz pogrešnog dokumenta. Filter u samoj
+pretrazi (a ne posle nje) znači da se `TOP_K` mesta popunjavaju samo izabranim dokumentima.
+**Cena:** BM25 i dalje računa retkost reči na celoj biblioteci (ne samo na izboru) — za rangiranje
+unutar izbora razlika je mala. Izbor je po browseru, ne po razgovoru: nastavak razgovora koristi
+trenutni izbor.

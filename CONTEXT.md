@@ -44,6 +44,8 @@ GitHub Actions · Docker / Hugging Face Spaces
 - **Pitanja sa nastavkom (ADR-031):** kad razgovor ima istoriju, model prvo prepiše pitanje u samostalan
   upit ("a u petu?" → "Koje bolesti spadaju u petu kategoriju zaraznih bolesti?"); UI pokazuje
   "tražio sam: …". Provereno uživo sa Groq-om (nastavak 2/2, nova tema 3/3).
+- **Pretraga u izabranim dokumentima (ADR-034):** kvačice u biblioteci → traka "Pretraga samo u: …" iznad
+  polja; `doc_ids` u `/ask`; odgovor ima `searched_documents`. Provereno u browseru.
 - **Kvalitet koda (ADR-033):** `api.py` podeljen na paket `docassist/api/` (ruteri po oblastima, `deps`,
   `security`, `schemas`); strogi `mypy` obavezan (CI + pre commita); šira ruff pravila. Pokrivenost 95 %.
 - **Samoosvežavanje indeksa (ADR-032):** zastareo ili nedovršen indeks web aplikacija pravi sama iz
@@ -200,3 +202,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-06 | Pitanja sa nastavkom: model prepiše pitanje pre pretrage (izmereno: 5/5 naspram 3/5 jeftine verzije); ADR-031 | #28 |
 | 2026-11-06 | Aplikacija sama osvežava zastareo indeks (napredak u UI-ju), stari citati se proveravaju po tekstu; ADR-032 | #29 |
 | 2026-11-06 | Kvalitet koda: API po ruterima, strogi mypy u CI-ju, šira ruff pravila; ADR-033 | #30 |
+| 2026-11-06 | Pretraga samo u izabranim dokumentima (kvačice, `doc_ids`, i za Agenta); ADR-034 | #31 |

@@ -15,7 +15,7 @@ import math
 import re
 import unicodedata
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 
 from docassist.models import Chunk
 
@@ -55,13 +55,18 @@ class KeywordIndex:
     def __len__(self) -> int:
         return len(self._chunks)
 
-    def search(self, query: str, k: int) -> list[tuple[Chunk, float]]:
-        """The `k` best-matching chunks with their BM25 score, best first (score > 0 only)."""
+    def search(
+        self, query: str, k: int, doc_ids: Collection[str] | None = None
+    ) -> list[tuple[Chunk, float]]:
+        """The `k` best-matching chunks with their BM25 score, best first (score > 0 only);
+        only chunks of the documents in `doc_ids` when it is given."""
         query_terms = set(tokenize(query)) & self._idf.keys()
         if not query_terms or k <= 0:
             return []
         scored = []
         for chunk, terms, length in zip(self._chunks, self._terms, self._lengths, strict=True):
+            if doc_ids is not None and chunk.doc_id not in doc_ids:
+                continue
             score = 0.0
             for term in query_terms:
                 tf = terms.get(term, 0)
