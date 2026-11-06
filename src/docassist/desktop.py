@@ -17,17 +17,48 @@ PICK_TIMEOUT_S = 600  # the dialog waits for the user
 # As a plain string: the type checker would treat the other platforms as unreachable code.
 _SYSTEM: str = sys.platform
 
+# Windows keeps a window opened by a background program (the server) behind the window the
+# user works in. So the dialog gets an owner window that is shown, invisible and always on
+# top (a dialog owned by a topmost window is on top too), and the script borrows the input of
+# the foreground window for a moment (AttachThreadInput), which lets it take the focus.
 _WINDOWS_PICKER = r"""
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class DocAssistFront {
+    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr pid);
+    [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] static extern bool AttachThreadInput(uint from, uint to, bool attach);
+    [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] static extern bool BringWindowToTop(IntPtr hWnd);
+    public static void Bring(IntPtr window) {
+        uint front = GetWindowThreadProcessId(GetForegroundWindow(), IntPtr.Zero);
+        uint mine = GetCurrentThreadId();
+        bool attached = front != mine && AttachThreadInput(mine, front, true);
+        BringWindowToTop(window);
+        SetForegroundWindow(window);
+        if (attached) { AttachThreadInput(mine, front, false); }
+    }
+}
+'@
+$owner = New-Object System.Windows.Forms.Form -Property @{
+    TopMost = $true; ShowInTaskbar = $false; FormBorderStyle = 'None'; Opacity = 0
+    StartPosition = 'CenterScreen'; Size = New-Object System.Drawing.Size(1, 1)
+}
+$owner.Show()
+[DocAssistFront]::Bring($owner.Handle)
 $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
 $dialog.Description = 'Izaberi folder iz kog se dokumenti sami dodaju u biblioteku'
 $dialog.ShowNewFolderButton = $true
 if ($env:DOCASSIST_START -and (Test-Path -LiteralPath $env:DOCASSIST_START)) {
     $dialog.SelectedPath = $env:DOCASSIST_START
 }
-$owner = New-Object System.Windows.Forms.Form -Property @{ TopMost = $true }
-if ($dialog.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { $dialog.SelectedPath }
+$result = $dialog.ShowDialog($owner)
+$owner.Close()
+if ($result -eq [System.Windows.Forms.DialogResult]::OK) { $dialog.SelectedPath }
 """
 
 

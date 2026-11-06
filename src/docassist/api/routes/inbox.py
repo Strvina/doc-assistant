@@ -9,6 +9,7 @@ not be able to point the app at any folder of the server.
 from __future__ import annotations
 
 import ipaddress
+import threading
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -88,12 +89,20 @@ def check(body: FolderCheck, settings: SettingsDep) -> dict[str, Any]:
     return {"folder": str(folder), "waiting": waiting_in(folder)}
 
 
+_dialog_open = threading.Lock()  # one folder dialog at a time (a double click opens one)
+
+
 @router.post("/pick", dependencies=LOCAL)
 def pick(watched: InboxDep) -> dict[str, Any]:
     """Let the user choose a folder in the system dialog (nothing is saved yet)."""
     if not desktop.available():
         raise HTTPException(409, "This computer has no desktop to show a folder dialog on")
-    chosen = desktop.pick_folder(watched.folder)
+    if not _dialog_open.acquire(blocking=False):
+        raise HTTPException(409, "Prozor za izbor foldera je već otvoren.")
+    try:
+        chosen = desktop.pick_folder(watched.folder)
+    finally:
+        _dialog_open.release()
     return {"folder": str(chosen) if chosen else None}
 
 

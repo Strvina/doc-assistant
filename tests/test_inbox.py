@@ -375,3 +375,25 @@ def test_a_relative_default_folder_is_shown_as_a_full_path(tmp_path, monkeypatch
     config = InboxConfig.load(tmp_path / "inbox.json", Path("data/inbox"))
 
     assert config.folder == tmp_path / "data" / "inbox"
+
+
+def test_only_one_folder_dialog_at_a_time(client, monkeypatch):
+    monkeypatch.setattr(desktop, "available", lambda: True)
+    opened, release = threading.Event(), threading.Event()
+
+    def slow_dialog(start):
+        opened.set()
+        release.wait(10)
+
+    monkeypatch.setattr(desktop, "pick_folder", slow_dialog)
+    first = threading.Thread(target=lambda: client.post("/inbox/pick"))
+    first.start()
+    opened.wait(10)
+
+    second = client.post("/inbox/pick")
+    release.set()
+    first.join(10)
+
+    assert second.status_code == 409
+    assert second.json()["detail"] == "Prozor za izbor foldera je već otvoren."
+    assert client.post("/inbox/pick").status_code == 200  # free again after closing

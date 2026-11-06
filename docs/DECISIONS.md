@@ -524,3 +524,18 @@ servera (to bi uvezlo tuđe fajlove u biblioteku).
 **Cena:** uvezeni fajlovi zauzimaju mesto dvaput (u "Uvezeno" i u biblioteci) dok ih neko ne obriše.
 Sistemski prozor otvara server — radi kad su browser i server na istom računaru (uobičajeno za ovu
 aplikaciju), inače se putanja kuca. Na Linuxu traži `zenity`, inače polje za putanju.
+
+### ADR-038 · Windows prozor za izbor foldera dolazi ispred browsera
+**Odluka:** prozor za izbor foldera (ADR-037) ostaje Windows-ov (`FolderBrowserDialog`), ali pripada
+nevidljivom "vlasničkom" prozoru koji se zaista prikaže i stalno je na vrhu (prozor koji pripada
+takvom prozoru je i sam na vrhu), a skripta preuzme fokus tako što se na trenutak priključi ulazu
+prozora u prvom planu (`AttachThreadInput` + `SetForegroundWindow`). Dok je prozor otvoren, dugme
+piše "Otvaram prozor…" i ne može da se klikne, a server dozvoljava samo jedan prozor odjednom (409).
+**Zašto:** korisnik je prijavio da se prozor otvara iza browsera: Windows ne pušta program u pozadini
+(server) da svoj prozor stavi ispred onog u kom korisnik upravo radi. Stari vlasnički prozor je imao
+`TopMost`, ali se nikad nije prikazao, pa nije imao efekta. Pregled foldera u samoj stranici je
+odbijen — korisnik želi Windows-ov prozor. Posle izmene korisnik je potvrdio da se prozor pojavljuje
+ispred.
+**Cena:** prozor se pojavi za 1–2 s (PowerShell, WinForms i mali C# deo ~0,5 s, ostalo sam prozor
+dok učita stablo foldera). Problem se nije mogao ponoviti automatski (zabrana važi samo posle pravog
+klika korisnika), pa je proveren ručno.

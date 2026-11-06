@@ -96,6 +96,7 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 - [x] Nedeljni izveštaj o prazninama u dokumentaciji mejlom timovima (n8n, ADR-035)
 - [x] Automatski uvoz dokumenata iz foldera `data/inbox` (ADR-036)
 - [x] Panel „Automatski uvoz iz foldera“: biranje foldera, uključi/isključi, istorija, neuspeli (ADR-037)
+- [x] Windows prozor za izbor foldera se pojavljuje ispred browsera (ADR-038)
 
 ## Dodatno — formati
 
