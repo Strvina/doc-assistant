@@ -12,6 +12,7 @@ ENV UV_COMPILE_BYTECODE=1 \
     DOCUMENTS_DIR=/state/documents \
     LOG_DB=/state/logs.sqlite \
     OUTBOX_DIR=/state/outbox \
+    INBOX_DIR=/state/inbox \
     PORT=8000
 
 WORKDIR /app

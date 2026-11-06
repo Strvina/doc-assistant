@@ -167,6 +167,11 @@ async function loadConfig() {
   const zone = $("#dropzone");
   zone.hidden = !state.config.allow_uploads;
   $("#dropzone-hint").textContent = `PDF, Word, Excel, PowerPoint, TXT, slike · do ${state.config.max_upload_mb} MB`;
+  const inboxHint = $("#inbox-hint");
+  inboxHint.hidden = !state.config.inbox;
+  if (state.config.inbox) {
+    inboxHint.replaceChildren("ili ih ubaci u folder ", el("code", {}, state.config.inbox), " — dodaju se sami");
+  }
   if (state.config.extensions) $("#file-input").accept = state.config.extensions.join(",");
 }
 
@@ -233,6 +238,28 @@ function watchRebuild() {
 async function loadDocuments() {
   state.documents = await api("/documents");
   renderDocuments();
+}
+
+// Documents can also arrive without this page: the inbox folder (ADR-036) or another user.
+// While the page is visible, the list is checked now and then and new documents announced.
+const LIBRARY_REFRESH_MS = 15000;
+
+function watchLibrary() {
+  setInterval(async () => {
+    if (document.hidden || state.pending || rebuildWatch) return;
+    const known = new Set(state.documents.map((d) => d.doc_id));
+    let documents;
+    try {
+      documents = await api("/documents");
+    } catch {
+      return; // the server may be restarting: try again next time
+    }
+    const added = documents.filter((d) => !known.has(d.doc_id));
+    if (!added.length && documents.length === state.documents.length) return;
+    state.documents = documents;
+    renderDocuments();
+    for (const doc of added) toast(`Novi dokument u biblioteci: ${prettyName(doc.source)}`);
+  }, LIBRARY_REFRESH_MS);
 }
 
 function renderDocuments() {
@@ -1166,6 +1193,7 @@ async function main() {
   } catch (error) {
     toast(`Razgovori: ${error.message}`, "error");
   }
+  watchLibrary();
 }
 
 main();

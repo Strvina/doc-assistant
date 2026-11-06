@@ -31,21 +31,31 @@ VisionFactory = Callable[[Settings], tuple[ReadImage, str]]
 
 def app_settings(request: Request) -> Settings:
     """The app's settings, read from `.env` on first use (also usable in a middleware)."""
-    state = request.app.state
+    return app_settings_of(request.app.state)
+
+
+def app_settings_of(state: Any) -> Settings:
     if state.settings is None:
         state.settings = Settings.from_env()
-    return state.settings
+    settings: Settings = state.settings
+    return settings
 
 
 SettingsDep = Annotated[Settings, Depends(app_settings)]
 
 
 def get_library(request: Request, settings: SettingsDep) -> Library:
-    state = request.app.state
+    return library_of(request.app.state, settings)
+
+
+def library_of(state: Any, settings: Settings) -> Library:
+    """The app's library, opened on first use. Raises HTTPException 503 while it cannot be
+    used (stale index being rebuilt, missing originals, missing API key)."""
     if state.library is None:
         with state.rebuild_lock:
             _open_library(state, settings)
-    return state.library
+    library: Library = state.library
+    return library
 
 
 def _open_library(state: Any, settings: Settings) -> None:

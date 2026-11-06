@@ -99,6 +99,9 @@ class Settings:
     hybrid_search: bool = True  # embeddings + keywords (ADR-023); false = embeddings only
     # Sites allowed to show the app in an iframe, e.g. https://huggingface.co for a Space.
     embed_origins: tuple[str, ...] = ()
+    # Files dropped here are imported (ADR-036); checked every `inbox_poll_s` s, 0 = off.
+    inbox_dir: Path = Path("data/inbox")
+    inbox_poll_s: int = 10
 
     @classmethod
     def from_env(cls, load_dotenv_file: bool = True) -> Settings:
@@ -150,6 +153,8 @@ class Settings:
             max_questions_per_ip_hour=int(_env("MAX_QUESTIONS_PER_IP_HOUR", "120")),
             documents_dir=Path(_env("DOCUMENTS_DIR", "data/documents")),
             max_upload_mb=int(_env("MAX_UPLOAD_MB", "20")),
+            inbox_dir=Path(_env("INBOX_DIR", "data/inbox")),
+            inbox_poll_s=int(_env("INBOX_POLL_S", "10")),
         )
 
 

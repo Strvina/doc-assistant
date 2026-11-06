@@ -76,6 +76,8 @@ def config(
         "escalation_teams": [
             {"id": team.id, "label": team.label} for team in settings.escalation_teams
         ],
+        # The folder whose files are imported automatically (ADR-036), or None when off.
+        "inbox": str(settings.inbox_dir) if request.app.state.inbox is not None else None,
     }
 
 

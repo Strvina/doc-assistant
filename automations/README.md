@@ -61,6 +61,15 @@ the app on this PC; `http://app:8000` when the app runs in compose) and sends `A
 `X-API-Key` if it is set. `setup_n8n.py` imports and activates it; send one report right away with
 `uv run python scripts/setup_n8n.py --send-gap-report`.
 
+## Feeding the inbox folder
+
+Doc Assistant imports every supported file that appears in `INBOX_DIR` (default `data/inbox`,
+checked every `INBOX_POLL_S` = 10 s; ADR-036). Any workflow can feed it: e.g. an **Email Trigger
+(IMAP)** node for a shared mailbox like `dokumenti@firma.rs` → **Write Binary File** of each
+attachment into the folder (mounted into the n8n container). A scanner that saves to that folder
+works the same way, without n8n. Imported files leave the folder; unreadable ones move to
+`failed/` with a `.txt` that says why. `GET /documents/inbox` lists the latest imports.
+
 ## Calling Doc Assistant from n8n
 
 Any workflow can ask questions through the REST API (`uv run uvicorn docassist.api:app`):

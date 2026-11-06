@@ -82,7 +82,7 @@ uv run python -m docassist.cli docs                              # list · delet
 The same app serves the API (OpenAPI docs at `/docs`):
 `POST /ask` (`"agent": true` for tools, `"doc_ids": [...]` to search only those documents) · `GET|POST /documents` · `DELETE /documents/{id}` ·
 `GET /documents/{id}/view?page=&chunk=` (highlighted original) · `GET /documents/{id}/file` ·
-`POST /feedback` · `GET /insights` · `GET /reports/gaps` (weekly gap report per team, `format=html` to preview) · `GET /health`.
+`POST /feedback` · `GET /insights` · `GET /reports/gaps` (weekly gap report per team, `format=html` to preview) · `GET /documents/inbox` (files imported from the inbox folder) · `GET /health`.
 
 ```bash
 curl -X POST localhost:8000/ask -H "Content-Type: application/json" \

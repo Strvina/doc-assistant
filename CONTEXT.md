@@ -44,6 +44,9 @@ GitHub Actions · Docker / Hugging Face Spaces
 - **Pitanja sa nastavkom (ADR-031):** kad razgovor ima istoriju, model prvo prepiše pitanje u samostalan
   upit ("a u petu?" → "Koje bolesti spadaju u petu kategoriju zaraznih bolesti?"); UI pokazuje
   "tražio sam: …". Provereno uživo sa Groq-om (nastavak 2/2, nova tema 3/3).
+- **Uvoz iz foldera (ADR-036):** fajl ubačen u `data/inbox` se sam doda u biblioteku (provera na 10 s, fajl
+  miruje 5 s), pa se ukloni iz foldera; nečitljiv → `inbox/failed/` + razlog. UI javlja novi dokument.
+  Provereno uživo (probni server + browser).
 - **Nedeljni izveštaj o prazninama (ADR-035):** `GET /reports/gaps` (JSON za n8n, `format=html` pregled) →
   n8n `gap_report_workflow.json` (ponedeljak 8:00 / *Run now*) → mejl po timu. Provereno uživo: mejl
   stigao u Mailpit. `setup_n8n.py --send-gap-report` šalje odmah.
@@ -209,3 +212,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-06 | Kvalitet koda: API po ruterima, strogi mypy u CI-ju, šira ruff pravila; ADR-033 | #30 |
 | 2026-11-06 | Pretraga samo u izabranim dokumentima (kvačice, `doc_ids`, i za Agenta); ADR-034 | #31 |
 | 2026-11-06 | Nedeljni izveštaj o prazninama mejlom po timu (n8n), AI raspodela po timovima; ADR-035 | #32 |
+| 2026-11-06 | Automatski uvoz dokumenata iz foldera `data/inbox` (skener, n8n); ADR-036 | #33 |
