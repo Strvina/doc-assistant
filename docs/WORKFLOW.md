@@ -59,7 +59,8 @@ chore(ci): cache uv dependencies
 1. `uv sync --locked` — zavisnosti se poklapaju sa `uv.lock`
 2. `ruff check .` — lint
 3. `ruff format --check .` — formatiranje
-4. `pytest` — testovi
+4. `mypy` — provera tipova (strogo, podešavanja u `pyproject.toml`)
+5. `pytest` — testovi
 
 Ako CI padne: otvori run u tabu *Actions*, popravi lokalno, commit + push na istu granu — PR se sam ažurira.
 

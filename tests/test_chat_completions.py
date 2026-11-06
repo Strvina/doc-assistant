@@ -151,10 +151,8 @@ def test_non_gemini_services_get_only_standard_message_fields():
         "name": "search_documents",
         "arguments": '{"query": "M8"}',
     }
-    gemini = FakeService(
-        **{"g": [response(tool_calls=[call], finish="tool_calls"), status_error(503)]}
-    )
-    groq = FakeService(**{"q": [response("done")]})
+    gemini = FakeService(g=[response(tool_calls=[call], finish="tool_calls"), status_error(503)])
+    groq = FakeService(q=[response("done")])
     llm = provider(Endpoint("gemini", "g", client(gemini)), Endpoint("groq", "q", client(groq)))
 
     run = llm.run_agent("s", MESSAGES, [search_tool([])])
@@ -172,8 +170,8 @@ def test_non_gemini_services_get_only_standard_message_fields():
 
 def test_quota_pauses_an_endpoint_and_the_next_one_answers():
     body = [{"error": {"details": [{"retryDelay": "67913s"}]}}]
-    gemini = FakeService(**{"g": [status_error(429, body)]})
-    groq = FakeService(**{"q": [response("a", model="q"), response("b", model="q")]})
+    gemini = FakeService(g=[status_error(429, body)])
+    groq = FakeService(q=[response("a", model="q"), response("b", model="q")])
     paused = {}
     llm = provider(
         Endpoint("gemini", "g", client(gemini)), Endpoint("groq", "q", client(groq)), paused=paused

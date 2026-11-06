@@ -235,7 +235,9 @@ class ChatCompletionsProvider:
                     raise
         raise AssertionError("unreachable")
 
-    def _call(self, ep: Endpoint, messages: list[Any], *, retries: int | None, **request: Any):
+    def _call(
+        self, ep: Endpoint, messages: list[Any], *, retries: int | None, **request: Any
+    ) -> Any:
         client = ep.client
         if retries is not None and hasattr(client, "with_options"):
             client = client.with_options(max_retries=retries)
@@ -294,8 +296,9 @@ def _for(ep: Endpoint, messages: list[Any]) -> list[Any]:
             out: dict[str, Any] = {"role": "assistant", "content": message.get("content") or ""}
             if message.get("tool_calls"):
                 out["tool_calls"] = [_call_for(call, gemini) for call in message["tool_calls"]]
-            message = out
-        cleaned.append(message)
+            cleaned.append(out)
+        else:
+            cleaned.append(message)
     return cleaned
 
 
@@ -336,4 +339,7 @@ def _usage(response: Any) -> tuple[int, int]:
 def _stop_reason(finish_reason: str | None) -> StopReason:
     if finish_reason in (None, "stop", "tool_calls"):
         return "end"
-    return {"length": "max_tokens", "content_filter": "refusal"}.get(finish_reason, "other")
+    return _STOP_REASONS.get(finish_reason, "other")
+
+
+_STOP_REASONS: dict[str, StopReason] = {"length": "max_tokens", "content_filter": "refusal"}

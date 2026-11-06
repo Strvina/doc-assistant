@@ -1,3 +1,4 @@
+import itertools
 from pathlib import Path
 
 import pytest
@@ -39,7 +40,7 @@ def test_chunks_cover_the_whole_text():
 def test_neighbouring_chunks_overlap():
     chunks = split_text(sentences(30), chunk_size=200, overlap=60)
 
-    for previous, current in zip(chunks, chunks[1:], strict=False):
+    for previous, current in itertools.pairwise(chunks):
         first_sentence = current.split(". ")[0]
         assert first_sentence in previous
 

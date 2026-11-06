@@ -23,6 +23,7 @@ import unicodedata
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import docx
 import openpyxl
@@ -58,6 +59,10 @@ _PDF_TEXT_FLAGS = (pymupdf.TEXTFLAGS_TEXT & ~pymupdf.TEXT_PRESERVE_LIGATURES) | 
 
 # Damaged PDFs make MuPDF print the same repair message for every page; they still load.
 pymupdf.TOOLS.mupdf_display_errors(False)
+
+# A text block of a PDF page as PyMuPDF gives it: x0, y0, x1, y1, text, block number
+# (-1 for a paragraph read by OCR) and block type (0 = text, 1 = image).
+PdfBlock = tuple[float, float, float, float, str, int, int]
 
 _MULTI_BLANK_LINES = re.compile(r"\n{3,}")
 _BULLETS = frozenset("•◦▪▫●○■□‣⁃")
@@ -138,7 +143,8 @@ def load_pdf(path: Path) -> list[str]:
     settings = ocr.settings_from_env()
     # Pages a vision model read on request (ADR-029) replace OCR and the page's own text.
     read_by_model = {page: text for page, text in vision.load_pages(path).items() if text}
-    natives, jobs = [], {}
+    natives: list[list[PdfBlock] | None] = []
+    jobs: dict[int, ocr.OcrJob] = {}
     with open_pdf(path) as pdf:
         if pdf.needs_pass:
             raise DocumentLoadError(f"{path.name} is password-protected")
@@ -179,32 +185,32 @@ def pdf_page_blocks(page: pymupdf.Page) -> list[tuple[pymupdf.Rect, str]]:
     return _paragraph_blocks(_merge(blocks, found))
 
 
-def _native_blocks(page: pymupdf.Page) -> list[tuple]:
+def _native_blocks(page: pymupdf.Page) -> list[PdfBlock]:
     return page.get_text("blocks", flags=_PDF_TEXT_FLAGS, sort=False)
 
 
-def _text_rects(blocks: list[tuple]) -> list[pymupdf.Rect]:
+def _text_rects(blocks: list[PdfBlock]) -> list[pymupdf.Rect]:
     return [pymupdf.Rect(b[:4]) for b in blocks if b[6] == 0 and b[4].strip()]
 
 
-def _merge(blocks: list[tuple], found: list[tuple[pymupdf.Rect, str]]) -> list[tuple]:
+def _merge(blocks: list[PdfBlock], found: list[tuple[pymupdf.Rect, str]]) -> list[PdfBlock]:
     """Add OCR paragraphs to the page's own text blocks, in reading order."""
     if not found:
         return blocks
     merged = [b for b in blocks if b[6] == 0]
-    merged += [(*rect, text, -1, 0) for rect, text in found]
+    merged += [(rect.x0, rect.y0, rect.x1, rect.y1, text, -1, 0) for rect, text in found]
     merged.sort(key=lambda b: (round(b[1]), b[0]))  # top to bottom, left to right
     return merged
 
 
-def _paragraph_blocks(blocks: list[tuple]) -> list[tuple[pymupdf.Rect, str]]:
+def _paragraph_blocks(blocks: list[PdfBlock]) -> list[tuple[pymupdf.Rect, str]]:
     result = []
     for x0, y0, x1, y1, text, block_no, block_type in blocks:
         if block_type != 0:  # 1 = image block
             continue
         paragraph = ""
-        for line in text.split("\n"):
-            line = " ".join(line.split())
+        for raw_line in text.split("\n"):
+            line = " ".join(raw_line.split())
             if not line:
                 continue
             if paragraph and line[0] in _BULLETS:  # each list item on its own line
@@ -375,8 +381,8 @@ def pptx_slides(path: Path) -> list[list[SlideItem]]:
     return slides
 
 
-def _shapes_in_reading_order(shapes) -> Iterator:
-    def position(shape) -> tuple[int, int]:
+def _shapes_in_reading_order(shapes: Iterable[Any]) -> Iterator[Any]:
+    def position(shape: Any) -> tuple[int, int]:
         return (shape.top or 0, shape.left or 0)
 
     for shape in sorted(shapes, key=position):

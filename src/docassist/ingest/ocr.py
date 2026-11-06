@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import csv
 import io
+import itertools
 import os
 import re
 import shutil
@@ -216,7 +217,11 @@ def ocr_blocks(
 
 
 def _run(args: list[str], data: bytes) -> subprocess.CompletedProcess[bytes]:
-    flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0  # no console popup
+    # A platform check as a statement, so the type checker knows the flag exists (Windows).
+    if sys.platform == "win32":
+        flags = subprocess.CREATE_NO_WINDOW  # no console popup
+    else:
+        flags = 0
     # One thread per Tesseract process: pages already run in parallel (run_jobs).
     env = {**os.environ, "OMP_THREAD_LIMIT": "1"}
     return subprocess.run(
@@ -291,7 +296,7 @@ def _token_kind(token: str) -> int:
     # Noise often mixes cases at random ("krYzYzYıh"); real words change case at most twice.
     changes = sum(
         1
-        for a, b in zip(core, core[1:], strict=False)
+        for a, b in itertools.pairwise(core)
         if a.isalpha() and b.isalpha() and a.islower() != b.islower()
     )
     if changes > 2:

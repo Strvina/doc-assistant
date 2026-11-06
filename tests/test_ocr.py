@@ -185,7 +185,7 @@ def test_multi_page_scan_reports_progress_while_reading(tmp_path, monkeypatch):
     from docassist.ingest import loaders
 
     monkeypatch.setenv("OCR_LANGUAGES", "deu+eng")
-    path, pixmap = scanned_pdf(tmp_path / "one.pdf")
+    _path, pixmap = scanned_pdf(tmp_path / "one.pdf")
     scan = pymupdf.open()
     for _ in range(3):
         scan.new_page(width=595, height=842).insert_image(

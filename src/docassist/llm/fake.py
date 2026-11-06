@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterator, Sequence
 from html import unescape
 from typing import TYPE_CHECKING, Any
 
-from docassist.llm.base import AgentRun, LLMResult, Message, ToolCall
+from docassist.llm.base import AgentRun, LLMResult, Message, ToolCall, text_of
 from docassist.llm.prompts import NOT_FOUND_SR, REWRITE_PROMPT
 
 if TYPE_CHECKING:
@@ -26,8 +26,8 @@ def quote_first_document(system: str, messages: list[Message]) -> str:
     """Default fake answer: the first sentence of the best-ranked document, with a citation.
     A follow-up question to rewrite (`REWRITE_PROMPT`) comes back unchanged."""
     if system == REWRITE_PROMPT:
-        return messages[-1]["content"]
-    match = _DOCUMENT.search(messages[-1]["content"])
+        return text_of(messages[-1]["content"])
+    match = _DOCUMENT.search(text_of(messages[-1]["content"]))
     if match is None:
         return NOT_FOUND_SR
     lines = [line.strip() for line in match["text"].splitlines() if line.strip()]
@@ -61,7 +61,7 @@ class FakeProvider:
     def complete(self, system: str, messages: list[Message]) -> LLMResult:
         self.calls.append((system, list(messages)))
         text = self._responder(system, messages)
-        prompt_chars = len(system) + sum(len(m["content"]) for m in messages)
+        prompt_chars = len(system) + sum(len(text_of(m["content"])) for m in messages)
         return LLMResult(
             text=text,
             model="fake",
@@ -81,7 +81,7 @@ class FakeProvider:
     ) -> AgentRun:
         from docassist.agent.tools import execute_tool
 
-        question = messages[-1]["content"]
+        question = text_of(messages[-1]["content"])
         script = self._tool_script
         if script is None:
             script = [("search_documents", {"query": question})]

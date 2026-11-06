@@ -130,4 +130,10 @@ def _stop_reason(response: Any) -> StopReason:
     if response.status != "incomplete":
         return "end"
     reason = getattr(response.incomplete_details, "reason", None) or ""
-    return {"max_output_tokens": "max_tokens", "content_filter": "refusal"}.get(reason, "other")
+    return _STOP_REASONS.get(reason, "other")
+
+
+_STOP_REASONS: dict[str, StopReason] = {
+    "max_output_tokens": "max_tokens",
+    "content_filter": "refusal",
+}

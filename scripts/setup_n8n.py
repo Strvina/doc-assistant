@@ -25,7 +25,7 @@ COMPOSE = ["docker", "compose", "--profile", "automation"]
 
 def run(*args: str) -> str:
     print("$", " ".join(args))
-    result = subprocess.run(args, capture_output=True, text=True, encoding="utf-8")
+    result = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", check=False)
     if result.returncode != 0:
         print(result.stdout, result.stderr, sep="\n", file=sys.stderr)
         raise SystemExit(f"command failed: {' '.join(args)}")

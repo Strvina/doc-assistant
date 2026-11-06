@@ -35,7 +35,7 @@ Ako se odluka promeni, ne briši staru: označi je kao *Zamenjena sa ADR-XXX*.
 **Zašto:** najbrži put do demo-a koji poslodavac može da proba.
 
 ### ADR-007 · CI: ruff + pytest, testovi bez mreže
-**Odluka:** GitHub Actions na svaki PR: `ruff check`, `ruff format --check`, `pytest`.
+**Odluka:** GitHub Actions na svaki PR: `ruff check`, `ruff format --check`, `pytest` (od ADR-033 i `mypy`).
 Sve spoljne usluge imaju Fake implementacije.
 **Zašto:** CI ne treba tajne ključeve, brz je i deterministički.
 
@@ -427,3 +427,22 @@ podele bi to ponovila. Stari razgovori su posle novog indeksa označavali pogre�
 **Cena:** dok se indeks pravi (~4 min sa skenom od 96 strana) aplikacija ne odgovara na pitanja.
 Pravi se ceo indeks, i za dokumente kojima se ništa ne bi promenilo. Citat iz starog razgovora čiji
 se tekst promenio (npr. OCR) otvara stranu bez označavanja.
+
+### ADR-033 · Kvalitet koda: API po ruterima, strogi mypy, šira ruff pravila
+**Odluka:** (1) `api.py` (922 linije, sve rute ugnježdene u `create_app`) je podeljen na paket
+`docassist/api/`: `app.py` sastavlja aplikaciju, `routes/` ima po jedan `APIRouter` za oblast (web,
+documents, ask, conversations, monitoring), `deps.py` zajedničke zavisnosti, `security.py` pristup i
+limite, `schemas.py` modele. Fabrike modela su na `app.state` (`llm_factory`, `vision_factory`), pa
+rute nisu closure-i. Javno ostaje isto: `docassist.api:app`, `create_app`, `SESSION_COOKIE`; 25 ruta
+sa istom zaštitom (provereno poređenjem tabele ruta pre/posle). (2) `mypy` u strogom režimu
+(`disallow_untyped_defs`, `disallow_any_generics`, `check_untyped_defs`, `strict_equality`,
+`warn_unreachable`…) je obavezna provera u CI-ju i pre commita. (3) Ruff dodatno: `C4`, `PIE`, `RET`,
+`RUF`, `PERF`, `PTH`, `PLE`, `PLW` (bez `RUF001-003` — srpska/nemačka slova nisu "dvosmislena"; bez
+`RUF005` — `Rect + (…)` u PyMuPDF-u nije spajanje tuple-ova).
+**Zašto:** jedna funkcija od 500 linija se teško čita i menja, a tri sledeće funkcije dodaju rute.
+mypy je odmah našao prave propuste: `Answer | None` prosleđen gde mora `Answer` (`/ask/stream`),
+metoda `ConversationStore.list` koja zaklanja ugrađeni `list` (preimenovana u `summaries`), tip poruke
+koji nije dozvoljavao sliku (model za slike, ADR-029), i sudar imena promenljive pri čišćenju.
+Pokrivenost testovima je 95 %, pa se podela proverava postojećim testovima.
+**Cena:** `--warn-return-any` nije uključen: prijavljuje uglavnom biblioteke bez tipova i `app.state`.
+Nekoliko mesta ima `Any` gde biblioteke (PyMuPDF, python-pptx) nemaju tipove.

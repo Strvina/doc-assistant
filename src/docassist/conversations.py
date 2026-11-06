@@ -129,7 +129,7 @@ class ConversationStore:
             )
         return True
 
-    def list(self, owner: str, limit: int = 100, query: str = "") -> list[dict[str, Any]]:
+    def summaries(self, owner: str, limit: int = 100, query: str = "") -> list[dict[str, Any]]:
         """The owner's conversations, most recently used first.
 
         `query` keeps the conversations whose title, questions or answers contain every word
