@@ -1,0 +1,90 @@
+# Doc Assistant on your own server (a VPS), ADR-040. From the repository root:
+#
+#   docker compose -f deploy/server/compose.yaml up -d --build
+#
+# n8n starts too with COMPOSE_PROFILES=automation in deploy/server/.env (the default there).
+#
+# Settings: deploy/server/.env (copy .env.example). Step by step: docs/DEPLOY.md, "Sopstveni server".
+#
+# Only Caddy is reachable from the internet (ports 80/443): it gets the HTTPS certificate,
+# asks for the password and passes requests on. The app and n8n have no public port.
+name: doc-assistant-server
+
+services:
+  app:
+    build: ../..
+    image: doc-assistant:server
+    env_file: .env
+    environment:
+      # n8n is reached inside this network; nothing here needs to be public.
+      ESCALATION_WEBHOOK_URL: http://n8n:5678/webhook/doc-assistant-escalation
+    volumes:
+      - state:/state  # index, original documents, query log, conversations
+      - inbox:/state/inbox  # files dropped here are imported (n8n can write e-mail attachments)
+    restart: unless-stopped
+    labels:
+      - docker-volume-backup.stop-during-backup=true  # a consistent copy of the SQLite files
+
+  caddy:
+    image: caddy:2.10-alpine
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in deploy/server/.env}
+      N8N_DOMAIN: ${N8N_DOMAIN:-}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in deploy/server/.env}
+      AUTH_USER: ${AUTH_USER:?set AUTH_USER in deploy/server/.env}
+      AUTH_PASSWORD_HASH: ${AUTH_PASSWORD_HASH:?set AUTH_PASSWORD_HASH in deploy/server/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data  # certificates
+      - caddy_config:/config
+    depends_on: [app]
+    restart: unless-stopped
+
+  n8n:
+    profiles: ["automation"]
+    image: docker.n8n.io/n8nio/n8n:2.46.5
+    environment:
+      GENERIC_TIMEZONE: Europe/Belgrade
+      TZ: Europe/Belgrade
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_HOST: ${N8N_DOMAIN:-n8n.localhost}
+      N8N_PROTOCOL: https
+      WEBHOOK_URL: https://${N8N_DOMAIN:-n8n.localhost}/
+      # The weekly gap report reads these (ADR-035).
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      DOC_ASSISTANT_URL: http://app:8000
+      DOC_ASSISTANT_API_KEY: ${API_TOKEN:-}
+    volumes:
+      - n8n:/home/node/.n8n
+      - ../../automations:/automations:ro
+      - inbox:/inbox  # a workflow can save attachments here: they are imported
+    restart: unless-stopped
+    labels:
+      - docker-volume-backup.stop-during-backup=true
+
+  # Every night at 3:00 the volumes go into deploy/server/backups/ (kept 14 days).
+  backup:
+    image: offen/docker-volume-backup:v2.43.4
+    environment:
+      BACKUP_CRON_EXPRESSION: ${BACKUP_CRON:-0 3 * * *}
+      BACKUP_FILENAME: doc-assistant-%Y-%m-%d.tar.gz
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+      BACKUP_PRUNING_PREFIX: doc-assistant-
+    volumes:
+      - state:/backup/state:ro
+      - inbox:/backup/inbox:ro
+      - n8n:/backup/n8n:ro
+      - ./backups:/archive
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # to pause the app for the copy
+    restart: unless-stopped
+
+volumes:
+  state:
+  inbox:
+  n8n:
+  caddy_data:
+  caddy_config:

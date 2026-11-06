@@ -560,3 +560,27 @@ elemenata malim kad liste porastu. Izmereno na probnom serveru: lista dokumenata
 **Cena:** skok na kraj razgovora mora da sačeka da se poslednje poruke iscrtaju (dva frame-a), jer
 poruke van ekrana imaju procenjenu visinu. Pretraga po stranici razgovora i dalje čita sve razgovore
 vlasnika (u Pythonu, ADR-025) — za jednog korisnika ih je malo.
+
+### ADR-040 · Sopstveni server: Caddy (HTTPS + lozinka), n8n, noćne rezervne kopije
+**Odluka:** za pravo korišćenje u firmi postoji `deploy/server/` — `compose.yaml` sa aplikacijom,
+**Caddy**-jem (Let's Encrypt HTTPS, `basic_auth` sa jednom lozinkom za firmu, `flush_interval -1` da
+odgovori stižu dok nastaju), **n8n**-om (sopstveni domen i nalog; webhook-ovi zatvoreni spolja jer ih
+zove samo aplikacija iznutra) i kontejnerom za **rezervne kopije** (`offen/docker-volume-backup`:
+svake noći u 3:00 svi volume-i u `deploy/server/backups/`, čuva 14 dana, aplikacija i n8n se za to
+pauziraju par sekundi). Javni su samo portovi 80/443; aplikacija i n8n nemaju javni port. Jedan
+`deploy/server/.env` za server i aplikaciju (`COMPOSE_PROFILES=automation` uključuje n8n). Volume
+`inbox` je i u aplikaciji (`/state/inbox`) i u n8n-u (`/inbox`), pa tok može da spušta priloge iz
+mejla na uvoz. `Dockerfile` pravi `/state/inbox` kao vlasništvo aplikacije (bez toga nov volume
+pripada root-u i uvoz ne radi — nađeno u probi). GitHub Action `deploy-server.yml` posle spajanja
+radi `git pull` + `compose up --build` preko SSH-a (uključuje se tek sa `SERVER_HOST`). CI proverava
+`compose.yaml` i `Caddyfile`. Uputstvo i cene: `docs/DEPLOY.md`, "Sopstveni server".
+**Zašto:** pre ove odluke svako sa linkom bi video sve dokumente. Lozinka u Caddy-ju je prava
+zaštita bez izmene koda i radi i za tok "pitanje → odgovor u delovima"; lični nalozi se mogu dodati
+bez koda (Cloudflare Access ispred domena) ili kasnije u aplikaciji. Jedan VPS (~4,5–8,5 €/mes.) nosi
+sve; model se plaća po pitanju (~0,35–0,50 $ na 1.000 pitanja sa Haiku 5.5 / Groq). Probano lokalno
+celo: 401 bez/sa pogrešnom lozinkom, HTTPS i preusmeravanje sa HTTP-a, upload i pitanje sa sesijom,
+n8n (200) i zatvoren webhook (403), n8n → aplikacija sa API ključem (bez ključa 401), aplikacija → n8n
+webhook, fajl koji n8n upiše u `/inbox` uvezen, rezervna kopija napravljena i vraćena.
+**Cena:** jedna zajednička lozinka (nema "ko je šta pitao" po osobi). Rezervne kopije su na istom
+serveru dok ih neko ne kopira dalje. "Otvori folder" i Windows prozor za izbor ne postoje na serveru.
+Prvo pravljenje slike na serveru traje ~10 min.
