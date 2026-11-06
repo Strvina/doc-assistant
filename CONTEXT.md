@@ -219,3 +219,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-06 | Panel „Automatski uvoz iz foldera“ (izbor foldera, istorija, neuspeli; premeštanje umesto brisanja); ADR-037 | #34 |
 | 2026-11-06 | Panel prikazuje punu putanju foldera (ne relativnu `data/inbox`) | #35 |
 | 2026-11-06 | Windows prozor za izbor foldera dolazi ispred browsera (potvrdio korisnik), jedan prozor odjednom; ispravka „false“ u panelu; ADR-038 | #37 |
+| 2026-11-06 | `data/inbox.json` (lokalni izbor foldera) izbačen iz repoa i dodat u `.gitignore` | #38 |
