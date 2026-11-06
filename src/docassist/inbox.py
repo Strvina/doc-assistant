@@ -126,11 +126,14 @@ class InboxConfig:
 
     @classmethod
     def load(cls, path: Path, default_folder: Path) -> InboxConfig:
+        """The saved choice, else `default_folder`; the folder as a full path, because people
+        see it (a relative "data/inbox" says nothing about where it is)."""
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            return cls(default_folder)
-        return cls(Path(data.get("folder") or default_folder), bool(data.get("enabled", True)))
+            data = {}
+        folder = Path(data.get("folder") or default_folder).absolute()
+        return cls(folder, bool(data.get("enabled", True)))
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
