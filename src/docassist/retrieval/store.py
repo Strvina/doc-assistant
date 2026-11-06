@@ -10,7 +10,7 @@ from typing import Any
 
 import chromadb
 
-from docassist.ingest.chunker import CHUNKING
+from docassist.ingest.chunker import CHUNKING, starts_with_list_item
 from docassist.models import Chunk
 from docassist.retrieval.embedder import Embedder
 from docassist.retrieval.keywords import KeywordIndex
@@ -19,6 +19,11 @@ DEFAULT_COLLECTION = "chunks"
 _ADD_BATCH = 1000
 # Hybrid search adds this many top keyword (BM25) hits that embedding search did not return.
 KEYWORD_EXTRA = 1
+# Chunks next to a hit on the same page go to the model with it, so a list or a paragraph cut
+# into several chunks arrives whole (ADR-030): this many before and after the hit, then more
+# following chunks while they continue a list ("4) …", "- …"), up to `LIST_FOLLOW`.
+NEIGHBORS = 1
+LIST_FOLLOW = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +31,7 @@ class SearchResult:
     chunk: Chunk
     score: float  # cosine similarity, higher is better (1.0 = identical direction)
     keyword_rank: int | None = None  # 1-based rank in the keyword (BM25) results, if any
+    neighbor: bool = False  # added next to a hit (`with_neighbors`); `score` is the hit's
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,6 +160,51 @@ class VectorStore:
             ]
         return hits
 
+    def with_neighbors(
+        self, results: Sequence[SearchResult], window: int = NEIGHBORS
+    ) -> list[SearchResult]:
+        """`results` plus the chunks next to each hit on the same page (see `NEIGHBORS`).
+
+        Hits keep their order; added chunks follow them, marked `neighbor`, with the score of
+        the hit they belong to. Each chunk appears once.
+        """
+        if window <= 0 or not results:
+            return list(results)
+        positions = {r.chunk.chunk_id: _position(r.chunk.chunk_id) for r in results}
+        wanted = {
+            f"{prefix}::{i}"
+            for prefix, index in filter(None, positions.values())
+            for i in range(max(0, index - window), index + window + LIST_FOLLOW + 1)
+        }
+        found = self._collection.get(ids=sorted(wanted), include=["documents", "metadatas"])
+        nearby = {
+            chunk_id: _chunk(chunk_id, text, meta)
+            for chunk_id, text, meta in zip(
+                found["ids"], found["documents"], found["metadatas"], strict=True
+            )
+        }
+
+        seen = set(positions)
+        added: list[SearchResult] = []
+        for hit in results:
+            position = positions[hit.chunk.chunk_id]
+            if position is None:
+                continue
+            prefix, index = position
+            ids = [f"{prefix}::{i}" for i in range(max(0, index - window), index + window + 1)]
+            last = index + window
+            while last - index - window < LIST_FOLLOW:
+                following = nearby.get(f"{prefix}::{last + 1}")
+                if following is None or not starts_with_list_item(following.text):
+                    break
+                last += 1
+                ids.append(following.chunk_id)
+            for chunk_id in ids:
+                if chunk_id in nearby and chunk_id not in seen:
+                    seen.add(chunk_id)
+                    added.append(SearchResult(nearby[chunk_id], hit.score, neighbor=True))
+        return [*results, *added]
+
     def _vector_search(self, query_embedding: list[float], n: int) -> list[SearchResult]:
         result = self._collection.query(
             query_embeddings=[query_embedding],
@@ -243,6 +294,12 @@ def _chunk(chunk_id: str, text: str, meta: dict[str, Any]) -> Chunk:
         page=int(meta["page"]),
         text=text,
     )
+
+
+def _position(chunk_id: str) -> tuple[str, int] | None:
+    """("x.pdf::p3", 2) for "x.pdf::p3::2"; None for an id in another form."""
+    prefix, _, index = chunk_id.rpartition("::")
+    return (prefix, int(index)) if prefix and index.isdigit() else None
 
 
 def _cosine(a: Sequence[float], b: Sequence[float]) -> float:

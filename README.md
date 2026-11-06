@@ -17,7 +17,7 @@ When the answer is not in the documents, it says so instead of guessing.
 
 | | |
 |---|---|
-| **Cross-language search** | A Serbian question finds the answer in a German installation manual. Hybrid search: a local multilingual embedding model plus BM25 keywords for exact words and codes; chunks follow document sections, so a table stays with its heading — measured: every key fact reaches the model for **27/27** evaluation questions. |
+| **Cross-language search** | A Serbian question finds the answer in a German installation manual. Hybrid search: a local multilingual embedding model plus BM25 keywords for exact words and codes; chunks follow document sections, so a table or list stays with its heading, and each hit goes to the model with the chunks around it, so a long list arrives whole — measured: every key fact reaches the model for all evaluation questions. |
 | **Verifiable citations** | Every claim cites `[document, page]`. Citations are checked against the passages the model actually received; a made-up source is flagged in the UI. |
 | **Highlighted originals** | Sources open in a built-in viewer: PDFs on the right page with the cited blocks highlighted, Word, Excel (one page per worksheet), PowerPoint (one page per slide, with notes) and text documents rendered as pages with the passage or table row marked. Every document can be viewed whole or downloaded. |
 | **Agent with tools** | Native Claude tool use, no framework: search, read a whole document, escalate an unanswered question to a person (n8n → e-mail), draft a leave request. |

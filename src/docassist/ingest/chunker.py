@@ -15,8 +15,9 @@ from collections.abc import Iterable
 from docassist.models import Chunk, Page
 
 # Version of text extraction + chunking, stored with the index: chunks made by another
-# version need `index --rebuild` (ADR-023; "ocr1" = text in images is read, ADR-024).
-CHUNKING = "sections-v2-ocr1"
+# version need `index --rebuild` (ADR-023; "ocr1" = text in images is read, ADR-024;
+# v3 + "ocr2" = lead-in lines are headings, Latin scans re-read without Cyrillic, ADR-030).
+CHUNKING = "sections-v3-ocr2"
 # 500/100 measured best with the local embedding model, which reads ~128 tokens (ADR-019).
 DEFAULT_CHUNK_SIZE = 500
 DEFAULT_OVERLAP = 100
@@ -92,17 +93,32 @@ def _split_long_section(heading: str, section: str, chunk_size: int, overlap: in
     return [f"{heading}\n{part}" for part in parts]
 
 
-# A section heading: a numbered title ("6. Anzugsmomente …", "2.1 Scope") or a short question
-# (FAQ entries). Numbered lines that end like a sentence are list items, not headings.
+# A section heading: a numbered title ("6. Anzugsmomente …", "2.1 Scope"), a short question
+# (FAQ entries) or a short line that introduces a list ("Kategorije zaraznih bolesti:"), so
+# every part of a long list keeps the words that say what the list is. Numbered lines that
+# end like a sentence are list items, not headings.
 _NUMBERED_HEADING = re.compile(r"^\d{1,2}(\.\d{1,2})*\.?\s+\S.{0,78}$")
 _QUESTION_HEADING = re.compile(r"^\S.{3,148}\?$")
+_LEAD_IN_HEADING = re.compile(r"^[^\W\d_].{3,78}:$")
+_LIST_ITEM = re.compile(r"^(\d{1,2}[.)]|[a-zA-Z][.)]\s|[-•*–—▪●○])")
 
 
 def _is_heading(line: str) -> bool:
     line = line.strip()
     if _NUMBERED_HEADING.match(line):
         return not line.endswith((".", ",", ";", ":"))
+    if _LEAD_IN_HEADING.match(line):
+        return not _LIST_ITEM.match(line) and len(line.split()) <= 10
     return bool(_QUESTION_HEADING.match(line))
+
+
+def starts_with_list_item(text: str) -> bool:
+    """True when a chunk starts with a list item ("4) Zoonoze …", "- …"), after the section
+    heading it may repeat: it continues a list from the chunk before it."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if lines and _is_heading(lines[0]):
+        lines = lines[1:]
+    return bool(lines) and bool(_LIST_ITEM.match(lines[0]))
 
 
 def _sections(text: str) -> list[tuple[str, str]]:

@@ -11,6 +11,7 @@ from docassist.retrieval import (
     FakeEmbedder,
     LocalEmbedder,
     OpenAIEmbedder,
+    SearchResult,
     VectorStore,
     retrieve,
 )
@@ -305,3 +306,59 @@ def test_keyword_index_sees_new_and_deleted_documents(tmp_path):
     results = store.search("kantina", k=1)
 
     assert {r.chunk.source for r in results} == {"menu.txt"}
+
+
+# --- neighbouring chunks (ADR-030) -------------------------------------------------------
+
+
+def list_document(store):
+    texts = [
+        "Uvodni pasus o zakonu.",
+        "Kategorije :\n1) Imunizacija: tetanus.",
+        "Kategorije :\n2) Hrana i voda: salmoneloza.",
+        "Kategorije :\n4) Zoonoze: besnilo.",
+        "Kategorije :\n6) Hepatitisi: hepatitis A.",
+        "Kategorije :\n8) Ostale bolesti.",
+        "Kategorije :\n9) Jedna previše.",
+    ]
+    chunks = [chunk("z.pdf", 2, i, text) for i, text in enumerate(texts)]
+    chunks += [chunk("z.pdf", 1, 0, "Strana jedan."), chunk("z.pdf", 3, 0, "Strana tri.")]
+    store.add_document(chunks)
+    return {c.chunk_id: c for c in chunks}
+
+
+def test_neighbors_add_the_chunks_around_a_hit_and_follow_a_list(store):
+    chunks = list_document(store)
+    hit = SearchResult(chunks["z.pdf::p2::1"], 0.9)
+
+    results = store.with_neighbors([hit])
+
+    assert results[0] == hit
+    assert [r.chunk.chunk_id for r in results[1:]] == [
+        "z.pdf::p2::0",  # before
+        "z.pdf::p2::2",  # after
+        "z.pdf::p2::3",  # the list goes on: up to LIST_FOLLOW more
+        "z.pdf::p2::4",
+        "z.pdf::p2::5",
+    ]
+    assert all(r.neighbor and r.score == 0.9 for r in results[1:])
+
+
+def test_neighbors_stay_on_the_page_and_appear_once(store):
+    chunks = list_document(store)
+    hits = [SearchResult(chunks["z.pdf::p2::0"], 0.9), SearchResult(chunks["z.pdf::p2::2"], 0.8)]
+
+    results = store.with_neighbors(hits, window=1)
+
+    ids = [r.chunk.chunk_id for r in results]
+    assert len(ids) == len(set(ids))
+    assert {r.chunk.page for r in results} == {2}
+    assert ids[:2] == ["z.pdf::p2::0", "z.pdf::p2::2"]  # hits first, in their order
+
+
+def test_no_neighbors_when_turned_off(store):
+    chunks = list_document(store)
+    hits = [SearchResult(chunks["z.pdf::p2::1"], 0.9)]
+
+    assert store.with_neighbors(hits, window=0) == hits
+    assert store.with_neighbors([]) == []

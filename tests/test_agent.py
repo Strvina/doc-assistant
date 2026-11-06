@@ -58,7 +58,8 @@ def test_search_documents_returns_context_and_records_results(ctx):
 
     assert not is_error
     assert '<document index="1" source="faq.txt" page="1">' in output
-    assert len(ctx.retrieved) in (3, 4)  # top_k by meaning + at most one keyword hit
+    hits = [r for r in ctx.retrieved if not r.neighbor]
+    assert len(hits) in (3, 4)  # top_k by meaning + at most one keyword hit
 
 
 def test_list_and_summarize_document(ctx):

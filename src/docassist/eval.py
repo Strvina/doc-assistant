@@ -149,7 +149,8 @@ def evaluate(
         if progress:
             print(f"[{number}/{len(questions)}] {question.id}", file=sys.stderr)
         if llm is None:
-            hits = retrieve(store, question.question, k=settings.top_k)
+            # What the model gets: the top-k hits and the chunks around them (ADR-030).
+            hits = store.with_neighbors(retrieve(store, question.question, k=settings.top_k))
             pages = {(r.chunk.source, r.chunk.page) for r in hits}
             results.append(
                 QuestionResult(

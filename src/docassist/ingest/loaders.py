@@ -62,6 +62,28 @@ pymupdf.TOOLS.mupdf_display_errors(False)
 _MULTI_BLANK_LINES = re.compile(r"\n{3,}")
 _BULLETS = frozenset("•◦▪▫●○■□‣⁃")
 
+# MuPDF joins words cut at a line end in a PDF's own text (TEXT_DEHYPHENATE); OCR text keeps
+# the hyphen ("bole-" + "sti"), so search does not find the word (ADR-030).
+_CUT_WORD = re.compile(r"([^\W\d_]+)-$")
+_CONJUNCTIONS = frozenset({"i", "ili", "a", "pa", "und", "oder", "bzw", "and", "or"})
+
+
+def joins_cut_word(paragraph: str, line: str) -> bool:
+    """True when `paragraph` ends with a word cut by a line wrap that `line` finishes.
+
+    The hyphen is kept when it likely belongs to the text: when the next line starts with a
+    capital letter or a digit, in a compound whose first part is a word ending in "o"
+    ("sanitarno-higijenske", "polio-vakcinom") and before a conjunction ("Bedien- und
+    Wartungsgang").
+    """
+    found = _CUT_WORD.search(paragraph)
+    if found is None or not line[0].islower() or not found.group(1)[-1].islower():
+        return False
+    head = found.group(1)
+    if len(head) >= 5 and head.endswith("o"):
+        return False
+    return line.split()[0].strip(".,;:").lower() not in _CONJUNCTIONS
+
 
 def load_document(path: str | Path) -> list[Page]:
     """Load a supported document and return its non-blank pages."""
@@ -177,7 +199,7 @@ def _merge(blocks: list[tuple], found: list[tuple[pymupdf.Rect, str]]) -> list[t
 
 def _paragraph_blocks(blocks: list[tuple]) -> list[tuple[pymupdf.Rect, str]]:
     result = []
-    for x0, y0, x1, y1, text, _block_no, block_type in blocks:
+    for x0, y0, x1, y1, text, block_no, block_type in blocks:
         if block_type != 0:  # 1 = image block
             continue
         paragraph = ""
@@ -187,6 +209,8 @@ def _paragraph_blocks(blocks: list[tuple]) -> list[tuple[pymupdf.Rect, str]]:
                 continue
             if paragraph and line[0] in _BULLETS:  # each list item on its own line
                 paragraph += "\n"
+            elif paragraph and block_no == -1 and joins_cut_word(paragraph, line):  # OCR
+                paragraph = paragraph[:-1]
             elif paragraph and not paragraph.endswith("-"):
                 paragraph += " "
             paragraph += line

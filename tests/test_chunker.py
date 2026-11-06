@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from docassist.ingest import chunk_pages, document_id, ingest, split_text
-from docassist.ingest.chunker import split_sections
+from docassist.ingest.chunker import _is_heading, split_sections, starts_with_list_item
 from docassist.models import Page
 
 SAMPLE_DOCS = Path(__file__).resolve().parent.parent / "data" / "sample_docs"
@@ -204,3 +204,52 @@ def test_faq_questions_start_sections():
 def test_list_items_and_table_rows_are_not_headings(line):
     text = f"Uvod.\n{line}\nJoš teksta."
     assert split_sections(text, 500, 100) == split_text(text, 500, 100)
+
+
+# --- lists introduced by a lead-in line (ADR-030) ----------------------------------------
+
+CATEGORIES_PAGE = "Uvodni pasus o zakonu.\n\nKategorije zaraznih bolesti :\n\n" + "\n\n".join(
+    f"{i}) Grupa {i}: " + ", ".join(f"bolest {i}.{j}" for j in range(8)) + "." for i in range(1, 9)
+)
+
+
+def test_parts_of_a_long_list_repeat_its_lead_in_line():
+    chunks = split_sections(CATEGORIES_PAGE, 250, 50)
+
+    parts = [c for c in chunks if ") Grupa" in c]
+    assert len(parts) > 1
+    assert all(c.startswith("Kategorije zaraznih bolesti :\n") for c in parts)
+    assert chunks[0] == "Uvodni pasus o zakonu."
+
+
+@pytest.mark.parametrize(
+    "line", ["Kategorije zaraznih bolesti :", "Sledeći slučajevi se prijavljuju:", "Napomena:"]
+)
+def test_short_lead_in_lines_are_headings(line):
+    assert _is_heading(line)
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "a) Bolesti koje se prenose:",
+        "- Koža:",
+        "Ovo je duga rečenica koja se slučajno završava dvotačkom jer posle nje ide nabrajanje:",
+    ],
+)
+def test_list_items_and_long_lines_with_a_colon_are_not_headings(line):
+    assert not _is_heading(line)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Kategorije zaraznih bolesti :\n4) Zoonoze: bruceloza.", True),
+        ("- Epidemija zarazne bolesti.", True),
+        ("• Rukavice", True),
+        ("Kategorije zaraznih bolesti :\nUvezene bolesti su retke.", False),
+        ("Crevne zarazne bolesti su česte.", False),
+    ],
+)
+def test_starts_with_list_item(text, expected):
+    assert starts_with_list_item(text) is expected

@@ -13,6 +13,10 @@ slowed down, and without Tesseract installed pages are read without OCR.
 
 Tesseract is good at printed text (scans, screenshots); on photos of products or logos it
 also produces noise, which `clean_ocr_text` filters out line by line.
+
+With Serbian Cyrillic among the languages, Tesseract reads some words of a Latin page as
+Cyrillic look-alikes ("је", "од", "5ргесамапје" for "Sprečavanje"); search cannot find those
+words. A mostly Latin page with such words is read again without Cyrillic (ADR-030).
 """
 
 from __future__ import annotations
@@ -41,6 +45,10 @@ MIN_IMAGE_SHARE = 0.10
 # An OCR line is a duplicate when this share of it lies inside the page's own text blocks.
 OVERLAP_SHARE = 0.5
 TIMEOUT_S = 120
+# Tesseract languages written in Cyrillic (left out when a Latin page is read again).
+CYRILLIC_LANGUAGES = frozenset({"srp", "rus", "ukr", "bel", "bul", "mkd"})
+# A page counts as Latin with stray Cyrillic when Cyrillic letters are at most this share.
+MAX_STRAY_CYRILLIC = 0.2
 # Pages read at the same time (one Tesseract process each); leave a core for the web server.
 WORKERS = max(1, (os.cpu_count() or 2) - 1)
 
@@ -140,10 +148,21 @@ def prepare(
 
 def run(job: OcrJob) -> list[tuple[pymupdf.Rect, str]]:
     """Paragraphs Tesseract reads in the job's page, with their position on the page; lines
-    over the page's own text are left out. Empty if Tesseract fails."""
+    over the page's own text are left out. Empty if Tesseract fails.
+
+    A mostly Latin page that came back with some Cyrillic words is read again without the
+    Cyrillic languages (see the module docstring)."""
+    paragraphs = _read(job, job.languages)
+    latin = latin_languages(job.languages)
+    if latin and has_stray_cyrillic("\n".join(text for _, text in paragraphs)):
+        paragraphs = _read(job, latin) or paragraphs
+    return paragraphs
+
+
+def _read(job: OcrJob, languages: str) -> list[tuple[pymupdf.Rect, str]]:
     try:
         result = _run(
-            [job.command, "stdin", "stdout", "-l", job.languages, "--psm", "3", "tsv"], job.png
+            [job.command, "stdin", "stdout", "-l", languages, "--psm", "3", "tsv"], job.png
         )
     except (OSError, subprocess.SubprocessError):
         return []
@@ -151,6 +170,25 @@ def run(job: OcrJob) -> list[tuple[pymupdf.Rect, str]]:
         return []
     tsv = result.stdout.decode("utf-8", "replace")
     return _paragraphs(tsv, job.scale, job.page_rect, list(job.text_rects))
+
+
+def latin_languages(languages: str) -> str | None:
+    """`languages` without the Cyrillic ones ("srp_latn+srp+eng" -> "srp_latn+eng"), or None
+    when nothing would change or nothing would be left."""
+    parts = languages.split("+")
+    latin = [lang for lang in parts if lang not in CYRILLIC_LANGUAGES]
+    return "+".join(latin) if latin and len(latin) < len(parts) else None
+
+
+# The Cyrillic Unicode block, U+0400 to U+04FF.
+_CYRILLIC = re.compile(r"[Ѐ-ӿ]")
+
+
+def has_stray_cyrillic(text: str) -> bool:
+    """True for mostly Latin text with some Cyrillic letters in it (not for Cyrillic text)."""
+    cyrillic = len(_CYRILLIC.findall(text))
+    letters = len(_LETTERS.findall(text))
+    return 0 < cyrillic <= letters * MAX_STRAY_CYRILLIC
 
 
 def run_jobs(

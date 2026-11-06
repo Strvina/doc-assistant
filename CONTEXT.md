@@ -36,6 +36,11 @@ GitHub Actions · Docker / Hugging Face Spaces
 - **Pretraga (ADR-023, grana `feat/hybrid-search`):** lokalni `paraphrase-multilingual-MiniLM-L12-v2` +
   1 dodatni BM25 pogodak po ključnim rečima; podela po odeljcima (naslov ostaje uz tabelu). Sve ključne
   činjenice stižu do modela za 27/27 pitanja; odgovori sa Groq-om **100 %** (pre: 93 %).
+- **Ceo spisak do modela (ADR-030):** uz svaki od 5 pogodaka idu i susedni delovi sa iste strane (+ dalje
+  dok traje spisak), delovi iste strane idu kao jedan odlomak; kratka linija sa ":" je naslov odeljka;
+  OCR latinične strane bez lažne ćirilice (ponovno čitanje bez `srp`) i bez reči presečenih crticom;
+  pravilo `LIST_RULE` u oba prompta. "Kategorije zaraznih bolesti" (sken 96 str.) sada daje svih 8
+  kategorija (pre: 1 + pogrešna). Eval 36 pitanja (2 nova sa spiskom): RAG **100 %**, ~1.900 tokena/pitanje.
 - **OCR (ADR-024, grana `feat/ocr`):** skenovi, slike u PDF-u i upload slika (PNG/JPG/TIFF/BMP) se čitaju
   Tesseract-om lokalno (srp latinica+ćirilica, deu, eng); pregled označava citat i na skenu. Eval sa
   skeniranim demo PDF-ovima: 100 %. Fotografije proizvoda (Lavazza) daju delimičan tekst.
@@ -98,9 +103,12 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
      model ~20/dan, Flash-Lite preuzima kad se potroši).
    - Sve 5 (+ ispravke) urađeno. Sledeći predlozi: Claude eval kad bude kredita; označavanje citata na
      stranama koje je pročitao model (traži položaj teksta).
-2. Eval uvek na čistom indeksu (samo demo dokumenti): `INDEX_DIR`/`DOCUMENTS_DIR`/`LOG_DB` u privremeni folder.
-3. Treniranje modela: korisnik je odložio (opcija A = dotreniranje embeddings modela, kad se vrati na to).
-4. Claude eval (6.3) kad bude moguće platiti kredit.
+2. **Posle ADR-030 indeks mora ponovo da se napravi** (`CHUNKING = "sections-v3-ocr2"`): zaustavi
+   server, `uv run python -m docassist.cli index data/documents --rebuild` (~4 min zbog OCR-a skena),
+   pa ponovo pokreni server. Stari sačuvani razgovori mogu da označe pogrešan pasus (novi ID-jevi delova).
+3. Eval uvek na čistom indeksu (samo demo dokumenti): `INDEX_DIR`/`DOCUMENTS_DIR`/`LOG_DB` u privremeni folder.
+4. Treniranje modela: korisnik je odložio (opcija A = dotreniranje embeddings modela, kad se vrati na to).
+5. Claude eval (6.3) kad bude moguće platiti kredit.
 
 ## Napomene za sledeću sesiju
 
@@ -130,6 +138,8 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 - Tesseract se zove direktno (`ingest/ocr.py`, TSV); PyMuPDF-ov OCR je preskakao tabele. Windows: traži se
   u `C:/Program Files/Tesseract-OCR`. OCR strane u pregledu se radi ponovo (~1,5 s).
 - Indeks pamti embedder i verziju podele (`CHUNKING` u `ingest/chunker.py`); promena → `--rebuild`.
+- Susedni delovi: `VectorStore.with_neighbors` (`NEIGHBORS`, `LIST_FOLLOW` u `retrieval/store.py`); prompt dobija
+  `rag.context_passages` (jedan odlomak po strani); `Answer.retrieved` sadrži i susede (`neighbor=True`).
 - Groq: 8.000 tokena/min po modelu → 413 za velike zahteve (agent čita ceo dokument); lanac prelazi dalje.
 - gpt-oss ponekad citira sa `【...】`; `chat_completions._clean` to pretvara u `[...]`.
 - Statika (`app.css`/`app.js`) se u `index.html` servira sa `?v=<hash>` — nema zastarelog CSS-a posle izmene.
@@ -171,3 +181,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-05 | Provera izvoza u browseru, eval sa novim pravilom za tabele (RAG 100 %, agent 90 % — limiti i citat sa `;`), restart servera | #24 |
 | 2026-11-05 | Excel i PowerPoint dokumenti, citati sa više izvora u zagradi; eval 34 pitanja, RAG 100 %; ADR-028 | #25 |
 | 2026-11-05 | AI model (Gemini) čita slike u dokumentu na zahtev; tekst se čuva pored originala; ADR-029 | #26 |
+| 2026-11-06 | Ceo spisak do modela: susedni delovi, odlomak po strani, uvodna linija kao naslov, OCR bez lažne ćirilice i presečenih reči, pravilo za spiskove; eval 36 pitanja, RAG 100 %; ADR-030 | #27 |

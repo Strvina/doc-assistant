@@ -1,11 +1,13 @@
-"""OCR (ADR-024). Unit tests run everywhere; the end-to-end ones need Tesseract installed
+"""OCR (ADR-024, ADR-030). Unit tests run everywhere; the end-to-end ones need Tesseract installed
 (CI installs it) and are skipped otherwise."""
+
+from types import SimpleNamespace
 
 import pymupdf
 import pytest
 
 from docassist.ingest import load_document, ocr
-from docassist.ingest.loaders import pdf_page_blocks
+from docassist.ingest.loaders import _paragraph_blocks, joins_cut_word, pdf_page_blocks
 
 HAS_TESSERACT = ocr.usable_languages("deu+eng") == "deu+eng"
 needs_tesseract = pytest.mark.skipif(not HAS_TESSERACT, reason="Tesseract is not installed")
@@ -206,3 +208,99 @@ def test_multi_page_scan_reports_progress_while_reading(tmp_path, monkeypatch):
     assert all("M8 20 Nm" in p.text for p in pages)
     assert progress[-1] == {"three.pdf": (3, 3)}
     assert "three.pdf" not in loaders.PROGRESS  # cleared when done
+
+
+# --- Latin pages read again without Cyrillic (ADR-030) -------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("languages", "expected"),
+    [
+        ("srp_latn+srp+deu+eng", "srp_latn+deu+eng"),
+        ("srp_latn+eng", None),  # nothing to leave out
+        ("srp", None),  # nothing would be left
+    ],
+)
+def test_latin_languages(languages, expected):
+    assert ocr.latin_languages(languages) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Aktuelni zakon о zaštiti stanovništva од zaraznih bolesti је donet 2016.", True),
+        ("Aktuelni zakon o zaštiti stanovništva od zaraznih bolesti je donet 2016.", False),
+        ("Правилник о раду, члан 12: годишњи одмор траје 20 дана.", False),  # Cyrillic page
+        ("", False),
+    ],
+)
+def test_has_stray_cyrillic(text, expected):
+    assert ocr.has_stray_cyrillic(text) is expected
+
+
+def fake_tesseract(monkeypatch, read):
+    """`read(languages)` gives the words Tesseract "reads"; returns the languages asked for."""
+    asked = []
+
+    def run(args, _data):
+        languages = args[args.index("-l") + 1]
+        asked.append(languages)
+        words = [word(1, 1, 1, i, 100 + 50 * i, 100, w) for i, w in enumerate(read(languages))]
+        return SimpleNamespace(returncode=0, stdout="\n".join([HEADER, *words]).encode())
+
+    monkeypatch.setattr(ocr, "_run", run)
+    return asked
+
+
+def job(languages="srp_latn+srp+eng"):
+    return ocr.OcrJob(b"", 0.5, pymupdf.Rect(0, 0, 595, 842), (), "tesseract", languages)
+
+
+def test_a_latin_page_with_cyrillic_look_alikes_is_read_again_without_cyrillic(monkeypatch):
+    def read(languages):
+        return ["Zakon", "је", "donet"] if "srp+" in languages else ["Zakon", "je", "donet"]
+
+    asked = fake_tesseract(monkeypatch, read)
+
+    assert [text for _, text in ocr.run(job())] == ["Zakon je donet"]
+    assert asked == ["srp_latn+srp+eng", "srp_latn+eng"]
+
+
+@pytest.mark.parametrize("words", [["Zakon", "je", "donet"], ["Закон", "је", "донет"]])
+def test_latin_and_cyrillic_pages_are_read_once(monkeypatch, words):
+    asked = fake_tesseract(monkeypatch, lambda _: words)
+
+    assert [text for _, text in ocr.run(job())] == [" ".join(words)]
+    assert asked == ["srp_latn+srp+eng"]
+
+
+# --- words cut at a line end in OCR text (ADR-030) -----------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("paragraph", "line", "joined"),
+    [
+        ("antraks, botuli-", "zam, kampilobakterioza", True),
+        ("vektorske bole-", "sti", True),
+        ("Sicherheits-", "hinweise beachten", True),
+        ("mere sanitarno-", "higijenske zaštite", False),  # compound
+        ("vakcinacija polio-", "vakcinom", False),
+        ("mindestens 1000 mm Bedien-", "und Wartungsgang", False),  # shared ending
+        ("hemoragijska groz-", "Nica", False),  # next line starts with a capital
+        ("broj 12-", "15", False),
+        ("Q-", "groznica", False),
+    ],
+)
+def test_words_cut_at_a_line_end_are_joined(paragraph, line, joined):
+    assert joins_cut_word(paragraph, line) is joined
+
+
+def test_only_ocr_blocks_are_dehyphenated():
+    rect = (0, 0, 100, 20)
+    ocr_block = (*rect, "infekcije uzrokovane bole-\nsti", -1, 0)
+    pdf_block = (*rect, "Bedien-\nund", 3, 0)
+
+    assert [t for _, t in _paragraph_blocks([ocr_block, pdf_block])] == [
+        "infekcije uzrokovane bolesti",
+        "Bedien-und",
+    ]

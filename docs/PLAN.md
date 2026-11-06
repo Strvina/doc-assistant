@@ -79,6 +79,12 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 - [x] OCR za skenirane PDF-ove i tekst na slikama, upload slika (ADR-024)
 - [x] Opcioni AI model za fotografije i tabele u slikama — na zahtev, po dokumentu (Gemini, ADR-029)
 
+## Dodatno — kvalitet odgovora
+
+- [x] Ceo spisak do modela: susedni delovi uz pogodak, delovi iste strane spojeni, uvodna linija
+      sa ":" kao naslov, OCR bez lažne ćirilice i bez reči presečenih crticom, pravilo za spiskove
+      u promptu; 2 eval pitanja sa spiskom (ADR-030)
+
 ## Dodatno — formati
 
 - [x] Excel (`.xlsx`, list = strana) i PowerPoint (`.pptx`, slajd = strana, sa beleškama); citati za
