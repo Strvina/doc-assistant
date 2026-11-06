@@ -407,3 +407,23 @@ pretegnu "kantinu" i "M8".
 **Cena:** jedan mali poziv modelu više po pitanju sa nastavkom: ~0,6 s i ~400 tokena (Groq
 besplatno, ali troši minutni/dnevni limit; na Claude-u delić centa). Model može pogrešno da
 "razreši" pitanje, što se vidi u "tražio sam: …" ispod odgovora.
+
+### ADR-032 · Aplikacija sama osvežava zastareo indeks
+**Odluka:** kad web aplikacija otvori indeks napravljen drugim embedder-om ili drugom podelom
+(`CHUNKING`), ne javlja grešku dok neko ne pokrene `index --rebuild`, nego sama pravi indeks iz
+početka u pozadinskoj niti, iz originala u `DOCUMENTS_DIR` (`docassist/reindex.py`). Dok to traje,
+zahtevi koji traže indeks dobijaju 503 sa porukom "The index is being rebuilt… (document 3 of 7)",
+`GET /documents/progress` vraća stavku `kind: "reindex"` (pored OCR napretka), a UI pokazuje traku
+"Osvežavam indeks posle nadogradnje: dokument 3 / 7 (…)" i posle učitava dokumente. Ako neki
+indeksirani dokument nema sačuvan original, **ništa se ne briše**: 503 navodi koji dokumenti fale.
+Oznaka `rebuilding` u folderu indeksa (i od `cli index --rebuild`) znači da pravljenje nije
+završeno, pa se posle restarta servera (npr. `--reload`) pokreće ponovo umesto da ostane pola
+indeksa. Pregled dokumenta dobija i početak citiranog teksta (`q`, 60 znakova): ako sačuvani ID-jevi
+delova sada imenuju druge delove (citat iz razgovora pre osvežavanja), označavaju se delovi te strane
+koji sadrže taj tekst, ili ništa — nikad drugi pasus.
+**Zašto:** posle ADR-030 korisnik je morao da pronađe i zaustavi server (4 procesa zbog `--reload`),
+ručno napravi indeks i ponovo pokrene server; do tada aplikacija nije radila. Svaka buduća promena
+podele bi to ponovila. Stari razgovori su posle novog indeksa označavali pogrešan pasus.
+**Cena:** dok se indeks pravi (~4 min sa skenom od 96 strana) aplikacija ne odgovara na pitanja.
+Pravi se ceo indeks, i za dokumente kojima se ništa ne bi promenilo. Citat iz starog razgovora čiji
+se tekst promenio (npr. OCR) otvara stranu bez označavanja.
