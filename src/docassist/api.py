@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import secrets
+import threading
 import time
 from collections import defaultdict, deque
 from collections.abc import Callable, Iterator
@@ -25,7 +26,7 @@ from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from docassist import __version__, export
+from docassist import __version__, export, reindex
 from docassist.agent import run_agent
 from docassist.agent.tools import ToolError, new_escalation
 from docassist.config import Settings
@@ -47,7 +48,7 @@ from docassist.logs import QueryLog
 from docassist.pricing import cost_usd
 from docassist.rag import Answer, answer, answer_stream, merge_passages
 from docassist.retrieval import EmbedderMismatchError, VectorStore
-from docassist.viewer import pdf_with_highlights, render_html
+from docassist.viewer import is_cited, pdf_with_highlights, render_html
 
 WEB_DIR = Path(__file__).parent / "web"
 SAMPLE_DOCS = Path(__file__).resolve().parents[2] / "data" / "sample_docs"
@@ -181,16 +182,46 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 def get_library(request: Request, settings: SettingsDep) -> Library:
     state = request.app.state
     if state.library is None:
-        try:
-            store = state.store or build_store(settings)
-        except (MissingAPIKeyError, EmbedderMismatchError) as exc:
-            raise HTTPException(503, str(exc)) from exc
+        with state.rebuild_lock:
+            _open_library(state, settings)
+    return state.library
+
+
+def _open_library(state: Any, settings: Settings) -> None:
+    """Open the index, or start rebuilding it when it is stale (ADR-032). Raises 503 while
+    a rebuild runs."""
+    if state.library is not None:
+        return
+    rebuilding = state.rebuild
+    if rebuilding is not None and (not rebuilding.finished or rebuilding.error):
+        raise HTTPException(503, rebuilding.message)
+    try:
+        if state.store is None and reindex.is_unfinished(settings.index_dir):
+            raise EmbedderMismatchError("An earlier rebuild of the index did not finish.")
+        store = state.store or build_store(settings)
+    except MissingAPIKeyError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except EmbedderMismatchError as exc:
+        missing = reindex.missing_originals(settings)
+        if missing:  # rebuilding would lose these documents: leave the index alone
+            names = ", ".join(missing)
+            raise HTTPException(
+                503,
+                f"{exc} No stored original for: {names}. Upload them again or run "
+                "`index --rebuild` with their files.",
+            ) from exc
+
+        def done(library: Library) -> None:
+            state.library = library
+
+        state.rebuild = reindex.start(settings, done)
+        raise HTTPException(503, state.rebuild.message) from exc
+    if state.library is None:
         state.library = Library(store, settings.documents_dir)
         if not settings.allow_uploads and store.count() == 0:
             # Public demo: the document set is fixed, so index the demo set on first use.
             for path in sorted(SAMPLE_DOCS.glob("*.*")):
                 state.library.add_file(path)
-    return state.library
 
 
 LibraryDep = Annotated[Library, Depends(get_library)]
@@ -280,6 +311,8 @@ def create_app(
     app.state.cancelled = set()  # request ids of questions the user cancelled
     app.state.ip_hits = defaultdict(deque)  # client ip -> timestamps of recent questions
     app.state.vision_progress = {}  # source -> (pages read, pages with pictures)
+    app.state.rebuild = None  # reindex.Rebuild while a stale index is rebuilt (ADR-032)
+    app.state.rebuild_lock = threading.Lock()
     access = [Depends(client_kind)]
     uploads = [Depends(client_kind), Depends(require_uploads)]
 
@@ -402,11 +435,16 @@ def create_app(
     def upload_progress() -> list[dict[str, Any]]:
         """Documents being read right now: pages read so far (OCR or AI model), of how many."""
         running = [("ocr", PROGRESS), ("vision", app.state.vision_progress)]
-        return [
+        items = [
             {"source": source, "done": done, "total": total, "kind": kind}
             for kind, progress in running
             for source, (done, total) in list(progress.items())
         ]
+        rebuilding = app.state.rebuild
+        if rebuilding is not None and not rebuilding.finished:  # ADR-032
+            item = {"source": rebuilding.current, "done": rebuilding.done, "kind": "reindex"}
+            items.insert(0, {**item, "total": rebuilding.total})
+        return items
 
     @app.post("/documents/demo", dependencies=uploads)
     def load_demo_documents(library: LibraryDep) -> list[IndexResult]:
@@ -467,8 +505,14 @@ def create_app(
         library: LibraryDep,
         page: Annotated[int | None, Query(ge=1)] = None,
         chunk: Annotated[list[str] | None, Query()] = None,
+        q: Annotated[str | None, Query(max_length=200)] = None,
     ) -> Response:
-        """The original document for the viewer, cited passage highlighted on `page`."""
+        """The original document for the viewer, cited passage highlighted on `page`.
+
+        `q` is the start of the cited text as it was shown. Chunk ids of a citation saved
+        before the index was rebuilt can name other chunks now (ADR-032): then the chunks of
+        the page that contain `q` are highlighted, or nothing, never another passage.
+        """
         found = library.original(doc_id)
         if found is None:
             raise HTTPException(404, "Document or its original file not found")
@@ -476,8 +520,11 @@ def create_app(
         passage = None
         if chunk:
             wanted = set(chunk)
-            chunks = [c for c in library.store.document_chunks(doc.source) if c.chunk_id in wanted]
-            passage = merge_passages(chunks) or None
+            chunks = library.store.document_chunks(doc.source)
+            passage = merge_passages([c for c in chunks if c.chunk_id in wanted]) or None
+            if q and not (passage and is_cited(q, passage)):
+                on_page = [c for c in chunks if c.page == page and is_cited(q, c.text)]
+                passage = merge_passages(on_page) or None
         disposition = {"Content-Disposition": f"inline; filename*=UTF-8''{quote(doc.source)}"}
         if path.suffix.lower() in (".pdf", *IMAGE_EXTENSIONS):
             data = pdf_with_highlights(path, page, passage)

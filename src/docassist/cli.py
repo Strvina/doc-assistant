@@ -14,6 +14,7 @@ import sys
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 
+from docassist import reindex
 from docassist.agent import run_agent
 from docassist.config import Settings
 from docassist.factory import (
@@ -76,6 +77,8 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def cmd_index(args: argparse.Namespace, settings: Settings) -> int:
+    if args.rebuild:  # an interrupted rebuild is noticed and redone by the web app (ADR-032)
+        reindex.mark_started(settings.index_dir)
     library = build_library(settings, rebuild=args.rebuild)
     store = library.store
     failures = 0
@@ -88,6 +91,8 @@ def cmd_index(args: argparse.Namespace, settings: Settings) -> int:
             continue
         status = f"{added:3d} chunks" if added else "unchanged "
         print(f"  {status}  {path}")
+    if args.rebuild:
+        reindex.mark_finished(settings.index_dir)
     print(f"Index: {len(store.documents())} documents, {store.count()} chunks")
     return 1 if failures else 0
 

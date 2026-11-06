@@ -44,6 +44,10 @@ GitHub Actions · Docker / Hugging Face Spaces
 - **Pitanja sa nastavkom (ADR-031):** kad razgovor ima istoriju, model prvo prepiše pitanje u samostalan
   upit ("a u petu?" → "Koje bolesti spadaju u petu kategoriju zaraznih bolesti?"); UI pokazuje
   "tražio sam: …". Provereno uživo sa Groq-om (nastavak 2/2, nova tema 3/3).
+- **Samoosvežavanje indeksa (ADR-032):** zastareo ili nedovršen indeks web aplikacija pravi sama iz
+  `DOCUMENTS_DIR` u pozadini; UI traka "Osvežavam indeks… dokument 3 / 7"; bez originala za neki
+  dokument ne briše ništa. Pregled proverava stare citate po početku teksta (`q`). Provereno sa pravim
+  serverom i u browseru (Playwright).
 - **OCR (ADR-024, grana `feat/ocr`):** skenovi, slike u PDF-u i upload slika (PNG/JPG/TIFF/BMP) se čitaju
   Tesseract-om lokalno (srp latinica+ćirilica, deu, eng); pregled označava citat i na skenu. Eval sa
   skeniranim demo PDF-ovima: 100 %. Fotografije proizvoda (Lavazza) daju delimičan tekst.
@@ -106,9 +110,8 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
      model ~20/dan, Flash-Lite preuzima kad se potroši).
    - Sve 5 (+ ispravke) urađeno. Sledeći predlozi: Claude eval kad bude kredita; označavanje citata na
      stranama koje je pročitao model (traži položaj teksta).
-2. **Posle ADR-030 indeks mora ponovo da se napravi** (`CHUNKING = "sections-v3-ocr2"`): zaustavi
-   server, `uv run python -m docassist.cli index data/documents --rebuild` (~4 min zbog OCR-a skena),
-   pa ponovo pokreni server. Stari sačuvani razgovori mogu da označe pogrešan pasus (novi ID-jevi delova).
+2. Promena `CHUNKING`/embedder-a više ne traži ručni `--rebuild`: aplikacija sama pravi indeks iz
+   originala i pokazuje napredak (ADR-032). CLI i eval i dalje traže `--rebuild`.
 3. Eval uvek na čistom indeksu (samo demo dokumenti): `INDEX_DIR`/`DOCUMENTS_DIR`/`LOG_DB` u privremeni folder.
 4. Treniranje modela: korisnik je odložio (opcija A = dotreniranje embeddings modela, kad se vrati na to).
 5. Claude eval (6.3) kad bude moguće platiti kredit.
@@ -145,6 +148,8 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
   `rag.context_passages` (jedan odlomak po strani); `Answer.retrieved` sadrži i susede (`neighbor=True`).
 - Prepisivanje pitanja: `rag.search_query` (+ `REWRITE_PROMPT`); `FakeProvider` na taj prompt vraća pitanje
   nepromenjeno. Agent ga ne koristi.
+- Osvežavanje: `reindex.py` (nit, `Rebuild` status, oznaka `rebuilding` u `INDEX_DIR`); `api._open_library` pod
+  `rebuild_lock`. Test server za proveru: `INDEX_DIR`/`DOCUMENTS_DIR` u scratch + `--port 8765`.
 - Groq: 8.000 tokena/min po modelu → 413 za velike zahteve (agent čita ceo dokument); lanac prelazi dalje.
 - gpt-oss ponekad citira sa `【...】`; `chat_completions._clean` to pretvara u `[...]`.
 - Statika (`app.css`/`app.js`) se u `index.html` servira sa `?v=<hash>` — nema zastarelog CSS-a posle izmene.
@@ -188,3 +193,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-05 | AI model (Gemini) čita slike u dokumentu na zahtev; tekst se čuva pored originala; ADR-029 | #26 |
 | 2026-11-06 | Ceo spisak do modela: susedni delovi, odlomak po strani, uvodna linija kao naslov, OCR bez lažne ćirilice i presečenih reči, pravilo za spiskove; eval 36 pitanja, RAG 100 %; ADR-030 | #27 |
 | 2026-11-06 | Pitanja sa nastavkom: model prepiše pitanje pre pretrage (izmereno: 5/5 naspram 3/5 jeftine verzije); ADR-031 | #28 |
+| 2026-11-06 | Aplikacija sama osvežava zastareo indeks (napredak u UI-ju), stari citati se proveravaju po tekstu; ADR-032 | #29 |

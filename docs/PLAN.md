@@ -86,6 +86,8 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
       u promptu; 2 eval pitanja sa spiskom (ADR-030)
 - [x] Pitanja sa nastavkom ("a u petu?"): model prepiše pitanje u samostalan upit pre pretrage,
       UI pokazuje šta je traženo (ADR-031)
+- [x] Aplikacija sama osvežava zastareo indeks (traka sa napretkom u UI-ju), stari citati ne
+      označavaju pogrešan pasus (ADR-032)
 
 ## Dodatno — formati
 

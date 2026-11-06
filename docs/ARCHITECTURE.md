@@ -30,6 +30,7 @@ src/docassist/
     embedder.py       # Embedder: LocalEmbedder (fastembed), OpenAIEmbedder, FakeEmbedder
     store.py          # VectorStore nad Chroma: add/replace, search, documents, delete
   library.py          # Library = indeks + kopije originala; safe_name, guess_language
+  reindex.py          # zastareo indeks → pravljenje iz originala u pozadini (ADR-032)
   viewer.py           # PDF sa highlight anotacijama; DOCX/TXT/MD → HTML "papir" strane
   llm/
     base.py           # LLMProvider (complete, run_agent), LLMResult, AgentRun, ToolCall

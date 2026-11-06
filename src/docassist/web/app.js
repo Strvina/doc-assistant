@@ -90,6 +90,7 @@ async function api(path, options = {}) {
     } catch {}
     const error = new Error(detail);
     error.status = response.status;
+    if (response.status === 503 && detail.includes("being rebuilt")) watchRebuild();
     throw error;
   }
   const type = response.headers.get("content-type") || "";
@@ -148,6 +149,42 @@ function progressText(running) {
   return running
     .map((p) => `${p.kind === "vision" ? "AI model čita slike" : "Čitam skenirane strane (OCR)"}: ${p.source} — ${p.done} / ${p.total}`)
     .join(" · ");
+}
+
+// After an update the server rebuilds a stale index by itself (ADR-032): show how far it is,
+// then load the documents again.
+let rebuildWatch = null;
+
+function watchRebuild() {
+  if (rebuildWatch) return;
+  const status = el("div", { class: "toast info progress", role: "status" }, "Osvežavam indeks posle nadogradnje…");
+  $("#toasts").append(status);
+  rebuildWatch = setInterval(async () => {
+    let running;
+    try {
+      running = await api("/documents/progress");
+    } catch {
+      return; // the server may be restarting: try again
+    }
+    const rebuild = running.find((p) => p.kind === "reindex");
+    if (rebuild) {
+      const ocr = running.filter((p) => p.kind === "ocr");
+      const step = rebuild.total
+        ? `: dokument ${Math.min(rebuild.done + 1, rebuild.total)} / ${rebuild.total}${rebuild.source ? ` (${rebuild.source})` : ""}`
+        : "…";
+      status.textContent = `Osvežavam indeks posle nadogradnje${step}${ocr.length ? ` · ${progressText(ocr)}` : ""}`;
+      return;
+    }
+    clearInterval(rebuildWatch);
+    rebuildWatch = null;
+    status.remove();
+    try {
+      await loadDocuments();
+      toast("Indeks je osvežen — možete da postavljate pitanja.");
+    } catch (error) {
+      toast(`Indeks: ${error.message}`, "error");
+    }
+  }, 1500);
 }
 
 async function loadDocuments() {
@@ -286,10 +323,13 @@ async function loadDemo() {
 
 // --- viewer -----------------------------------------------------------------------------
 
-function openViewer({ docId, source, page, chunkIds = [] }) {
+function openViewer({ docId, source, page, chunkIds = [], quote = "" }) {
   const params = new URLSearchParams();
   if (page) params.set("page", page);
   for (const id of chunkIds) params.append("chunk", id);
+  // The start of the cited text: lets the server check old chunk ids after a rebuild (ADR-032).
+  const start = quote.replace(/\s+/g, " ").trim().slice(0, 60);
+  if (chunkIds.length && start) params.set("q", start);
   const base = `/documents/${docId}/view${params.size ? "?" + params : ""}`;
   const isPdf = ext(source) === "pdf";
   const src = isPdf && page ? `${base}#page=${page}&view=FitH` : base;
@@ -500,7 +540,7 @@ function renderAnswer(question, data, mode) {
       el("h4", {}, `Izvori · ${data.citations.length}`),
       el("div", { class: "source-cards" }, ...data.citations.map((c) =>
         el("button", { class: "source", type: "button",
-            onclick: () => openViewer({ docId: c.doc_id, source: c.source, page: c.page, chunkIds: c.chunk_ids }) },
+            onclick: () => openViewer({ docId: c.doc_id, source: c.source, page: c.page, chunkIds: c.chunk_ids, quote: c.text }) },
           el("span", { class: `file-badge ${ext(c.source)}` }, ext(c.source).toUpperCase()),
           el("div", {},
             el("div", { class: "source-title" }, prettyName(c.source), el("span", { class: "pg" }, `str. ${c.page}`)),
@@ -546,7 +586,7 @@ function renderAnswer(question, data, mode) {
     const chip = event.target.closest(".cite[data-doc]");
     if (!chip) return;
     const citation = data.citations.find((c) => `${c.source.toLowerCase()}|${c.page}` === chip.dataset.key);
-    if (citation) openViewer({ docId: citation.doc_id, source: citation.source, page: citation.page, chunkIds: citation.chunk_ids });
+    if (citation) openViewer({ docId: citation.doc_id, source: citation.source, page: citation.page, chunkIds: citation.chunk_ids, quote: citation.text });
   });
   return card;
 }
@@ -1057,10 +1097,19 @@ async function main() {
   try { setSideTab(localStorage.getItem("da-side-tab") === "convs" ? "convs" : "docs"); } catch { setSideTab("docs"); }
   try {
     await loadConfig();
-    await loadDocuments();
-    await loadConversations();
   } catch (error) {
     toast(`Server nije dostupan: ${error.message}`, "error");
+    return;
+  }
+  try {
+    await loadDocuments();
+  } catch (error) {
+    if (!rebuildWatch) toast(`Dokumenti: ${error.message}`, "error"); // else: progress is shown
+  }
+  try {
+    await loadConversations();
+  } catch (error) {
+    toast(`Razgovori: ${error.message}`, "error");
   }
 }
 
