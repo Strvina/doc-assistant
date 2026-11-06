@@ -223,6 +223,21 @@
   page: 3
   facts: ["8"]
 
+# Whole lists (ADR-030): every item must be in the answer, not only the first ones.
+- id: list-commissioning
+  lang: sr
+  question: Koje provere treba uraditi pre prvog uključivanja ormana PV-400?
+  source: montageanleitung_pv400.pdf
+  page: 3
+  facts: ["10 %|10%", "0,1|0.1", "500", "MΩ|megaom|MOhm"]
+
+- id: list-paid-leave
+  lang: sr
+  question: U kojim slučajevima imam pravo na plaćeno odsustvo i koliko dana?
+  source: pravilnik_o_radu.pdf
+  page: 2
+  facts: ["brak", "rođenj|rodjenj", "smrt", "selidb|seljenj", "krv"]
+
 - id: none-bonus
   lang: sr
   question: Koliki je bonus za najboljeg radnika meseca?

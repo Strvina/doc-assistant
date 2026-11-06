@@ -2,10 +2,12 @@ from pathlib import Path
 
 import pytest
 
+from docassist.agent.prompts import AGENT_SYSTEM_PROMPT
 from docassist.ingest import ingest
 from docassist.llm import NOT_FOUND_SR, SYSTEM_PROMPT, FakeProvider, LLMResult
+from docassist.llm.prompts import LIST_RULE
 from docassist.models import Chunk
-from docassist.rag import answer, extract_citations, merge_passages
+from docassist.rag import answer, context_passages, extract_citations, merge_passages
 from docassist.retrieval import FakeEmbedder, SearchResult, VectorStore
 
 SAMPLE_DOCS = Path(__file__).resolve().parent.parent / "data" / "sample_docs"
@@ -96,7 +98,9 @@ def test_answer_with_fake_provider(store):
     assert result.citations[0].page == 2
     assert "radnih dana" in result.text
     assert result.provider == "fake"
-    assert len(result.retrieved) == 3
+    hits = [r for r in result.retrieved if not r.neighbor]
+    assert len(hits) == 3
+    assert all(r.chunk.page in {h.chunk.page for h in hits} for r in result.retrieved)
     assert result.latency_s >= 0
     assert result.input_tokens > 0
 
@@ -104,7 +108,8 @@ def test_answer_with_fake_provider(store):
     assert system == SYSTEM_PROMPT
     assert messages[-1]["role"] == "user"
     assert messages[-1]["content"].endswith("Question: Koliko dana traje godišnji odmor?")
-    assert messages[-1]["content"].count("<document ") == 3
+    pages = {(r.chunk.source, r.chunk.page) for r in result.retrieved}
+    assert messages[-1]["content"].count("<document ") == len(pages)  # one per page
 
 
 def test_answer_not_found_has_no_citations(store):
@@ -178,3 +183,43 @@ def test_merge_passages_removes_overlap():
         "Prvi deo teksta. Ovo je zajednički deo koji se ponavlja. Drugi deo."
     )
     assert merge_passages([first, far]).endswith("[…]\n\nDaleki pasus.")
+
+
+def test_merge_passages_joins_neighbours_and_drops_the_repeated_heading():
+    def c(index, text):
+        return Chunk(f"x.pdf::p2::{index}", "d", "x.pdf", 2, text)
+
+    merged = merge_passages(
+        [c(2, "Kategorije :\n2) Hrana."), c(0, "Uvod."), c(1, "Kategorije :\n1) Imunizacija.")]
+    )
+
+    assert merged == "Uvod.\n\nKategorije :\n1) Imunizacija.\n\n2) Hrana."
+
+
+def test_context_has_one_passage_per_page_in_the_order_of_the_best_hit():
+    def r(page, index, text, score=0.5):
+        return SearchResult(Chunk(f"x.pdf::p{page}::{index}", "d", "x.pdf", page, text), score)
+
+    results = [r(5, 0, "Pet."), r(2, 1, "Dva b."), r(5, 1, "Pet b."), r(2, 0, "Dva a.")]
+
+    passages = context_passages(results)
+
+    assert [(p.page, p.text) for p in passages] == [(5, "Pet.\n\nPet b."), (2, "Dva a.\n\nDva b.")]
+
+
+def test_the_model_gets_the_whole_list_around_a_hit(tmp_path):
+    store = VectorStore(tmp_path / "index", FakeEmbedder())
+    texts = ["Kategorije bolesti :\n1) Imunizacija.", "2) Hrana.", "3) Vazduh.", "4) Zoonoze."]
+    store.add_document([Chunk(f"z.pdf::p2::{i}", "d", "z.pdf", 2, t) for i, t in enumerate(texts)])
+    llm = FakeProvider()
+
+    answer("Kategorije bolesti", store, llm, k=1)
+
+    [(_, messages)] = llm.calls
+    assert messages[-1]["content"].count("<document ") == 1
+    assert all(t.splitlines()[-1] in messages[-1]["content"] for t in texts)
+
+
+def test_prompts_ask_for_whole_lists():
+    assert LIST_RULE in SYSTEM_PROMPT
+    assert LIST_RULE in AGENT_SYSTEM_PROMPT

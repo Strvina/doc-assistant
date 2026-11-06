@@ -1,7 +1,7 @@
 # Evaluation results
 
-Question set: [`eval/questions.yaml`](../eval/questions.yaml) — 34 questions (Serbian, German,
-English): 31 with a known source page and key facts, 3 the documents cannot answer. Runs before
+Question set: [`eval/questions.yaml`](../eval/questions.yaml) — 36 questions (Serbian, German,
+English): 33 with a known source page and key facts, 3 the documents cannot answer. Runs before
 2026-11-05 used the first 30 (no Excel/PowerPoint documents yet).
 Runner: `uv run python -m docassist.eval` (see the README).
 
@@ -93,6 +93,21 @@ service" does not say which product) and RAG scored 94 %. The agent run that day
 questions, all 15 correctly (the new Excel/PowerPoint ones among them); the other 19 hit the
 free-tier limits of Groq and the Gemini fallback after several runs that day, so it is not a
 measurement. Several sources in one bracket are now read as citations.
+
+**Whole lists** (ADR-030: chunks around each hit, one passage per page, lead-in lines as headings,
+list rule in the prompt; 36 questions, 2 new ones that need every item of a list), clean index,
+2026-11-06:
+
+| Run | Correct overall | Page cited | Fact recall | "Not found" correct | Wrong "not found" | Made-up citations | Latency avg / p95 | Cost |
+|---|---|---|---|---|---|---|---|---|
+| groq openai/gpt-oss-120b, RAG | **100 %** | 100 % | 100 % | 100 % | 0 % | 0 | 6.6 s / 16.4 s | free |
+
+Input tokens: ~1,880 per question (before: ~1,170) — the price of sending the neighbouring chunks.
+Outside the eval set, on a 96-page scanned textbook uploaded by the user: "Kategorije zaraznih
+bolesti" (8 numbered categories on one page, cut into 4 chunks) got a wrong list before (category 1
+plus "diseases with absolute disposition" from another chapter); now RAG and the agent list all 8
+with their diseases. Re-reading Latin pages without Cyrillic removed all 1,171 Cyrillic look-alike
+letters from that scan.
 
 **Before** (fixed chunks, embeddings only; the index also held one unrelated uploaded document):
 

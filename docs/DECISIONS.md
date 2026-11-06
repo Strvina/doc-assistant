@@ -346,3 +346,37 @@ ne označava (označavanje traži položaj teksta na strani, a model ga ne daje)
 besplatni nivo mogu dozvoliti korišćenje sadržaja — za prave dokumente plaćeni nivo ili Claude
 (kad bude kredita, isti `read_image` interfejs). Sken od 96 strana = 96 zahteva: za skenove je
 Tesseract i dalje pravi izbor.
+
+### ADR-030 · Ceo spisak do modela: susedni delovi, uvodna linija kao naslov, OCR bez lažne ćirilice
+**Odluka:** (1) Uz svaki od `TOP_K` pogodaka modelu idu i delovi odmah pre i posle njega sa iste strane
+(`NEIGHBORS = 1`), a zatim i sledeći delovi dok god počinju stavkom spiska (`4) …`, `- …`, `•`), još
+najviše `LIST_FOLLOW = 3` (`VectorStore.with_neighbors`). Delovi iste strane se šalju kao **jedan
+odlomak** (`context_passages`), bez teksta koji se ponavlja zbog preklapanja i bez ponovljenog
+naslova; `[…]` označava izostavljen tekst. Isto važi za alat agenta `search_documents`. (2) Kratka
+linija koja uvodi spisak (počinje slovom, do 80 znakova i 10 reči, završava se sa `:`, npr.
+"Kategorije zaraznih bolesti :") je naslov odeljka, pa svaki deo dugog spiska počinje njome.
+(3) Kada OCR na pretežno latiničnoj strani (ćirilica ≤ 20 % slova) vrati i ćirilična slova, strana se
+čita ponovo bez ćiriličnih jezika (`srp_latn+deu+eng`). U OCR tekstu se reč presečena crticom na
+kraju reda spaja ("bole-" + "sti" → "bolesti"; MuPDF to već radi za tekst PDF-a), osim kad sledeći
+red počinje velikim slovom ili brojem, pre veznika ("Bedien- und") i kad je prvi deo reč od 5+ slova
+na "-o" (složenice: "sanitarno-higijenske"). (4) Pravilo za model `LIST_RULE` (u oba
+prompta): sve stavke spiska, redom i sa brojevima, bez stavki iz nepovezanih odlomaka; ako spisak
+deluje nepotpun, reći šta nedostaje; više odlomaka o istoj temi spojiti u jedan povezan odgovor.
+`CHUNKING = "sections-v3-ocr2"` → `index --rebuild`.
+**Zašto:** pitanje "Kategorije zaraznih bolesti" (sken, 8 numerisanih kategorija na str. 2) je dobilo
+pogrešan spisak. Spisak je bio presečen u 4 dela; samo deo sa kategorijom 1 je bio među 5 pogodaka,
+deo sa kategorijama 2–3 nije bio ni u prvih 10 (u njemu ne piše "kategorije"), a ostala 4 pogotka su
+bila druga deljenja bolesti iz knjige (str. 40, 61, 62). gpt-oss je od toga složio spisak sa
+"bolestima sa apsolutnom dispozicijom" kao kategorijom 2 — model je radio sa onim što je dobio, jači
+model ne bi pogodio kategorije koje nije video. Uz to je Tesseract sa `srp` (ćirilica) na 81 od 96
+strana latiničnog skena pročitao deo reči kao ćirilicu ("је", "од", "5ргесамапје" = "Sprečavanje"),
+pa ih pretraga ne nalazi; bez `srp` na istim stranama 0 takvih reči. U istom skenu je bilo ~650
+reči sa crticom ("botuli-zam", "groz-nice"), većinom presečenih na kraju reda. Postojeći eval (kratka pitanja
+sa jednom činjenicom) ovo nije mogao da uhvati.
+**Cena:** prompt je duži (do ~3× teksta po pogotku; delovi iste strane se ne ponavljaju) — na Groq-u
+besplatno, na Claude-u delić centa po pitanju. Uvodna linija sa `:` nekad je samo red teksta, ne
+naslov — tada se ponavlja u delovima bez potrebe. Strane sa lažnom ćirilicom se OCR-uju dvaput
+(sporije ubacivanje skena). Pravilo za crticu nekad spoji pravu složenicu (npr. engleski
+"well-known" → "wellknown") ili ostavi presečenu reč na "-o" ("epidemiolo-gija"). Stranica sa pravim mešanim pismom (latinica + malo ćirilice) gubi
+ćirilicu. Novi indeks menja ID-jeve delova, pa označavanje citata u **starim** sačuvanim razgovorima
+može da pokaže pogrešan pasus.

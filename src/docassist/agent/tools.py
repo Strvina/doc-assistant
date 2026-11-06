@@ -13,6 +13,7 @@ from typing import Any, Protocol
 from docassist.config import Team
 from docassist.llm.prompts import format_context
 from docassist.models import Chunk
+from docassist.rag import context_passages
 from docassist.retrieval import SearchResult, VectorStore, retrieve
 
 MAX_DOCUMENT_CHARS = 30_000  # keeps one document read well inside the context window
@@ -144,11 +145,11 @@ def build_tools(ctx: ToolContext) -> list[Tool]:
     team_ids = ", ".join(t.id for t in ctx.teams)
 
     def search_documents(args: dict[str, Any]) -> str:
-        results = retrieve(ctx.store, args["query"], k=ctx.top_k)
+        results = ctx.store.with_neighbors(retrieve(ctx.store, args["query"], k=ctx.top_k))
         if not results:
             return "No matching passages found."
         ctx.retrieved.extend(results)
-        return format_context([r.chunk for r in results])
+        return format_context(context_passages(results))
 
     def list_documents(args: dict[str, Any]) -> str:
         docs = ctx.store.documents()

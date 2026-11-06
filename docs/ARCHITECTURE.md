@@ -10,7 +10,7 @@
                         ┌──────────────────────── docassist (core) ────────────────────────┐
    index:  fajl ──▶ Library ──▶ loaders ──▶ chunker ──▶ LocalEmbedder ──▶ VectorStore (Chroma)
                       └──▶ kopija originala (DOCUMENTS_DIR) ──▶ viewer (PDF highlight / HTML strane)
-   ask:   pitanje ──▶ retrieve ──▶ prompt ──▶ ClaudeProvider ──▶ odgovor + provereni citati
+   ask:   pitanje ──▶ retrieve ──▶ + susedni delovi ──▶ prompt ──▶ ClaudeProvider ──▶ odgovor + provereni citati
    agent: Claude bira alate: search / list / summarize / escalate (webhook → n8n) / leave request
                         └───────────────────────────────────────────────────────────────────┘
                                  QueryLog (SQLite: latencija, tokeni, cena, 👍/👎) · eval

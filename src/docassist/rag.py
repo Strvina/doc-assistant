@@ -11,6 +11,7 @@ from docassist.llm import NOT_FOUND_SR, SYSTEM_PROMPT, LLMProvider, Message, bui
 from docassist.llm.base import ToolCall, stream_complete
 from docassist.models import Chunk
 from docassist.retrieval import SearchResult, VectorStore, retrieve
+from docassist.retrieval.store import NEIGHBORS
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,14 +55,19 @@ def answer(
     k: int = 5,
     min_score: float = 0.0,
     history: Sequence[tuple[str, str]] = (),
+    neighbors: int = NEIGHBORS,
 ) -> Answer:
     """Answer a question from the indexed documents.
 
     `history` is a list of earlier (question, answer) pairs for follow-up questions; only
-    the current question gets document context.
+    the current question gets document context. The `k` best chunks go to the model with
+    the chunks around them (`VectorStore.with_neighbors`, `neighbors` before and after).
     """
     final = None
-    for event in answer_stream(question, store, llm, k=k, min_score=min_score, history=history):
+    events = answer_stream(
+        question, store, llm, k=k, min_score=min_score, history=history, neighbors=neighbors
+    )
+    for event in events:
         if isinstance(event, Answer):
             final = event
     assert final is not None
@@ -76,10 +82,11 @@ def answer_stream(
     k: int = 5,
     min_score: float = 0.0,
     history: Sequence[tuple[str, str]] = (),
+    neighbors: int = NEIGHBORS,
 ) -> Iterator[str | Answer]:
     """Like `answer`, but yields the text as the model writes it, then the `Answer` last."""
     started = time.perf_counter()
-    results = retrieve(store, question, k=k, min_score=min_score)
+    results = store.with_neighbors(retrieve(store, question, k=k, min_score=min_score), neighbors)
     if not results:
         yield NOT_FOUND_SR
         yield Answer(
@@ -98,7 +105,7 @@ def answer_stream(
         messages.append({"role": "user", "content": previous_question})
         messages.append({"role": "assistant", "content": previous_answer})
     messages.append(
-        {"role": "user", "content": build_user_message(question, [r.chunk for r in results])}
+        {"role": "user", "content": build_user_message(question, context_passages(results))}
     )
 
     result = None
@@ -129,20 +136,52 @@ def answer_stream(
 
 
 def merge_passages(chunks: Sequence[Chunk]) -> str:
-    """Join chunks of one page in reading order, dropping the text neighbours share (overlap)."""
-    ordered = sorted(chunks, key=lambda c: int(c.chunk_id.rsplit("::", 1)[-1]))
-    merged = ""
+    """Join chunks of one page in reading order, dropping the text neighbours share (overlap)
+    and the section heading a chunk repeats from the one before it. "[…]" marks left-out
+    text between chunks that are not next to each other."""
+    ordered = sorted({c.chunk_id: c for c in chunks}.values(), key=_chunk_index)
+    merged, previous = "", None
     for chunk in ordered:
         text = chunk.text
+        adjacent = previous is not None and _chunk_index(chunk) == _chunk_index(previous) + 1
+        if adjacent:
+            heading = _first_line(previous.text)
+            if _first_line(text) == heading and len(heading) < len(text):
+                text = text[len(heading) :].lstrip("\n")
         overlap = next(
             (n for n in range(min(len(merged), len(text)), 0, -1) if merged.endswith(text[:n])),
             0,
         )
         if overlap >= 20:  # real overlap, not an accidental one-word match
             merged += text[overlap:]
+        elif not merged:
+            merged = text
         else:
-            merged += ("\n\n[…]\n\n" if merged else "") + text
+            merged += ("\n\n" if adjacent else "\n\n[…]\n\n") + text
+        previous = chunk
     return merged
+
+
+def context_passages(results: Sequence[SearchResult]) -> list[Chunk]:
+    """One passage per page for the model, in the order of the page's best hit. The chunks
+    of a page are merged (`merge_passages`), so overlapping text is not sent twice and a
+    list cut into several chunks reads as one text."""
+    by_page: dict[tuple[str, int], list[Chunk]] = {}
+    for result in results:
+        by_page.setdefault((result.chunk.source, result.chunk.page), []).append(result.chunk)
+    return [
+        Chunk(chunks[0].chunk_id, chunks[0].doc_id, source, page, merge_passages(chunks))
+        for (source, page), chunks in by_page.items()
+    ]
+
+
+def _chunk_index(chunk: Chunk) -> int:
+    index = chunk.chunk_id.rsplit("::", 1)[-1]
+    return int(index) if index.isdigit() else 0
+
+
+def _first_line(text: str) -> str:
+    return text.split("\n", 1)[0].strip()
 
 
 def extract_citations(
