@@ -461,3 +461,23 @@ pretrazi (a ne posle nje) znači da se `TOP_K` mesta popunjavaju samo izabranim 
 **Cena:** BM25 i dalje računa retkost reči na celoj biblioteci (ne samo na izboru) — za rangiranje
 unutar izbora razlika je mala. Izbor je po browseru, ne po razgovoru: nastavak razgovora koristi
 trenutni izbor.
+
+### ADR-035 · Nedeljni izveštaj o prazninama u dokumentaciji (n8n → mejl po timu)
+**Odluka:** `GET /reports/gaps?days=7&classify=true` (`docassist/reports.py`) uzima iz loga pitanja
+bez odgovora i odgovore ocenjene 👎 za poslednjih N dana, spaja ista pitanja (broj ponavljanja),
+daje svako pitanje timu i za svaki tim piše mejl (naslov, tekst, HTML, na srpskom). Tim: onaj kome
+je pitanje već prosleđeno (log sada pamti `escalation_team`); inače, uz `classify=true`, tim koji AI
+model izabere po imenima timova (jedan poziv, odgovor kao JSON; neupotrebljiv odgovor ili greška →
+bez dodele); inače prvi tim. Pitanje sa nastavkom se prikazuje i grupiše u samostalnom obliku koji je
+pretraga koristila (log pamti `search_query`, ADR-031), uz "pitano kao nastavak razgovora: „…“".
+n8n tok `gap_report_workflow.json`: ponedeljak 8:00 (ili *Run now*) → HTTP zahtev → jedan element po
+timu → mejl. `format=html` je pregled istog izveštaja (veza u panelu *Praćenje*). `setup_n8n.py`
+uvozi i aktivira tok; `--send-gap-report` ga pokreće odmah.
+**Zašto:** praznine su se videle samo ako neko otvori panel *Praćenje*. Mejl odgovornom timu zatvara
+krug pitanje → praznina → tim → nov dokument, bez ručnog rada. Aplikacija sama piše mejl (zna
+srpsku množinu, datume, escape HTML-a), pa n8n tok ostaje četiri čvora i lako se menja (Slack, Teams).
+Prvi pravi izveštaj je pokazao da je "a u 9" bez razgovora nerazumljivo — zato samostalan oblik.
+**Cena:** sa `classify=true` jedan poziv modelu nedeljno (besplatno na Groq-u). n8n u kontejneru mora
+da dođe do aplikacije (`DOC_ASSISTANT_URL`, `host.docker.internal` na Docker Desktop-u; na Linuxu
+`extra_hosts`), a n8n 2.x mora da dozvoli `$env` u izrazima (`N8N_BLOCK_ENV_ACCESS_IN_NODE=false`).
+Pitanja zabeležena pre ove verzije nemaju `search_query`, pa ostaju kako su postavljena.

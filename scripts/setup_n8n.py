@@ -1,6 +1,10 @@
-"""Start n8n + Mailpit in Docker and install the escalation workflow (one command).
+"""Start n8n + Mailpit in Docker and install the Doc Assistant workflows (one command).
 
-    uv run python scripts/setup_n8n.py
+    uv run python scripts/setup_n8n.py                      # escalation + weekly gap report
+    uv run python scripts/setup_n8n.py --send-gap-report    # ... and send the report once now
+
+Workflows: escalation of a question to a team (webhook → e-mail) and the weekly report of the
+gaps in the documentation (every Monday 8:00: GET /reports/gaps → one e-mail per team).
 
 After it finishes:
     n8n UI:        http://localhost:5678   (first visit asks you to create the owner account)
@@ -19,6 +23,7 @@ import urllib.error
 import urllib.request
 
 WORKFLOW_ID = "DocAssistEscalat"
+GAP_REPORT_WORKFLOW_ID = "DocAssistGapRepo"
 WEBHOOK_URL = "http://localhost:5678/webhook/doc-assistant-escalation"
 COMPOSE = ["docker", "compose", "--profile", "automation"]
 
@@ -53,8 +58,12 @@ def main() -> int:
     wait_for("http://localhost:5678/healthz")
 
     n8n("import:credentials", "--input=/automations/n8n_credentials_mailpit.json")
-    n8n("import:workflow", "--input=/automations/escalation_workflow.json")
-    n8n("update:workflow", f"--id={WORKFLOW_ID}", "--active=true")
+    for workflow_id, name in (
+        (WORKFLOW_ID, "escalation_workflow.json"),
+        (GAP_REPORT_WORKFLOW_ID, "gap_report_workflow.json"),
+    ):
+        n8n("import:workflow", f"--input=/automations/{name}")
+        n8n("update:workflow", f"--id={workflow_id}", "--active=true")
     run(*COMPOSE, "restart", "n8n")  # n8n picks up CLI activation on start
     wait_for("http://localhost:5678/healthz")
 
@@ -65,6 +74,9 @@ def main() -> int:
         "question": "Test: da li n8n prima eskalacije?",
         "reason": "setup_n8n.py smoke test",
         "contact": "setup script",
+        "team": "hr",
+        "team_label": "HR",
+        "team_email": "hr@example.com",
     }
     request = urllib.request.Request(
         WEBHOOK_URL,
@@ -83,6 +95,24 @@ def main() -> int:
             if error.code != 404 or time.time() > deadline:
                 raise
             time.sleep(2)
+
+    if "--send-gap-report" in sys.argv:
+        # Needs the app running (uvicorn on this PC, or the app service in compose). The CLI
+        # run starts from the "Run now" node and needs its own task broker port, because the
+        # running n8n already uses the default one.
+        print(
+            run(
+                *COMPOSE,
+                "exec",
+                "-T",
+                "-e",
+                "N8N_RUNNERS_BROKER_PORT=5690",
+                "n8n",
+                "n8n",
+                "execute",
+                f"--id={GAP_REPORT_WORKFLOW_ID}",
+            )
+        )
 
     print(
         "\nDone.\n"

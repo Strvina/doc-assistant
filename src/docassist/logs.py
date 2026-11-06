@@ -30,7 +30,9 @@ CREATE TABLE IF NOT EXISTS queries (
     output_tokens INTEGER NOT NULL,
     feedback      INTEGER,                   -- 1 = 👍, -1 = 👎, NULL = none
     cost_usd      REAL,                      -- NULL when the model price is unknown
-    escalation    TEXT                       -- reference when forwarded to a person
+    escalation    TEXT,                      -- reference when forwarded to a person
+    escalation_team TEXT,                    -- id of the team it was forwarded to
+    search_query  TEXT                       -- a follow-up rewritten to stand alone (ADR-031)
 );
 """
 
@@ -38,6 +40,8 @@ CREATE TABLE IF NOT EXISTS queries (
 _MIGRATIONS = {
     "cost_usd": "ALTER TABLE queries ADD COLUMN cost_usd REAL",
     "escalation": "ALTER TABLE queries ADD COLUMN escalation TEXT",
+    "escalation_team": "ALTER TABLE queries ADD COLUMN escalation_team TEXT",
+    "search_query": "ALTER TABLE queries ADD COLUMN search_query TEXT",
 }
 
 
@@ -84,12 +88,13 @@ class QueryLog:
             result.input_tokens,
             result.output_tokens,
             cost_usd(result.model, result.input_tokens, result.output_tokens),
+            result.search_query or None,
         )
         with closing(self._connect()) as db, db:
             cursor = db.execute(
                 "INSERT INTO queries (created_at, channel, mode, provider, model, question,"
                 " answer, found, citations, tool_calls, latency_ms, input_tokens, output_tokens,"
-                " cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " cost_usd, search_query) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 row,
             )
             row_id = cursor.lastrowid
@@ -108,9 +113,12 @@ class QueryLog:
         rows = self._select("SELECT * FROM queries WHERE id = ?", query_id)
         return rows[0] if rows else None
 
-    def set_escalation(self, query_id: int, reference: str) -> None:
+    def set_escalation(self, query_id: int, reference: str, team: str | None = None) -> None:
         with closing(self._connect()) as db, db:
-            db.execute("UPDATE queries SET escalation = ? WHERE id = ?", (reference, query_id))
+            db.execute(
+                "UPDATE queries SET escalation = ?, escalation_team = ? WHERE id = ?",
+                (reference, team, query_id),
+            )
 
     def delete(self, query_id: int) -> bool:
         """Remove one question from the log. False for an unknown id."""
@@ -152,6 +160,15 @@ class QueryLog:
         return self._select(
             "SELECT * FROM queries WHERE found = 0 OR feedback = -1 ORDER BY id DESC LIMIT ?",
             limit,
+        )
+
+    def gaps_since(self, since: str) -> list[dict[str, object]]:
+        """Every gap (see `gaps`) logged at or after the ISO timestamp `since`, oldest first:
+        the input of the weekly report (docassist.reports)."""
+        return self._select(
+            "SELECT * FROM queries WHERE (found = 0 OR feedback = -1) AND created_at >= ?"
+            " ORDER BY id",
+            since,
         )
 
     def _select(self, sql: str, *params: object) -> list[dict[str, object]]:

@@ -44,6 +44,9 @@ GitHub Actions · Docker / Hugging Face Spaces
 - **Pitanja sa nastavkom (ADR-031):** kad razgovor ima istoriju, model prvo prepiše pitanje u samostalan
   upit ("a u petu?" → "Koje bolesti spadaju u petu kategoriju zaraznih bolesti?"); UI pokazuje
   "tražio sam: …". Provereno uživo sa Groq-om (nastavak 2/2, nova tema 3/3).
+- **Nedeljni izveštaj o prazninama (ADR-035):** `GET /reports/gaps` (JSON za n8n, `format=html` pregled) →
+  n8n `gap_report_workflow.json` (ponedeljak 8:00 / *Run now*) → mejl po timu. Provereno uživo: mejl
+  stigao u Mailpit. `setup_n8n.py --send-gap-report` šalje odmah.
 - **Pretraga u izabranim dokumentima (ADR-034):** kvačice u biblioteci → traka "Pretraga samo u: …" iznad
   polja; `doc_ids` u `/ask`; odgovor ima `searched_documents`. Provereno u browseru.
 - **Kvalitet koda (ADR-033):** `api.py` podeljen na paket `docassist/api/` (ruteri po oblastima, `deps`,
@@ -157,6 +160,8 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
   `rebuild_lock`. Test server za proveru: `INDEX_DIR`/`DOCUMENTS_DIR` u scratch + `--port 8765`.
 - Nova ruta → odgovarajući modul u `api/routes/`; zavisnosti iz `api/deps.py`, pristup `ACCESS`/`UPLOADS` iz
   `api/security.py`. `ConversationStore.list` se sada zove `summaries`.
+- `n8n execute` pored pokrenutog n8n-a traži drugi port za task broker (`N8N_RUNNERS_BROKER_PORT=5690`) i
+  ručni okidač u toku (*Run now*). Log ima nove kolone `escalation_team`, `search_query` (migracija sama).
 - Groq: 8.000 tokena/min po modelu → 413 za velike zahteve (agent čita ceo dokument); lanac prelazi dalje.
 - gpt-oss ponekad citira sa `【...】`; `chat_completions._clean` to pretvara u `[...]`.
 - Statika (`app.css`/`app.js`) se u `index.html` servira sa `?v=<hash>` — nema zastarelog CSS-a posle izmene.
@@ -203,3 +208,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-06 | Aplikacija sama osvežava zastareo indeks (napredak u UI-ju), stari citati se proveravaju po tekstu; ADR-032 | #29 |
 | 2026-11-06 | Kvalitet koda: API po ruterima, strogi mypy u CI-ju, šira ruff pravila; ADR-033 | #30 |
 | 2026-11-06 | Pretraga samo u izabranim dokumentima (kvačice, `doc_ids`, i za Agenta); ADR-034 | #31 |
+| 2026-11-06 | Nedeljni izveštaj o prazninama mejlom po timu (n8n), AI raspodela po timovima; ADR-035 | #32 |
