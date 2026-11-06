@@ -22,6 +22,7 @@ data/uploads/
 data/documents/
 data/outbox/
 data/inbox/
+data/inbox.json
 logs/
 *.sqlite
 *.db
