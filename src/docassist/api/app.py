@@ -70,8 +70,28 @@ def create_app(
     return app
 
 
+LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+
+
+def setup_logging() -> None:
+    """Show the app's own log lines (imports, rebuilds, failed scans) next to uvicorn's.
+
+    uvicorn configures only its own loggers: without a handler, the app's INFO lines were
+    dropped and warnings came out without a time. Left alone when logging is already
+    configured (e.g. `uvicorn --log-config`).
+    """
+    logger = logging.getLogger("docassist")
+    if logger.handlers or logging.getLogger().handlers:
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter(LOG_FORMAT))
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    setup_logging()
     stop = threading.Event()
     _watch_inbox(app.state, stop)
     yield

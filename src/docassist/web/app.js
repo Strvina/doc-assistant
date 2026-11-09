@@ -362,7 +362,7 @@ function renderInboxCard() {
 }
 
 async function openInbox() {
-  $("#inbox").hidden = false;
+  openModal($("#inbox"));
   await loadInbox();
 }
 
@@ -425,7 +425,7 @@ function renderImport(item) {
   return el("li", {
       class: `inbox-import ${item.status}` + (doc ? " clickable" : ""),
       title: doc ? "Otvori dokument" : undefined,
-      onclick: doc ? () => { $("#inbox").hidden = true; openViewer({ docId: doc.doc_id, source: doc.source }); } : undefined,
+      onclick: doc ? () => { closeModal($("#inbox"), { restoreFocus: false }); openViewer({ docId: doc.doc_id, source: doc.source }); } : undefined,
     },
     el("span", { class: "inbox-mark", "aria-hidden": "true" }, mark),
     el("span", {}, el("strong", {}, prettyName(item.source)), el("small", {}, `${when(item.at)} · ${outcome}`)));
@@ -1079,6 +1079,8 @@ function setBusy(busy) {
   send.classList.toggle("stop", busy);
   send.setAttribute("aria-label", busy ? "Zaustavi" : "Pošalji");
   send.title = busy ? "Zaustavi pitanje (Esc)" : "Pošalji";
+  // Screen readers wait for the whole answer instead of reading every piece as it arrives.
+  $("#thread").setAttribute("aria-busy", String(busy));
 }
 
 function cancelAsk() {
@@ -1359,7 +1361,7 @@ async function deleteConversation(conversation) {
 
 async function openInsights() {
   const modal = $("#insights");
-  modal.hidden = false;
+  openModal(modal);
   try {
     const data = await api("/insights");
     const s = data.stats;
@@ -1376,7 +1378,7 @@ async function openInsights() {
     const canDelete = state.config?.allow_uploads;  // off in the public demo
     const item = (q) => el("li", {
         class: `clickable${canDelete ? " removable" : ""}`, tabindex: 0, title: "Postavi ponovo",
-        onclick: () => { $("#insights").hidden = true; const input = $("#composer-input"); input.value = q.question; autosize(input); input.focus(); },
+        onclick: () => { closeModal($("#insights"), { restoreFocus: false }); const input = $("#composer-input"); input.value = q.question; autosize(input); input.focus(); },
       },
       q.question,
       el("small", {}, [new Date(q.created_at).toLocaleString("sr-RS"), q.found ? "odgovoreno" : "nema u dokumentima",
@@ -1415,6 +1417,44 @@ async function clearQueries() {
     return;
   }
   await openInsights();
+}
+
+// --- dialogs ----------------------------------------------------------------------------
+// A dialog takes the keyboard focus when it opens and gives it back to the button that opened
+// it when it closes; while it is open, Tab stays inside (what aria-modal="true" promises).
+
+const FOCUSABLE = "button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex='-1'])";
+
+function openModal(modal) {
+  if (!modal.hidden) return;
+  modal.opener = document.activeElement;
+  modal.hidden = false;
+  $(`#${modal.id}-close`, modal)?.focus();
+}
+
+function closeModal(modal, { restoreFocus = true } = {}) {
+  if (modal.hidden) return;
+  modal.hidden = true;
+  if (restoreFocus && modal.opener?.isConnected) modal.opener.focus();
+  modal.opener = null;
+}
+
+function trapFocus(event) {
+  if (event.key !== "Tab") return;
+  const modal = [...document.querySelectorAll(".modal")].find((m) => !m.hidden);
+  if (!modal) return;
+  const items = [...modal.querySelectorAll(FOCUSABLE)].filter((node) => node.offsetParent !== null);
+  if (!items.length) return;
+  const first = items[0];
+  const last = items[items.length - 1];
+  const inside = modal.contains(document.activeElement);
+  if (!inside || (event.shiftKey && document.activeElement === first)) {
+    event.preventDefault();
+    (inside ? last : first).focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 // --- layout helpers ---------------------------------------------------------------------
@@ -1461,12 +1501,13 @@ function bindEvents() {
       $("#composer").requestSubmit();
     }
   });
+  document.addEventListener("keydown", trapFocus);
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       if (closeExportMenu()) return;
       if (state.pending) cancelAsk();
-      else if (!$("#insights").hidden) $("#insights").hidden = true;
-      else if (!$("#inbox").hidden) $("#inbox").hidden = true;
+      else if (!$("#insights").hidden) closeModal($("#insights"));
+      else if (!$("#inbox").hidden) closeModal($("#inbox"));
       else if (!$("#viewer").hidden) closeViewer();
       else closeLibraryDrawer();
     }
@@ -1496,12 +1537,12 @@ function bindEvents() {
   $("#viewer-close").addEventListener("click", closeViewer);
   $("#load-demo").addEventListener("click", loadDemo);
   $("#insights-open").addEventListener("click", openInsights);
-  $("#insights-close").addEventListener("click", () => ($("#insights").hidden = true));
+  $("#insights-close").addEventListener("click", () => closeModal($("#insights")));
   $("#inbox-card").addEventListener("click", openInbox);
-  $("#inbox-close").addEventListener("click", () => ($("#inbox").hidden = true));
-  $("#inbox").addEventListener("click", (event) => { if (event.target.id === "inbox") event.currentTarget.hidden = true; });
+  $("#inbox-close").addEventListener("click", () => closeModal($("#inbox")));
+  $("#inbox").addEventListener("click", (event) => { if (event.target.id === "inbox") closeModal(event.currentTarget); });
   $("#queries-clear").addEventListener("click", clearQueries);
-  $("#insights").addEventListener("click", (event) => { if (event.target.id === "insights") event.currentTarget.hidden = true; });
+  $("#insights").addEventListener("click", (event) => { if (event.target.id === "insights") closeModal(event.currentTarget); });
   $("#theme-toggle").addEventListener("click", () => {
     const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = next;

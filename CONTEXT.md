@@ -67,6 +67,8 @@ GitHub Actions · Docker / Hugging Face Spaces
 - **Performanse (ADR-042):** lista dokumenata u memoriji (42 → 0,6 ms; briše se pri promeni indeksa ili broja
   delova), jedan HTTP klijent po servisu i ključu (`shared_client`, timeout 120/300 s), stranice razgovora u SQL-u,
   odgovor koji stiže crta se jednom po frejmu.
+- **Pouzdanost i pristupačnost (ADR-043):** logovi aplikacije (`docassist.*`, INFO, sa vremenom) se vide uz
+  uvicorn-ove; dijalozi drže fokus (otvaranje, Tab, povratak na dugme); `aria-busy` dok odgovor stiže.
 - **Kvalitet koda (ADR-033):** `api.py` podeljen na paket `docassist/api/` (ruteri po oblastima, `deps`,
   `security`, `schemas`); strogi `mypy` obavezan (CI + pre commita); šira ruff pravila. Pokrivenost 95 %.
 - **Samoosvežavanje indeksa (ADR-032):** zastareo ili nedovršen indeks web aplikacija pravi sama iz
@@ -96,6 +98,11 @@ GitHub Actions · Docker / Hugging Face Spaces
   - 0.5 zaštita grane `main` — nije uključena (sekcija uklonjena iz `WORKFLOW.md`).
 
 ## Sledeći korak
+
+**Revizija 2026-11-09 (#41–#43) je urađena.** Predlozi koji su ostali (traže odluku korisnika):
+zaštita od DNS rebinding-a (spisak dozvoljenih `Host` imena), `ALLOWED_HOSTS` za server; pregled PDF-a sa
+označenim citatom u kešu (OCR strana ~1,5 s pri svakom kliku); WAL režim za SQLite ako bude više korisnika
+istovremeno; limit za `/escalate` i `/reports/gaps?classify=true` u javnom demo režimu.
 
 **Odluka (2026-11-06): nema demo videa ni online dema, i za sada nema Claude-a — samo razvoj aplikacije
 (besplatni Groq/Gemini).** (Ranije, 2026-11-04: online demo se ne objavljuje.)
@@ -236,3 +243,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-07 | Priprema za sopstveni server (Caddy HTTPS + lozinka, n8n, rezervne kopije, deploy Action), probano lokalno; ADR-040 | #40 |
 | 2026-11-09 | Revizija 1/3 — bezbednost: CSRF zaštita, limit po IP-u bez lažnog zaglavlja, CSP za stranicu; ADR-041 | #41 |
 | 2026-11-09 | Revizija 2/3 — performanse: lista dokumenata u memoriji, deljeni HTTP klijenti sa timeout-om, stranice razgovora u SQL-u, crtanje po frejmu; ADR-042 | #42 |
+| 2026-11-09 | Revizija 3/3 — logovi aplikacije vidljivi, fokus u dijalozima, `aria-busy`; ADR-043 | #43 |

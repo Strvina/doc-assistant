@@ -628,3 +628,18 @@ parsira ceo odgovor; provereno u browseru sa 43 i 58 delića: odgovor se prikazu
 staru listu dok se indeks ne promeni ponovo — server je jedini koji menja indeks dok radi (CLI
 `index` se pokreće kad server ne radi).
 
+### ADR-043 · Logovi aplikacije i fokus u dijalozima
+**Odluka:** (1) Pri pokretanju servera `setup_logging()` (`api/app.py`) daje loggeru `docassist`
+handler sa vremenom i nivoom INFO — samo ako logovanje nije već podešeno (npr. `uvicorn
+--log-config`). (2) Dijalozi *Praćenje* i *Automatski uvoz* (`openModal`/`closeModal`/`trapFocus` u
+`app.js`): fokus ide na dugme za zatvaranje kad se otvore, Tab i Shift+Tab ostaju unutar dijaloga,
+a posle zatvaranja (Esc, ×, klik pored) fokus se vraća na dugme koje ga je otvorilo. (3) Razgovor
+ima `aria-busy="true"` dok odgovor stiže, pa čitač ekrana pročita ceo odgovor jednom, a ne svaki
+delić.
+**Zašto:** uvicorn podešava samo svoje loggere: INFO poruke aplikacije (uvoz iz foldera,
+osvežavanje indeksa) su se gubile, a upozorenja izlazila bez vremena — na serveru se nije videlo
+šta se desilo. Dijalozi su obećavali `aria-modal="true"`, a fokus je ostajao iza njih: korisnik
+tastature je Tab-om išao po stranici ispod. Provereno u browseru: fokus, Tab ×25 unutar dijaloga,
+povratak fokusa, `aria-busy` tačno/netačno; u logu servera se vidi "Watching … for new documents".
+**Cena:** nova dugmad u dijalozima moraju biti pravi `button`/`a`/`input` da bi ih Tab našao.
+
