@@ -21,6 +21,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from docassist.db import Database
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
     id          TEXT PRIMARY KEY,
@@ -66,14 +68,12 @@ def make_title(question: str) -> str:
 
 class ConversationStore:
     def __init__(self, path: str | Path) -> None:
-        self._path = Path(path)
+        # Created on demand, like the query log: a deleted file is simply recreated.
+        self._db = Database(Path(path), lambda db: db.executescript(_SCHEMA))
 
     def _connect(self) -> sqlite3.Connection:
-        # Created on demand, like the query log: a deleted file is simply recreated.
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        db = sqlite3.connect(self._path)
-        db.execute("PRAGMA foreign_keys = ON")
-        db.executescript(_SCHEMA)
+        db = self._db.connect()
+        db.execute("PRAGMA foreign_keys = ON")  # per connection: deleting cascades to turns
         return db
 
     # --- sessions ------------------------------------------------------------------------

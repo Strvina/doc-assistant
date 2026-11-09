@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from docassist.db import Database
 from docassist.pricing import cost_usd
 from docassist.rag import Answer
 
@@ -45,6 +46,14 @@ _MIGRATIONS = {
 }
 
 
+def _create(db: sqlite3.Connection) -> None:
+    db.executescript(_SCHEMA)
+    columns = {row[1] for row in db.execute("PRAGMA table_info(queries)")}
+    for column, statement in _MIGRATIONS.items():
+        if column not in columns:
+            db.execute(statement)
+
+
 _NO_LIMIT = 2**63 - 1  # larger than any SQLite row id: the first page
 
 
@@ -62,18 +71,11 @@ class UsageStats:
 
 class QueryLog:
     def __init__(self, path: str | Path) -> None:
-        self._path = Path(path)
+        # The table is created on demand, so a deleted log file is simply recreated.
+        self._db = Database(Path(path), _create)
 
     def _connect(self) -> sqlite3.Connection:
-        # Create the file and table on demand, so a deleted log file is simply recreated.
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        db = sqlite3.connect(self._path)
-        db.executescript(_SCHEMA)
-        columns = {row[1] for row in db.execute("PRAGMA table_info(queries)")}
-        for column, statement in _MIGRATIONS.items():
-            if column not in columns:
-                db.execute(statement)
-        return db
+        return self._db.connect()
 
     def log(self, result: Answer, *, channel: str, mode: str = "rag") -> int:
         row = (
