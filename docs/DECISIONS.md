@@ -709,3 +709,20 @@ sa SQL-om.
 kad se zatvori; rezervna kopija na serveru pauzira aplikaciju, ADR-040). WAL ne radi na mrežnom
 disku — `LOG_DB` mora biti na lokalnom disku servera.
 
+### ADR-047 · Dokument se pojavljuje u listi čim je indeksiran
+**Odluka:** (1) Dok se zastareo indeks pravi iz originala (ADR-032), `GET /documents`, pregled i
+preuzimanje koriste deo indeksa koji je već napravljen (`Rebuild.library`, `get_readable_library`
+u `api/deps.py`); pitanja i izmene i dalje čekaju ceo indeks (503). UI na svakom koraku praćenja
+ponovo učitava listu. (2) Upload više fajlova šalje fajl po fajl (jedan zahtev po fajlu), pa se
+lista osvežava posle svakog; status pokazuje "2 / 5: ime". (3) Lista se proverava na 5 s umesto
+na 15 s (fajlovi iz foldera za uvoz, drugi korisnici) i crta ponovo samo kad se nešto promenilo.
+(4) Kad se server restartuje usred pravljenja indeksa, nema više crvene poruke "Indeks: The index
+is being rebuilt…" — praćenje se samo nastavi.
+**Zašto:** korisnik je morao da osveži stranicu da bi video dokumente. Reprodukovano: dva mala
+dokumenta su bila gotova posle 6 s, a lista je ostajala prazna ~4 min dok OCR ne pročita sken od
+96 strana; isto za upload više fajlova (ništa dok se ne završe svi). Lista dolazi iz memorije
+(ADR-042), pa provera na 5 s ne košta ništa primetno.
+**Cena:** upload više fajlova je par zahteva umesto jednog (fajlovi idu redom, kao i ranije na
+serveru). Tokom pravljenja indeksa dokument se vidi i otvara, ali se o njemu ne može pitati dok
+se ne završe svi.
+

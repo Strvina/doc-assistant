@@ -8,7 +8,13 @@ from urllib.parse import quote
 from fastapi import APIRouter, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 
-from docassist.api.deps import SAMPLE_DOCS, LibraryDep, SettingsDep, VisionFactoryDep
+from docassist.api.deps import (
+    SAMPLE_DOCS,
+    LibraryDep,
+    ReadableLibraryDep,
+    SettingsDep,
+    VisionFactoryDep,
+)
 from docassist.api.schemas import DocumentOut, IndexResult, PicturesResult, fields_of
 from docassist.api.security import ACCESS, UPLOADS
 from docassist.factory import MissingAPIKeyError
@@ -24,7 +30,7 @@ NOT_FOUND = "Document or its original file not found"
 
 
 @router.get("", dependencies=ACCESS)
-def list_documents(library: LibraryDep) -> list[DocumentOut]:
+def list_documents(library: ReadableLibraryDep) -> list[DocumentOut]:
     return [
         DocumentOut(
             **fields_of(d),
@@ -140,7 +146,7 @@ def read_pictures(
 @router.get("/{doc_id}/view", dependencies=ACCESS)
 def view_document(
     doc_id: str,
-    library: LibraryDep,
+    library: ReadableLibraryDep,
     page: Annotated[int | None, Query(ge=1)] = None,
     chunk: Annotated[list[str] | None, Query()] = None,
     q: Annotated[str | None, Query(max_length=200)] = None,
@@ -171,7 +177,7 @@ def view_document(
 
 
 @router.get("/{doc_id}/file", dependencies=ACCESS)
-def download_document(doc_id: str, library: LibraryDep) -> FileResponse:
+def download_document(doc_id: str, library: ReadableLibraryDep) -> FileResponse:
     found = library.original(doc_id)
     if found is None:
         raise HTTPException(404, NOT_FOUND)
