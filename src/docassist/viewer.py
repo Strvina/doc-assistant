@@ -11,10 +11,13 @@ from __future__ import annotations
 
 import html
 import re
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 
 import docx
+import pymupdf
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 
@@ -68,13 +71,39 @@ def pdf_with_highlights(path: Path, page_no: int | None, passage: str | None) ->
     with open_pdf(path) as pdf:  # an uploaded image is shown as a one-page PDF
         if passage and page_no and 1 <= page_no <= pdf.page_count:
             page = pdf[page_no - 1]
-            for rect, text in pdf_page_blocks(page):
+            stat = path.stat()  # a changed file is another key: never stale blocks
+            blocks = _page_blocks(str(path), stat.st_mtime_ns, stat.st_size, page_no, page)
+            for rect, text in blocks:
                 if is_cited(text, passage):
-                    annot = page.add_highlight_annot(rect)
+                    annot = page.add_highlight_annot(pymupdf.Rect(rect))
                     annot.set_colors(stroke=HIGHLIGHT_COLOR)
                     annot.set_opacity(0.45)
                     annot.update()
         return pdf.tobytes(garbage=1, deflate=True)
+
+
+# The text blocks of recently viewed PDF pages. On a scan they come from OCR, ~1.5 s a page:
+# without this, every click on a citation of the same page waited for it again.
+Box = tuple[float, float, float, float]  # x0, y0, x1, y1
+BLOCK_CACHE_PAGES = 200
+_BLOCK_CACHE: OrderedDict[tuple[str, int, int, int], list[tuple[Box, str]]] = OrderedDict()
+_block_cache_lock = threading.Lock()
+
+
+def _page_blocks(
+    path: str, mtime_ns: int, size: int, page_no: int, page: pymupdf.Page
+) -> list[tuple[Box, str]]:
+    key = (path, mtime_ns, size, page_no)
+    with _block_cache_lock:
+        if key in _BLOCK_CACHE:
+            _BLOCK_CACHE.move_to_end(key)
+            return _BLOCK_CACHE[key]
+    blocks = [((r.x0, r.y0, r.x1, r.y1), text) for r, text in pdf_page_blocks(page)]
+    with _block_cache_lock:  # OCR ran outside the lock: other pages need not wait
+        _BLOCK_CACHE[key] = blocks
+        while len(_BLOCK_CACHE) > BLOCK_CACHE_PAGES:
+            _BLOCK_CACHE.popitem(last=False)
+    return blocks
 
 
 # --- DOCX / TXT / MD → pages of blocks -----------------------------------------------------

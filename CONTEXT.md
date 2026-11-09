@@ -72,6 +72,8 @@ GitHub Actions · Docker / Hugging Face Spaces
   eval 100 %, pretraga 1,8 → 0,24 ms, 48 paketa / 168 MB manje). Stari Chroma indeks → aplikacija sama pravi nov
   iz originala (~4 min sa skenom od 96 strana). Stari fajlovi (`chroma.sqlite3` + folderi sa UUID imenima u
   `data/index`) ostaju i mogu da se obrišu ručno.
+- **Pregled citata (ADR-045):** tekst-blokovi poslednjih 200 PDF strana se pamte (ključ: putanja, vreme izmene,
+  veličina, strana); sken: prvi klik 8,1 s, sledeći 0,12 s.
 - **Kvalitet koda (ADR-033):** `api.py` podeljen na paket `docassist/api/` (ruteri po oblastima, `deps`,
   `security`, `schemas`); strogi `mypy` obavezan (CI + pre commita); šira ruff pravila. Pokrivenost 95 %.
 - **Samoosvežavanje indeksa (ADR-032):** zastareo ili nedovršen indeks web aplikacija pravi sama iz
@@ -178,7 +180,7 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 - OCR strane idu paralelno (`ocr.run_jobs`, CPU-1 Tesseract procesa, `OMP_THREAD_LIMIT=1`): sken od 96 strana
   ~2 min (ranije ~6,5). UI prati `GET /documents/progress` i pokazuje "Čitam skenirane strane: 23 / 96".
 - Tesseract se zove direktno (`ingest/ocr.py`, TSV); PyMuPDF-ov OCR je preskakao tabele. Windows: traži se
-  u `C:/Program Files/Tesseract-OCR`. OCR strane u pregledu se radi ponovo (~1,5 s).
+  u `C:/Program Files/Tesseract-OCR`. OCR strane u pregledu: pri prvom kliku, posle se pamti (ADR-045).
 - Indeks pamti embedder i verziju podele (`CHUNKING` u `ingest/chunker.py`); promena → `--rebuild`.
 - Susedni delovi: `VectorStore.with_neighbors` (`NEIGHBORS`, `LIST_FOLLOW` u `retrieval/store.py`); prompt dobija
   `rag.context_passages` (jedan odlomak po strani); `Answer.retrieved` sadrži i susede (`neighbor=True`).
@@ -248,3 +250,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-09 | Revizija 2/3 — performanse: lista dokumenata u memoriji, deljeni HTTP klijenti sa timeout-om, stranice razgovora u SQL-u, crtanje po frejmu; ADR-042 | #42 |
 | 2026-11-09 | Revizija 3/3 — logovi aplikacije vidljivi, fokus u dijalozima, `aria-busy`; ADR-043 | #43 |
 | 2026-11-09 | Indeks u SQLite-u + numpy umesto ChromaDB-a (izmereno: isti pogoci, brže, 48 paketa manje); ADR-044 | #44 |
+| 2026-11-09 | Pregled citata pamti tekst strane (sken: 8,1 → 0,12 s od drugog klika); ADR-045 | #45 |
