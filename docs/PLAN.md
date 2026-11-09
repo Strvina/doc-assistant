@@ -105,6 +105,7 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 - [x] Bezbednost: zaštita od zahteva sa tuđih sajtova (CSRF), limit po IP-u bez lažnog zaglavlja, CSP za stranicu (ADR-041)
 - [x] Performanse: lista dokumenata iz memorije, jedan HTTP klijent po servisu (+ timeout), stranice razgovora u SQL-u, crtanje odgovora jednom po frejmu (ADR-042)
 - [x] Pouzdanost i pristupačnost: logovi aplikacije vidljivi uz uvicorn-ove, fokus u dijalozima (otvaranje, Tab, povratak), `aria-busy` dok odgovor stiže (ADR-043)
+- [x] Indeks u SQLite-u sa egzaktnom pretragom (numpy) umesto ChromaDB-a: isti pogoci, brže, 48 paketa manje (ADR-044)
 
 ## Dodatno — formati
 

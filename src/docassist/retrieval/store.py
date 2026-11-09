@@ -1,22 +1,34 @@
-"""Chunk storage and hybrid search (embeddings + BM25 keywords) on ChromaDB (ADR-003, ADR-023)."""
+"""Chunk storage and hybrid search (embeddings + BM25 keywords): SQLite and numpy (ADR-044).
+
+The chunks, their embeddings and the index settings live in one SQLite file
+(`INDEX_DIR/index.sqlite`). Search compares the question with every chunk (exact cosine
+similarity, one matrix product in numpy) instead of an approximate index: for a company's
+documents (thousands to tens of thousands of chunks) that takes a few milliseconds and never
+misses the best chunk. Measured against the ChromaDB index used before (ADR-003): the same
+top-5 chunks for every evaluation question, 7x faster, without its 48 extra packages.
+
+The chunks are read into memory once and read again only when the file changes: by this
+store (it forgets them on every write) or by another process (SQLite's `data_version`).
+"""
 
 from __future__ import annotations
 
-import math
+import sqlite3
+import threading
 from collections.abc import Collection, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
-import chromadb
+import numpy as np
 
 from docassist.ingest.chunker import CHUNKING, starts_with_list_item
 from docassist.models import Chunk
 from docassist.retrieval.embedder import Embedder
 from docassist.retrieval.keywords import KeywordIndex
 
-DEFAULT_COLLECTION = "chunks"
-_ADD_BATCH = 1000
+INDEX_FILE = "index.sqlite"
+# The ChromaDB index of earlier versions: when only that one exists, the index is rebuilt.
+CHROMA_FILE = "chroma.sqlite3"
 # Hybrid search adds this many top keyword (BM25) hits that embedding search did not return.
 KEYWORD_EXTRA = 1
 # Chunks next to a hit on the same page go to the model with it, so a list or a paragraph cut
@@ -24,6 +36,24 @@ KEYWORD_EXTRA = 1
 # following chunks while they continue a list ("4) …", "- …"), up to `LIST_FOLLOW`.
 NEIGHBORS = 1
 LIST_FOLLOW = 3
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,                 -- embedder | chunking
+    value TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS chunks (
+    chunk_id  TEXT PRIMARY KEY,             -- "source::pN::i"
+    doc_id    TEXT NOT NULL,                -- hash of the file's content
+    source    TEXT NOT NULL,                -- file name
+    page      INTEGER NOT NULL,
+    position  INTEGER NOT NULL,             -- i: order of the chunk on its page
+    text      TEXT NOT NULL,
+    embedding BLOB NOT NULL                 -- float32, unit length
+);
+CREATE INDEX IF NOT EXISTS chunks_source ON chunks (source);
+CREATE INDEX IF NOT EXISTS chunks_doc ON chunks (doc_id);
+"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +76,21 @@ class EmbedderMismatchError(RuntimeError):
     """The index was built with a different embedder (or chunking) than the one in use now."""
 
 
+@dataclass
+class _Snapshot:
+    """Every chunk in reading order, with its embedding as a row of `vectors`."""
+
+    chunks: list[Chunk]
+    vectors: np.ndarray  # shape (chunks, dimensions), float32, unit rows
+    doc_ids: np.ndarray  # the chunks' doc ids, to limit a search to some documents
+    by_id: dict[str, int] = field(init=False)
+    keywords: KeywordIndex | None = None  # built on the first hybrid search
+    documents: list[DocumentInfo] | None = None  # built on the first `documents()`
+
+    def __post_init__(self) -> None:
+        self.by_id = {chunk.chunk_id: i for i, chunk in enumerate(self.chunks)}
+
+
 class VectorStore:
     """Stores chunks with their embeddings and finds the most similar ones to a query.
 
@@ -55,58 +100,58 @@ class VectorStore:
 
     def __init__(
         self,
-        path: str | Path | None,
+        path: str | Path,
         embedder: Embedder,
         *,
-        collection: str = DEFAULT_COLLECTION,
         rebuild: bool = False,
-        client: Any = None,
         hybrid: bool = True,
     ) -> None:
-        if client is None:
-            if path is None:
-                raise ValueError("Either path or client is required")
-            Path(path).mkdir(parents=True, exist_ok=True)
-            client = chromadb.PersistentClient(
-                path=str(path),
-                settings=chromadb.Settings(anonymized_telemetry=False),
+        folder = Path(path)
+        folder.mkdir(parents=True, exist_ok=True)
+        self.path = folder / INDEX_FILE
+        if not self.path.exists() and (folder / CHROMA_FILE).exists() and not rebuild:
+            raise EmbedderMismatchError(
+                "The index is in the format of an earlier version (ChromaDB). Rebuild the "
+                "index (cli: index data/documents --rebuild)."
             )
-        self._client = client
         self._embedder = embedder
-        self._name = collection
         self._hybrid = hybrid
-        self._keywords: KeywordIndex | None = None  # built on first search, dropped on change
-        # (chunk count, documents): reading every chunk's metadata takes ~40 ms per 1,000
-        # chunks, and the list is read by every citation click and every library refresh.
-        self._documents: tuple[int, list[DocumentInfo]] | None = None
+        self._lock = threading.Lock()  # one connection, shared by the server's threads
+        self._db = sqlite3.connect(self.path, timeout=30, check_same_thread=False)
+        self._snapshot: _Snapshot | None = None
+        self._version = -1  # SQLite's data_version when the snapshot was read
 
-        if rebuild and collection in {c.name for c in client.list_collections()}:
-            client.delete_collection(collection)
+        wanted = {"embedder": embedder.name, "chunking": CHUNKING}
+        with self._lock, self._db:
+            if rebuild:
+                self._db.executescript("DROP TABLE IF EXISTS chunks; DROP TABLE IF EXISTS settings")
+            self._db.executescript(_SCHEMA)
+            built_with = dict(self._db.execute("SELECT key, value FROM settings").fetchall())
+            if not built_with:  # a new index
+                self._db.executemany("INSERT INTO settings VALUES (?, ?)", wanted.items())
+                built_with = wanted
+        if built_with.get("embedder") != embedder.name:
+            raise EmbedderMismatchError(
+                f"Index was built with {built_with.get('embedder')!r} but the current embedder "
+                f"is {embedder.name!r}. Rebuild the index (cli: index data/documents --rebuild)."
+            )
+        if built_with.get("chunking") != CHUNKING:
+            raise EmbedderMismatchError(
+                f"Index was built with chunking {built_with.get('chunking')!r}, the current one "
+                f"is {CHUNKING!r}. Rebuild the index (cli: index data/documents --rebuild)."
+            )
 
-        self._collection = client.get_or_create_collection(
-            collection,
-            configuration={"hnsw": {"space": "cosine"}},
-            metadata={"embedder": embedder.name, "chunking": CHUNKING},
-            embedding_function=None,
-        )
-        meta = self._collection.metadata or {}
-        built_with = meta.get("embedder")
-        if built_with != embedder.name:
-            raise EmbedderMismatchError(
-                f"Index was built with {built_with!r} but the current embedder is "
-                f"{embedder.name!r}. Rebuild the index (cli: index data/documents --rebuild)."
-            )
-        if meta.get("chunking") != CHUNKING:
-            raise EmbedderMismatchError(
-                f"Index was built with chunking {meta.get('chunking')!r}, the current one is "
-                f"{CHUNKING!r}. Rebuild the index (cli: index data/documents --rebuild)."
-            )
+    def close(self) -> None:
+        self._db.close()
+
+    # --- changing the index ----------------------------------------------------------------
 
     def add_document(self, chunks: Sequence[Chunk]) -> int:
         """Index all chunks of one document. Returns the number of chunks embedded.
 
         Returns 0 when the same content is already indexed under the same name, so
-        re-running the indexer does not pay for embeddings again.
+        re-running the indexer does not pay for embeddings again. A new version replaces the
+        old one in one transaction: a search never sees half of each.
         """
         if not chunks:
             return 0
@@ -114,25 +159,33 @@ class VectorStore:
         if any(c.source != source or c.doc_id != doc_id for c in chunks):
             raise ValueError("add_document() expects the chunks of exactly one document")
 
-        existing = self._collection.get(where={"source": source}, include=["metadatas"])
-        existing_ids = {m["doc_id"] for m in existing["metadatas"] or []}
-        if existing_ids == {doc_id} and len(existing["ids"]) == len(chunks):
+        with self._lock:
+            existing = self._db.execute(
+                "SELECT doc_id, COUNT(*) FROM chunks WHERE source = ? GROUP BY doc_id", (source,)
+            ).fetchall()
+        if existing == [(doc_id, len(chunks))]:
             return 0
-        if existing["ids"]:
-            self._collection.delete(where={"source": source})
-            self._changed()
 
-        embeddings = self._embedder.embed([c.text for c in chunks])
-        for start in range(0, len(chunks), _ADD_BATCH):
-            batch = chunks[start : start + _ADD_BATCH]
-            self._collection.add(
-                ids=[c.chunk_id for c in batch],
-                embeddings=embeddings[start : start + _ADD_BATCH],
-                documents=[c.text for c in batch],
-                metadatas=[{"source": c.source, "page": c.page, "doc_id": c.doc_id} for c in batch],
-            )
-        self._changed()
+        vectors = _unit_rows(self._embedder.embed([c.text for c in chunks]))  # outside the lock
+        rows = [
+            (c.chunk_id, c.doc_id, c.source, c.page, _index(c.chunk_id), c.text, vector.tobytes())
+            for c, vector in zip(chunks, vectors, strict=True)
+        ]
+        with self._lock, self._db:
+            self._db.execute("DELETE FROM chunks WHERE source = ?", (source,))
+            self._db.executemany("INSERT INTO chunks VALUES (?, ?, ?, ?, ?, ?, ?)", rows)
+            self._snapshot = None
         return len(chunks)
+
+    def delete_document(self, doc_id: str) -> int:
+        """Remove every chunk of a document. Returns the number of chunks removed."""
+        with self._lock, self._db:
+            removed = self._db.execute("DELETE FROM chunks WHERE doc_id = ?", (doc_id,)).rowcount
+            if removed:
+                self._snapshot = None
+        return removed
+
+    # --- reading it ------------------------------------------------------------------------
 
     def search(
         self, query: str, k: int = 5, doc_ids: Collection[str] | None = None
@@ -146,27 +199,31 @@ class VectorStore:
         questions out of the top k, because keywords cannot match across languages
         (measured in docs/EVAL_RESULTS.md, ADR-023). `score` is always the cosine similarity.
         """
-        if k <= 0 or self.count() == 0 or (doc_ids is not None and not doc_ids):
+        snapshot = self._current()
+        if k <= 0 or not snapshot.chunks or (doc_ids is not None and not doc_ids):
             return []
-        query_embedding = self._embedder.embed_query(query)
-        hits = self._vector_search(query_embedding, min(k, self.count()), doc_ids)
+        scores = snapshot.vectors @ _unit_rows([self._embedder.embed_query(query)])[0]
+        if doc_ids is not None:
+            scores = np.where(np.isin(snapshot.doc_ids, list(doc_ids)), scores, -np.inf)
+        candidates = int(np.isfinite(scores).sum())
+        best = np.argsort(-scores, kind="stable")[: min(k, candidates)]
+        hits = [SearchResult(snapshot.chunks[i], float(scores[i])) for i in best]
         if not self._hybrid:
             return hits
 
+        if snapshot.keywords is None:
+            snapshot.keywords = KeywordIndex(snapshot.chunks)
         seen = {hit.chunk.chunk_id for hit in hits}
-        keyword_hits = self._keyword_index().search(query, k, doc_ids)
+        keyword_hits = snapshot.keywords.search(query, k, doc_ids)
         extra = [
             (rank, chunk)
             for rank, (chunk, _) in enumerate(keyword_hits, start=1)
             if chunk.chunk_id not in seen
         ][:KEYWORD_EXTRA]
-        if extra:
-            scored = self._scored([chunk.chunk_id for _, chunk in extra], query_embedding)
-            hits += [
-                SearchResult(chunk, scored[chunk.chunk_id].score, keyword_rank=rank)
-                for rank, chunk in extra
-            ]
-        return hits
+        return hits + [
+            SearchResult(chunk, float(scores[snapshot.by_id[chunk.chunk_id]]), keyword_rank=rank)
+            for rank, chunk in extra
+        ]
 
     def with_neighbors(
         self, results: Sequence[SearchResult], window: int = NEIGHBORS
@@ -178,149 +235,103 @@ class VectorStore:
         """
         if window <= 0 or not results:
             return list(results)
-        positions = {r.chunk.chunk_id: _position(r.chunk.chunk_id) for r in results}
-        wanted = {
-            f"{prefix}::{i}"
-            for prefix, index in filter(None, positions.values())
-            for i in range(max(0, index - window), index + window + LIST_FOLLOW + 1)
-        }
-        found = self._collection.get(ids=sorted(wanted), include=["documents", "metadatas"])
-        nearby = {
-            chunk_id: _chunk(chunk_id, text, meta)
-            for chunk_id, text, meta in zip(
-                found["ids"], found["documents"], found["metadatas"], strict=True
-            )
-        }
+        snapshot = self._current()
 
-        seen = set(positions)
+        def nearby(chunk_id: str) -> Chunk | None:
+            index = snapshot.by_id.get(chunk_id)
+            return None if index is None else snapshot.chunks[index]
+
+        seen = {r.chunk.chunk_id for r in results}
         added: list[SearchResult] = []
         for hit in results:
-            position = positions[hit.chunk.chunk_id]
+            position = _position(hit.chunk.chunk_id)
             if position is None:
                 continue
             prefix, index = position
             ids = [f"{prefix}::{i}" for i in range(max(0, index - window), index + window + 1)]
             last = index + window
             while last - index - window < LIST_FOLLOW:
-                following = nearby.get(f"{prefix}::{last + 1}")
+                following = nearby(f"{prefix}::{last + 1}")
                 if following is None or not starts_with_list_item(following.text):
                     break
                 last += 1
                 ids.append(following.chunk_id)
             for chunk_id in ids:
-                if chunk_id in nearby and chunk_id not in seen:
+                chunk = nearby(chunk_id)
+                if chunk is not None and chunk_id not in seen:
                     seen.add(chunk_id)
-                    added.append(SearchResult(nearby[chunk_id], hit.score, neighbor=True))
+                    added.append(SearchResult(chunk, hit.score, neighbor=True))
         return [*results, *added]
 
-    def _vector_search(
-        self, query_embedding: list[float], n: int, doc_ids: Collection[str] | None = None
-    ) -> list[SearchResult]:
-        where = None if doc_ids is None else {"doc_id": {"$in": sorted(doc_ids)}}
-        result = self._collection.query(
-            query_embeddings=[query_embedding],
-            n_results=n,
-            where=where,
-            include=["documents", "metadatas", "distances"],
-        )
-        return [
-            SearchResult(chunk=_chunk(chunk_id, text, meta), score=1.0 - distance)
-            for chunk_id, text, meta, distance in zip(
-                result["ids"][0],
-                result["documents"][0],
-                result["metadatas"][0],
-                result["distances"][0],
-                strict=True,
-            )
-        ]
-
-    def _scored(self, ids: list[str], query_embedding: list[float]) -> dict[str, SearchResult]:
-        found = self._collection.get(ids=ids, include=["documents", "metadatas", "embeddings"])
-        results = {}
-        for chunk_id, text, meta, vector in zip(
-            found["ids"], found["documents"], found["metadatas"], found["embeddings"], strict=True
-        ):
-            results[chunk_id] = SearchResult(
-                _chunk(chunk_id, text, meta), _cosine(query_embedding, list(vector))
-            )
-        return results
-
-    def _keyword_index(self) -> KeywordIndex:
-        # Rebuilt when another process (UI and API share the index) changed the collection.
-        if self._keywords is None or len(self._keywords) != self.count():
-            found = self._collection.get(include=["documents", "metadatas"])
-            self._keywords = KeywordIndex(
-                [
-                    _chunk(chunk_id, text, meta)
-                    for chunk_id, text, meta in zip(
-                        found["ids"], found["documents"], found["metadatas"], strict=True
-                    )
-                ]
-            )
-        return self._keywords
-
-    def _changed(self) -> None:
-        """Forget what was derived from the chunks (after adding or deleting some)."""
-        self._keywords = None
-        self._documents = None
-
     def documents(self) -> list[DocumentInfo]:
-        """All indexed documents, sorted by name.
-
-        Kept until this store changes the index; like the keyword index, it is also read
-        again when the number of chunks changed (another process added or deleted some).
-        """
-        count = self.count()
-        if self._documents is None or self._documents[0] != count:
-            self._documents = (count, self._read_documents())
-        return list(self._documents[1])
-
-    def _read_documents(self) -> list[DocumentInfo]:
-        metadatas = self._collection.get(include=["metadatas"])["metadatas"] or []
-        grouped: dict[str, dict[str, Any]] = {}
-        for meta in metadatas:
-            info = grouped.setdefault(
-                meta["doc_id"], {"source": meta["source"], "chunks": 0, "pages": set()}
-            )
-            info["chunks"] += 1
-            info["pages"].add(meta["page"])
-        docs = [
-            DocumentInfo(doc_id, info["source"], info["chunks"], len(info["pages"]))
-            for doc_id, info in grouped.items()
-        ]
-        return sorted(docs, key=lambda d: d.source.lower())
+        """All indexed documents, sorted by name."""
+        snapshot = self._current()
+        if snapshot.documents is None:
+            grouped: dict[str, tuple[str, int, set[int]]] = {}
+            for chunk in snapshot.chunks:
+                source, count, pages = grouped.get(chunk.doc_id, (chunk.source, 0, set()))
+                pages.add(chunk.page)
+                grouped[chunk.doc_id] = (source, count + 1, pages)
+            docs = [
+                DocumentInfo(doc_id, source, count, len(pages))
+                for doc_id, (source, count, pages) in grouped.items()
+            ]
+            snapshot.documents = sorted(docs, key=lambda d: d.source.lower())
+        return list(snapshot.documents)
 
     def document_chunks(self, source: str) -> list[Chunk]:
         """All chunks of one document (by file name), in reading order."""
-        found = self._collection.get(where={"source": source}, include=["documents", "metadatas"])
-        chunks = [
-            Chunk(chunk_id, meta["doc_id"], meta["source"], int(meta["page"]), text)
-            for chunk_id, text, meta in zip(
-                found["ids"], found["documents"] or [], found["metadatas"] or [], strict=True
-            )
-        ]
-        return sorted(chunks, key=lambda c: (c.page, int(c.chunk_id.rsplit("::", 1)[-1])))
-
-    def delete_document(self, doc_id: str) -> int:
-        """Remove every chunk of a document. Returns the number of chunks removed."""
-        ids = self._collection.get(where={"doc_id": doc_id})["ids"]
-        if ids:
-            self._collection.delete(ids=ids)
-            self._changed()
-        return len(ids)
+        return [c for c in self._current().chunks if c.source == source]
 
     def count(self) -> int:
-        return self._collection.count()
+        return len(self._current().chunks)
+
+    def _current(self) -> _Snapshot:
+        """The chunks in memory, read again when the index file changed."""
+        with self._lock:
+            version = self._db.execute("PRAGMA data_version").fetchone()[0]
+            if self._snapshot is None or version != self._version:
+                self._snapshot = self._read()
+                self._version = version
+            return self._snapshot
+
+    def _read(self) -> _Snapshot:
+        rows = self._db.execute(
+            "SELECT chunk_id, doc_id, source, page, text, embedding FROM chunks"
+            " ORDER BY source, page, position"
+        ).fetchall()
+        chunks = [Chunk(*row[:5]) for row in rows]
+        blobs = b"".join(row[5] for row in rows)
+        vectors = np.frombuffer(blobs, dtype=np.float32).reshape(len(rows), -1 if rows else 0)
+        return _Snapshot(chunks, vectors, np.array([c.doc_id for c in chunks], dtype=object))
 
 
-def _chunk(chunk_id: str, text: str, meta: dict[str, Any]) -> Chunk:
-    return Chunk(
-        chunk_id=chunk_id,
-        doc_id=meta["doc_id"],
-        source=meta["source"],
-        page=int(meta["page"]),
-        text=text,
-    )
+def indexed_sources(index_dir: Path) -> set[str]:
+    """File names of the documents in an index folder, without opening it as a store: also
+    from an index of an earlier version (ChromaDB), so a rebuild can check that every
+    document has an original to be rebuilt from."""
+    for name, sql in (
+        (INDEX_FILE, "SELECT DISTINCT source FROM chunks"),
+        (CHROMA_FILE, "SELECT DISTINCT string_value FROM embedding_metadata WHERE key = 'source'"),
+    ):
+        path = index_dir / name
+        if not path.exists():
+            continue
+        db = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+        try:
+            return {str(row[0]) for row in db.execute(sql)}
+        except sqlite3.OperationalError:  # no table yet: an empty index
+            return set()
+        finally:
+            db.close()
+    return set()
+
+
+def _unit_rows(vectors: Sequence[Sequence[float]]) -> np.ndarray:
+    """The vectors as float32 rows of length 1, so a dot product is the cosine similarity."""
+    matrix = np.asarray(vectors, dtype=np.float32)
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    return np.divide(matrix, norms, out=np.zeros_like(matrix), where=norms > 0)
 
 
 def _position(chunk_id: str) -> tuple[str, int] | None:
@@ -329,6 +340,6 @@ def _position(chunk_id: str) -> tuple[str, int] | None:
     return (prefix, int(index)) if prefix and index.isdigit() else None
 
 
-def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
-    norm = math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
-    return sum(x * y for x, y in zip(a, b, strict=True)) / norm if norm else 0.0
+def _index(chunk_id: str) -> int:
+    position = _position(chunk_id)
+    return position[1] if position else 0

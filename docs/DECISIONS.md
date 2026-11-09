@@ -15,7 +15,7 @@ Ako se odluka promeni, ne briši staru: označi je kao *Zamenjena sa ADR-XXX*.
 **Zašto:** cilj je da na razgovoru za posao mogu da objasnim svaki korak; manje magije, lakše debagovanje.
 **Alternativa:** LlamaIndex — brže na početku, ali skriva detalje.
 
-### ADR-003 · ChromaDB kao vektorska baza
+### ADR-003 · ChromaDB kao vektorska baza (zamenjeno: ADR-044)
 **Odluka:** Chroma u lokalnom (persist) režimu, folder `data/index/`.
 **Zašto:** bez servera i Docker-a za start, dovoljno za demo.
 **Alternativa:** Postgres + pgvector (produkcijski izbor; moguća migracija kasnije).
@@ -642,4 +642,37 @@ osvežavanje indeksa) su se gubile, a upozorenja izlazila bez vremena — na ser
 tastature je Tab-om išao po stranici ispod. Provereno u browseru: fokus, Tab ×25 unutar dijaloga,
 povratak fokusa, `aria-busy` tačno/netačno; u logu servera se vidi "Watching … for new documents".
 **Cena:** nova dugmad u dijalozima moraju biti pravi `button`/`a`/`input` da bi ih Tab našao.
+
+### ADR-044 · Indeks u SQLite-u sa egzaktnom pretragom (numpy) umesto ChromaDB-a
+**Odluka:** `VectorStore` (`retrieval/store.py`) čuva delove, njihove embeddings (float32, dužine 1)
+i podešavanja indeksa (embedder, `CHUNKING`) u jednom SQLite fajlu `INDEX_DIR/index.sqlite`.
+Pretraga poredi pitanje sa **svim** delovima (jedan proizvod matrice u numpy-ju) umesto približnog
+HNSW indeksa. Delovi se čitaju u memoriju jednom i ponovo samo kad se fajl promeni: ovaj store ih
+zaboravlja pri svakoj izmeni, a izmenu iz drugog procesa javlja SQLite (`PRAGMA data_version`) —
+to zamenjuje pravilo "isti broj delova" iz ADR-042. Nova verzija dokumenta zamenjuje staru u
+jednoj transakciji. Javni API je isti, ostatak aplikacije se nije menjao. Indeks starog formata
+(postoji samo `chroma.sqlite3`) se prepoznaje kao zastareo, pa ga aplikacija sama pravi iz
+originala (ADR-032); spisak njegovih dokumenata se čita direktno iz Chroma-inog SQLite fajla, pa
+dokument bez originala i dalje zaustavlja ponovno pravljenje. Stari fajlovi se ne brišu.
+`numpy` je sada navedena zavisnost (bio je samo posredan, preko fastembed-a); `chromadb` je uklonjen.
+**Zašto:** izmereno na pravom indeksu (946 delova) i eval skupu:
+
+| | ChromaDB (HNSW) | SQLite + numpy |
+|---|---|---|
+| Isti top-5 kao druga strana, 33 pitanja | — | 33/33 identično |
+| Eval pretrage, 36 pitanja (strana / činjenice u top-5) | 100 % / 100 % | 100 % / 100 % |
+| Pretraga (bez računanja vektora pitanja) | 1,79 ms | 0,24 ms |
+| 50.000 delova (sintetički) | — | 3,4 ms, 77 MB RAM |
+| Paketi samo za vektorsku bazu | 48 (168 MB: kubernetes, grpc, opentelemetry…) | 0 |
+| `import` pri pokretanju | 1,7 s | — |
+
+HNSW se isplati tek na milionima vektora; za dokumente jedne firme je samo teret, uz prijavljene
+ranjivosti u Chroma-inom serverskom delu i sporo čitanje metapodataka (lista dokumenata 42 ms).
+Razmotreno: sqlite-vec (dodatna ekstenzija pre verzije 1.0, učitavanje ekstenzija nije svuda
+dozvoljeno), LanceDB (pyarrow, veći od Chroma-e), Qdrant/pgvector (poseban server). Prelazak
+proveren na kopiji pravih podataka: 7 dokumenata i 946 delova kao pre, za 228 s (najviše OCR skena
+od 96 strana), pitanje, citat i pregled rade.
+**Cena:** svi vektori su u memoriji (~1,5 KB po delu: 77 MB za 50.000). Iznad nekoliko stotina
+hiljada delova trebalo bi preći na približan indeks (npr. sqlite-vec ili Qdrant) iza istog API-ja.
+Prvo pokretanje posle nadogradnje ponovo pravi indeks (OCR skenova traje).
 

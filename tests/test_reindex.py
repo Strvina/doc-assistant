@@ -1,12 +1,12 @@
 """A stale index is rebuilt by the web app from the stored originals (ADR-032)."""
 
 import shutil
+import sqlite3
 import threading
 import time
 from dataclasses import replace
 from pathlib import Path
 
-import chromadb
 import pytest
 from fastapi.testclient import TestClient
 
@@ -57,10 +57,49 @@ def wait_for_rebuild(app, timeout=60.0):
 
 
 def chunk_count(settings):
-    client = chromadb.PersistentClient(
-        path=str(settings.index_dir), settings=chromadb.Settings(anonymized_telemetry=False)
+    db = sqlite3.connect(settings.index_dir / store_module.INDEX_FILE)
+    try:
+        return db.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+    finally:
+        db.close()
+
+
+def chroma_index(settings, *sources):
+    """What an index of an earlier version (ChromaDB) looks like on disk: its SQLite file
+    names the documents in `embedding_metadata`."""
+    settings.index_dir.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(settings.index_dir / store_module.CHROMA_FILE)
+    db.execute("CREATE TABLE embedding_metadata (id INTEGER, key TEXT, string_value TEXT)")
+    db.executemany(
+        "INSERT INTO embedding_metadata VALUES (1, 'source', ?)", [(s,) for s in sources]
     )
-    return client.get_collection(store_module.DEFAULT_COLLECTION).count()
+    db.commit()
+    db.close()
+
+
+def test_an_index_of_an_earlier_version_is_rebuilt_from_the_originals(settings):
+    chroma_index(settings, "faq.txt")
+    store_originals(settings, "faq.txt")
+    app, client = app_client(settings)
+
+    assert client.get("/documents").status_code == 503  # the rebuild starts
+    wait_for_rebuild(app)
+
+    assert [d["source"] for d in client.get("/documents").json()] == ["faq.txt"]
+    assert chunk_count(settings) > 0
+    assert (settings.index_dir / store_module.CHROMA_FILE).exists()  # the old files stay
+
+
+def test_an_index_of_an_earlier_version_is_kept_while_originals_are_missing(settings):
+    chroma_index(settings, "faq.txt", "only_indexed.pdf")
+    store_originals(settings, "faq.txt")
+    _app, client = app_client(settings)
+
+    response = client.get("/documents")
+
+    assert response.status_code == 503
+    assert "only_indexed.pdf" in response.json()["detail"]
+    assert not (settings.index_dir / store_module.INDEX_FILE).exists()  # nothing replaced
 
 
 def test_a_stale_index_is_rebuilt_from_the_originals(settings, monkeypatch):

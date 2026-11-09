@@ -22,7 +22,7 @@ Ako odgovor nije u dokumentima, bot to kaže umesto da izmišlja.
 ## Stack (detalji u `docs/DECISIONS.md`)
 
 Python 3.12 · uv · Claude API (OpenAI opciono, ADR-018) · besplatni Groq/Gemini za demo (ADR-021/022) · lokalni višejezični embeddings
-(fastembed, ADR-019) · ChromaDB · FastAPI + sopstveni web UI (ADR-020) · n8n · ruff + pytest ·
+(fastembed, ADR-019) · SQLite + numpy indeks (ADR-044) · FastAPI + sopstveni web UI (ADR-020) · n8n · ruff + pytest ·
 GitHub Actions · Docker / Hugging Face Spaces
 
 ## Trenutno stanje
@@ -62,13 +62,16 @@ GitHub Actions · Docker / Hugging Face Spaces
   `content-visibility` za poruke. Pomoćnik `whenReached`/`revealList` u `app.js`.
 - **Bezbednost (ADR-041):** POST/PUT/PATCH/DELETE sa stranice drugog sajta → 403 (CSRF, `block_cross_site`);
   limit po IP-u broji adresu veze, ne `X-Forwarded-For`; stranica `/` ima CSP (inline skripta preko sha256).
-  Provereno u browseru: bez CSP prekršaja. `chromadb` 1.5.9 ima prijavljene ranjivosti samo u Chroma HTTP
-  serveru, koji aplikacija ne koristi (indeks se otvara iz fajla); ispravka još ne postoji.
+  Provereno u browseru: bez CSP prekršaja.
 - **Performanse (ADR-042):** lista dokumenata u memoriji (42 → 0,6 ms; briše se pri promeni indeksa ili broja
   delova), jedan HTTP klijent po servisu i ključu (`shared_client`, timeout 120/300 s), stranice razgovora u SQL-u,
   odgovor koji stiže crta se jednom po frejmu.
 - **Pouzdanost i pristupačnost (ADR-043):** logovi aplikacije (`docassist.*`, INFO, sa vremenom) se vide uz
   uvicorn-ove; dijalozi drže fokus (otvaranje, Tab, povratak na dugme); `aria-busy` dok odgovor stiže.
+- **Indeks bez ChromaDB-a (ADR-044):** `INDEX_DIR/index.sqlite` + egzaktna pretraga u numpy (isti top-5 33/33,
+  eval 100 %, pretraga 1,8 → 0,24 ms, 48 paketa / 168 MB manje). Stari Chroma indeks → aplikacija sama pravi nov
+  iz originala (~4 min sa skenom od 96 strana). Stari fajlovi (`chroma.sqlite3` + folderi sa UUID imenima u
+  `data/index`) ostaju i mogu da se obrišu ručno.
 - **Kvalitet koda (ADR-033):** `api.py` podeljen na paket `docassist/api/` (ruteri po oblastima, `deps`,
   `security`, `schemas`); strogi `mypy` obavezan (CI + pre commita); šira ruff pravila. Pokrivenost 95 %.
 - **Samoosvežavanje indeksa (ADR-032):** zastareo ili nedovršen indeks web aplikacija pravi sama iz
@@ -244,3 +247,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-09 | Revizija 1/3 — bezbednost: CSRF zaštita, limit po IP-u bez lažnog zaglavlja, CSP za stranicu; ADR-041 | #41 |
 | 2026-11-09 | Revizija 2/3 — performanse: lista dokumenata u memoriji, deljeni HTTP klijenti sa timeout-om, stranice razgovora u SQL-u, crtanje po frejmu; ADR-042 | #42 |
 | 2026-11-09 | Revizija 3/3 — logovi aplikacije vidljivi, fokus u dijalozima, `aria-busy`; ADR-043 | #43 |
+| 2026-11-09 | Indeks u SQLite-u + numpy umesto ChromaDB-a (izmereno: isti pogoci, brže, 48 paketa manje); ADR-044 | #44 |
