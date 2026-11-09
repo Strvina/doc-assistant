@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from docassist.db import Database
 from docassist.ingest import DocumentLoadError
 from docassist.ingest.loaders import SUPPORTED_EXTENSIONS
 from docassist.library import Library
@@ -87,13 +88,10 @@ class ImportLog:
     """
 
     def __init__(self, path: Path) -> None:
-        self._path = path
+        self._db = Database(path, lambda db: db.executescript(self._SCHEMA))
 
     def _connect(self) -> sqlite3.Connection:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        db = sqlite3.connect(self._path)
-        db.executescript(self._SCHEMA)
-        return db
+        return self._db.connect()
 
     def add(self, items: Iterable[Imported]) -> None:
         rows = [(i.at, i.source, i.status, i.chunks_added, i.error) for i in items]

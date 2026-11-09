@@ -107,6 +107,7 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 - [x] Pouzdanost i pristupačnost: logovi aplikacije vidljivi uz uvicorn-ove, fokus u dijalozima (otvaranje, Tab, povratak), `aria-busy` dok odgovor stiže (ADR-043)
 - [x] Indeks u SQLite-u sa egzaktnom pretragom (numpy) umesto ChromaDB-a: isti pogoci, brže, 48 paketa manje (ADR-044)
 - [x] Pregled citata na skenu: tekst strane se pamti (8,1 s → 0,12 s od drugog klika, ADR-045)
+- [x] SQLite za više korisnika odjednom (WAL, bez `database is locked`); PostgreSQL razmotren i odbijen (ADR-046)
 
 ## Dodatno — formati
 

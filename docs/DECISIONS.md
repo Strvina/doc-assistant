@@ -687,3 +687,25 @@ je svaki klik čekao ceo OCR.
 **Cena:** do ~200 strana teksta u memoriji (nekoliko MB); prvi klik na novu stranu skena i dalje
 čeka OCR.
 
+### ADR-046 · SQLite za više korisnika odjednom (WAL), a ne PostgreSQL
+**Odluka:** log pitanja, razgovori, sesije i istorija uvoza ostaju u jednom SQLite fajlu
+(`LOG_DB`), ali kroz `db.Database` (`db.py`): WAL režim (upis ne blokira čitanje i obrnuto),
+`synchronous=NORMAL`, čekanje na zaključan fajl do 30 s i tabele/migracije jednom po objektu
+umesto pri svakoj vezi. PostgreSQL se ne uvodi.
+**Zašto:** opterećenje sa 40 istovremenih "pitanja" (upis u log, nov razgovor, odgovor, statistika
+— koliko server najviše radi odjednom) je pre ove izmene padalo sa `database is locked` (izgubljen
+već plaćen odgovor). Posle: bez greške, ~100 sačuvanih pitanja u sekundi (pre: ~33 sa jednim
+korisnikom), p95 0,96 s pri 40 odjednom. Pravo opterećenje je daleko manje: 200 zaposlenih × 1
+pitanje na minut = 3,3 u sekundi, a odgovor modela (~1 s) traje mnogo duže od upisa (ms).
+PostgreSQL bi doneo drugi servis za rad, nadogradnje i rezervne kopije (i lozinku), drajver,
+alat za migracije, Postgres u testovima i CI-ju i u lokalnom radu na Windows-u — a rešava probleme
+koje ova aplikacija nema: više servera aplikacije iza load balancer-a, mnogo istovremenih upisa,
+prava pristupa u bazi. pgvector ne bi bio brži od pretrage u memoriji (ADR-044).
+**Kada preći:** kad aplikacija radi na više servera odjednom, kad uvede naloge i prava po
+korisniku sa složenim upitima, ili kad firma traži upravljanu bazu (rezervne kopije, replika).
+Prelazak je ograničen: `QueryLog`, `ConversationStore`, `ImportLog` i `VectorStore` su jedina mesta
+sa SQL-om.
+**Cena:** pored fajla nastaju `logs.sqlite-wal` i `-shm` dok aplikacija radi (spajaju se u fajl
+kad se zatvori; rezervna kopija na serveru pauzira aplikaciju, ADR-040). WAL ne radi na mrežnom
+disku — `LOG_DB` mora biti na lokalnom disku servera.
+
