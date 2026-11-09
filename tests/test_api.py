@@ -1,4 +1,5 @@
 import json
+import logging
 from dataclasses import replace
 from pathlib import Path
 
@@ -559,3 +560,23 @@ def test_monitoring_lists_come_page_by_page(client):
     gaps = client.get("/queries", params={"kind": "gaps"}).json()
     assert "Kvantna gravitacija?" in [q["question"] for q in gaps["items"]]
     assert client.get("/queries", params={"kind": "sve"}).status_code == 422
+
+
+def test_the_apps_log_lines_are_shown(monkeypatch):
+    from docassist.api.app import setup_logging
+
+    logger = logging.getLogger("docassist")
+    monkeypatch.setattr(logger, "handlers", [])
+    monkeypatch.setattr(logger, "level", logging.NOTSET)
+    monkeypatch.setattr(logging.getLogger(), "handlers", [])
+
+    setup_logging()
+    setup_logging()  # once is enough
+
+    assert len(logger.handlers) == 1
+    assert logger.getEffectiveLevel() == logging.INFO
+
+    monkeypatch.setattr(logger, "handlers", [])
+    monkeypatch.setattr(logging.getLogger(), "handlers", [logging.NullHandler()])
+    setup_logging()  # configured elsewhere (--log-config): left alone
+    assert logger.handlers == []
