@@ -6,7 +6,7 @@ Click a citation and the original opens at that page with the passage highlighte
 When the answer is not in the documents, it says so instead of guessing.
 
 [![CI](https://github.com/Strvina/doc-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/Strvina/doc-assistant/actions/workflows/ci.yml)
-· Python 3.12 · Claude API (Groq / Gemini free tiers for the demo) · FastAPI · ChromaDB · local multilingual embeddings · n8n
+· Python 3.12 · Claude API (Groq / Gemini free tiers for the demo) · FastAPI · SQLite + numpy (exact vector search) · local multilingual embeddings · n8n
 
 ![Answer with a highlighted source page](docs/images/answer-viewer.png)
 
@@ -35,7 +35,7 @@ When the answer is not in the documents, it says so instead of guessing.
 flowchart LR
     subgraph ingest[Indexing — on the server]
         F[PDF / DOCX / XLSX / PPTX / TXT] --> L[Loaders<br/>keep page numbers] --> C[Chunker<br/>500 chars, per page]
-        C --> E[Multilingual embeddings<br/>local ONNX model] --> V[(ChromaDB)]
+        C --> E[Multilingual embeddings<br/>local ONNX model] --> V[(SQLite index<br/>exact search, numpy)]
         F --> O[(Original files<br/>for the viewer)]
     end
     subgraph ask[Answering]

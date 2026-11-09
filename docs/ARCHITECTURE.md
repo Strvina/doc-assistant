@@ -8,7 +8,7 @@
    terminal ──▶ cli.py ─────────────────────────────────┘          │      (X-API-Key)
                                                                    ▼
                         ┌──────────────────────── docassist (core) ────────────────────────┐
-   index:  fajl ──▶ Library ──▶ loaders ──▶ chunker ──▶ LocalEmbedder ──▶ VectorStore (Chroma)
+   index:  fajl ──▶ Library ──▶ loaders ──▶ chunker ──▶ LocalEmbedder ──▶ VectorStore (SQLite + numpy)
                       └──▶ kopija originala (DOCUMENTS_DIR) ──▶ viewer (PDF highlight / HTML strane)
    ask:   pitanje ──▶ retrieve ──▶ + susedni delovi ──▶ prompt ──▶ ClaudeProvider ──▶ odgovor + provereni citati
    agent: Claude bira alate: search / list / summarize / escalate (webhook → n8n) / leave request
@@ -28,7 +28,7 @@ src/docassist/
     pipeline.py       # ingest(path), document_id(path)
   retrieval/
     embedder.py       # Embedder: LocalEmbedder (fastembed), OpenAIEmbedder, FakeEmbedder
-    store.py          # VectorStore nad Chroma: add/replace, search, documents, delete
+    store.py          # VectorStore: SQLite fajl + egzaktna pretraga u numpy (ADR-044)
   library.py          # Library = indeks + kopije originala; safe_name, guess_language
   reindex.py          # zastareo indeks → pravljenje iz originala u pozadini (ADR-032)
   viewer.py           # PDF sa highlight anotacijama; DOCX/TXT/MD → HTML "papir" strane

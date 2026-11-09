@@ -1,6 +1,7 @@
 """Rebuild a stale index in the background, from the stored originals (ADR-032).
 
-An index built with another embedder or another chunking (`CHUNKING`) cannot be searched.
+An index built with another embedder or another chunking (`CHUNKING`), or in the format of an
+earlier version (ChromaDB, ADR-044), cannot be searched.
 The web app then rebuilds it by itself instead of failing until someone runs
 `index --rebuild`: every original in DOCUMENTS_DIR is indexed again, and the UI shows how far
 it is. Nothing is deleted when an indexed document has no original to rebuild it from.
@@ -17,14 +18,12 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import chromadb
-
 from docassist.config import Settings
 from docassist.factory import build_library
 from docassist.ingest import DocumentLoadError
 from docassist.ingest.loaders import SUPPORTED_EXTENSIONS
 from docassist.library import Library
-from docassist.retrieval.store import DEFAULT_COLLECTION
+from docassist.retrieval.store import indexed_sources
 
 log = logging.getLogger(__name__)
 
@@ -76,13 +75,7 @@ def originals(documents_dir: Path) -> list[Path]:
 
 def missing_originals(settings: Settings) -> list[str]:
     """Indexed documents without a stored original: a rebuild would lose them."""
-    client = chromadb.PersistentClient(
-        path=str(settings.index_dir), settings=chromadb.Settings(anonymized_telemetry=False)
-    )
-    if DEFAULT_COLLECTION not in {c.name for c in client.list_collections()}:
-        return []
-    metadatas = client.get_collection(DEFAULT_COLLECTION).get(include=["metadatas"])["metadatas"]
-    sources = {str(meta["source"]) for meta in metadatas or []}
+    sources = indexed_sources(settings.index_dir)  # also from an index of an earlier version
     stored = {p.name for p in originals(settings.documents_dir)}
     return sorted(sources - stored, key=str.lower)
 

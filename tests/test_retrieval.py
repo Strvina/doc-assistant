@@ -191,12 +191,13 @@ def test_document_list_is_read_once_until_the_index_changes(tmp_path, monkeypatc
     store = VectorStore(tmp_path, FakeEmbedder())
     store.add_document([chunk("a.pdf", 1, 0, "first", doc_id="A1")])
     reads = []
-    original = store._read_documents
-    monkeypatch.setattr(store, "_read_documents", lambda: reads.append(1) or original())
+    original = store._read
+    monkeypatch.setattr(store, "_read", lambda: reads.append(1) or original())
 
     store.documents()
+    store.search("first")
     store.documents()
-    assert len(reads) == 1  # the second call is served from memory
+    assert len(reads) == 1  # read from the file once, then served from memory
 
     # A new version with the same number of chunks: the count alone would not show it.
     store.add_document([chunk("a.pdf", 1, 0, "second", doc_id="A2")])
