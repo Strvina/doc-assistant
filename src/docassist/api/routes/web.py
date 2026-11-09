@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
+import re
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +13,7 @@ from fastapi.responses import HTMLResponse
 
 from docassist import __version__
 from docassist.api.deps import ConversationsDep, SettingsDep, get_library
-from docassist.api.security import ensure_session
+from docassist.api.security import ensure_session, page_policy
 from docassist.ingest.loaders import SUPPORTED_EXTENSIONS
 
 WEB_DIR = Path(__file__).resolve().parents[2] / "web"
@@ -29,9 +31,25 @@ router = APIRouter()
 
 @router.get("/", include_in_schema=False)
 def index(request: Request, settings: SettingsDep, conversations: ConversationsDep) -> Response:
-    response = HTMLResponse(_index_html(), headers={"Cache-Control": "no-cache"})
+    page = _index_html()
+    headers = {
+        "Cache-Control": "no-cache",
+        "Content-Security-Policy": page_policy(settings, inline_script_hashes(page)),
+    }
+    response = HTMLResponse(page, headers=headers)
     ensure_session(request, response, settings, conversations)
     return response
+
+
+_INLINE_SCRIPT = re.compile(r"<script>(.*?)</script>", re.DOTALL)
+
+
+def inline_script_hashes(page: str) -> list[str]:
+    """The CSP hashes (sha256, base64) of the page's inline scripts: only those may run."""
+    return [
+        base64.b64encode(hashlib.sha256(script.encode()).digest()).decode()
+        for script in _INLINE_SCRIPT.findall(page)
+    ]
 
 
 @router.get("/api/config")

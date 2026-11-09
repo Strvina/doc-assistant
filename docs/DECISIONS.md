@@ -584,3 +584,26 @@ webhook, fajl koji n8n upiše u `/inbox` uvezen, rezervna kopija napravljena i v
 **Cena:** jedna zajednička lozinka (nema "ko je šta pitao" po osobi). Rezervne kopije su na istom
 serveru dok ih neko ne kopira dalje. "Otvori folder" i Windows prozor za izbor ne postoje na serveru.
 Prvo pravljenje slike na serveru traje ~10 min.
+
+### ADR-041 · Zahtevi sa tuđih sajtova, limit po IP-u i CSP
+**Odluka:** (1) Middleware `block_cross_site` (`api/security.py`) odbija (403) svaki POST/PUT/PATCH/
+DELETE koji browser šalje sa stranice drugog sajta: gleda `Sec-Fetch-Site` (`same-origin` i `none`
+prolaze), a stariji browseri samo `Origin` (mora da odgovara `Host`-u). Integracije (n8n, curl) ne
+šalju ta zaglavlja, pa ih ovo ne dotiče. (2) Limit pitanja po IP-u broji adresu same veze
+(`request.client.host`), a ne prvu adresu iz `X-Forwarded-For` koju klijent može da izmisli; iza
+proksija (Caddy, Docker) uvicorn tu adresu uzima iz zaglavlja samo kad je proksi poverljiv
+(`--forwarded-allow-ips`), a Caddy zaglavlje od klijenta ne prosleđuje. (3) Stranica aplikacije
+(`/`) ima Content-Security-Policy: skripte, stilovi i zahtevi samo sa ovog servera, plus jedna
+inline skripta (tema pre prvog crtanja) preko svog sha256 otiska koji server računa iz
+`index.html`.
+**Zašto:** bez `API_TOKEN`-a (podrazumevano) svaki sajt koji korisnik otvori mogao je da pošalje
+upload u biblioteku, "Proveri sada" ili pitanje koje troši limit — obrazac (`multipart/form-data`)
+ne traži dozvolu browsera. Limit po IP-u se zaobilazio novim lažnim `X-Forwarded-For` za svako
+pitanje. CSP je druga linija odbrane za tekst koji piše model i koji dolazi iz dokumenata: i kad bi
+nešto promaklo escape-ovanju, ne može da pokrene kod. Provereno u browseru (Playwright): cela
+stranica bez ijednog CSP prekršaja; POST sa drugog sajta 403, isti sa stranice 200.
+**Cena:** stranica ne sme da dobije inline `style="…"` atribute ni nove inline skripte bez
+otiska (test `test_index_page_runs_only_its_own_scripts`). DNS rebinding (napadački domen koji
+pokazuje na 127.0.0.1) ovo ne zaustavlja — za to treba spisak dozvoljenih `Host` imena, koji
+zavisi od toga gde aplikacija radi.
+

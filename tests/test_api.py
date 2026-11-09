@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from docassist.api import SESSION_COOKIE, create_app
+from docassist.api.routes.web import inline_script_hashes
 from docassist.config import Settings
 from docassist.factory import MissingAPIKeyError
 from docassist.llm import FakeProvider, LLMError
@@ -207,9 +208,13 @@ def test_app_can_be_embedded_only_where_allowed(settings, tmp_path):
     assert plain.headers["x-frame-options"] == "SAMEORIGIN"
     assert "samesite=strict" in plain.headers["set-cookie"].lower()
 
-    space = make_client(settings, tmp_path, embed_origins=("https://huggingface.co",)).get("/")
+    space_client = make_client(settings, tmp_path, embed_origins=("https://huggingface.co",))
+    space = space_client.get("/")
     assert "x-frame-options" not in space.headers
-    assert space.headers["content-security-policy"] == (
+    assert space.headers["content-security-policy"].endswith(
+        "; frame-ancestors 'self' https://huggingface.co"
+    )
+    assert space_client.get("/api/config").headers["content-security-policy"] == (
         "frame-ancestors 'self' https://huggingface.co"
     )
     cookie = space.headers["set-cookie"].lower()
@@ -434,6 +439,49 @@ def test_question_limit_per_ip_but_not_for_api_keys(settings, tmp_path):
     assert client.post("/ask", json={"question": "Kantina?"}).status_code == 429
     keyed = client.post("/ask", json={"question": "Kantina?"}, headers=key)
     assert keyed.status_code == 200  # integrations are not rate limited
+
+
+def test_ip_limit_cannot_be_dodged_with_a_made_up_forwarded_header(settings, tmp_path):
+    client = make_client(settings, tmp_path, max_questions_per_ip_hour=1)
+    upload(client, "faq.txt")
+
+    assert client.post("/ask", json={"question": "Kantina?"}).status_code == 200
+    fake = {"X-Forwarded-For": "203.0.113.9"}  # not from a trusted proxy: just a header
+    assert client.post("/ask", json={"question": "Kantina?"}, headers=fake).status_code == 429
+
+
+@pytest.mark.parametrize(
+    ("headers", "status"),
+    [
+        ({}, 200),  # API clients (n8n, curl) send neither header
+        ({"Sec-Fetch-Site": "same-origin"}, 200),  # the app's own page
+        ({"Sec-Fetch-Site": "none"}, 200),  # typed into the address bar
+        ({"Sec-Fetch-Site": "cross-site"}, 403),  # a form or fetch on another website
+        ({"Sec-Fetch-Site": "same-site"}, 403),  # another app on a sibling subdomain
+        ({"Origin": "http://testserver"}, 200),  # older browsers: only Origin
+        ({"Origin": "https://evil.example"}, 403),
+        ({"Origin": "null"}, 403),  # a sandboxed iframe or a local file
+    ],
+)
+def test_changes_only_from_the_apps_own_pages(client, headers, status):
+    assert client.post("/documents/demo", headers=headers).status_code == status
+
+
+def test_other_websites_may_still_read_and_link(client):
+    cross = {"Sec-Fetch-Site": "cross-site"}
+    assert client.get("/", headers=cross).status_code == 200  # a link to the app works
+    assert client.get("/health", headers=cross).status_code == 200
+
+
+def test_index_page_runs_only_its_own_scripts(client):
+    response = client.get("/")
+    policy = response.headers["content-security-policy"]
+
+    assert "default-src 'self'" in policy and "style-src 'self';" in policy
+    assert "frame-ancestors 'self'" in policy
+    hashes = inline_script_hashes(response.text)
+    assert len(hashes) == 1  # the theme script that runs before the first paint
+    assert f"script-src 'self' 'sha256-{hashes[0]}';" in policy
 
 
 def test_public_demo_mode(settings, tmp_path):

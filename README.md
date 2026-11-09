@@ -90,7 +90,11 @@ curl -X POST localhost:8000/ask -H "Content-Type: application/json" \
 ```
 
 Without `API_TOKEN` the app is open (internal network). With it, integrations send `X-API-Key`
-and browsers use a session cookie issued by the web UI.
+and browsers use a session cookie issued by the web UI. Either way, a browser may change data
+(upload, delete, ask) only from the app's own pages: requests that another website sends
+through the user's browser are refused (CSRF, ADR-041). The question limit per IP address
+counts the connection's address; behind a proxy, uvicorn's `--forwarded-allow-ips` decides
+which proxy may name the real one.
 
 ## Evaluation
 

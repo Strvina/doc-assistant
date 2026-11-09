@@ -1,14 +1,16 @@
 """Who is calling and how much they may ask: API key or browser session, question limits,
-the session cookie and the security headers."""
+the session cookie, requests from other websites (CSRF) and the security headers."""
 
 from __future__ import annotations
 
 import secrets
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from typing import Annotated
+from urllib.parse import urlsplit
 
 from fastapi import Depends, Header, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 
 from docassist.api.deps import SettingsDep, app_settings
 from docassist.config import Settings
@@ -103,8 +105,10 @@ def check_limits(request: Request, settings: Settings) -> None:
             raise HTTPException(429, "Question limit for this session reached")
         state.sessions[session_id] += 1
 
-    forwarded = request.headers.get("x-forwarded-for", "")
-    ip = forwarded.split(",")[0].strip() or (request.client.host if request.client else "?")
+    # The address of the connection, never a request header a client can make up: behind a
+    # proxy (Caddy, Docker) uvicorn takes it from X-Forwarded-For, but only when the proxy
+    # is trusted (`--forwarded-allow-ips`).
+    ip = request.client.host if request.client else "?"
     hits = state.ip_hits[ip]
     now = time.monotonic()
     while hits and now - hits[0] > IP_WINDOW_S:
@@ -114,16 +118,67 @@ def check_limits(request: Request, settings: Settings) -> None:
     hits.append(now)
 
 
+def frame_ancestors(settings: Settings) -> str:
+    """The CSP directive for who may show the app in an iframe (EMBED_ORIGINS, ADR-020)."""
+    return "frame-ancestors " + " ".join(("'self'", *settings.embed_origins))
+
+
+def page_policy(settings: Settings, script_hashes: Iterable[str]) -> str:
+    """Content-Security-Policy of the web UI page: scripts, styles and requests only from
+    this server, plus the inline scripts with these sha256 hashes (base64).
+
+    The page shows text written by the AI model and found in documents; it is escaped, and
+    this policy is the second line: even text that slipped through as HTML cannot run code.
+    """
+    scripts = " ".join(f"'sha256-{digest}'" for digest in script_hashes)
+    return (
+        f"default-src 'self'; script-src 'self' {scripts}; style-src 'self'; "
+        "img-src 'self' data: blob:; frame-src 'self' blob:; base-uri 'self'; "
+        f"form-action 'self'; {frame_ancestors(settings)}"
+    )
+
+
+UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+def is_cross_site(request: Request) -> bool:
+    """True when another website's page sent this request through the user's browser.
+
+    Browsers say where a request comes from (`Sec-Fetch-Site`, older ones only `Origin`);
+    API clients such as n8n or curl send neither, so they are never blocked.
+    """
+    site = request.headers.get("sec-fetch-site")
+    if site is not None:
+        return site not in ("same-origin", "none")  # "none": typed in the address bar
+    origin = request.headers.get("origin")
+    if origin is None:
+        return False
+    return urlsplit(origin).netloc != request.headers.get("host")
+
+
+async def block_cross_site(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    """HTTP middleware against cross-site request forgery (CSRF).
+
+    Without API_TOKEN the API answers anyone, and a form or `fetch` on another site can send
+    a POST (an upload, "scan the inbox", a question that costs quota) without the page ever
+    reading the answer. Changes are accepted only from the app's own pages.
+    """
+    if request.method in UNSAFE_METHODS and is_cross_site(request):
+        return JSONResponse({"detail": "Requests from other websites are not allowed"}, 403)
+    return await call_next(request)
+
+
 async def security_headers(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
     """HTTP middleware: no MIME sniffing, no framing by other sites (except EMBED_ORIGINS)."""
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
-    embed = app_settings(request).embed_origins
-    if embed:  # e.g. a Hugging Face Space shows the app in an iframe on huggingface.co
-        frame_ancestors = " ".join(("'self'", *embed))
-        response.headers.setdefault("Content-Security-Policy", f"frame-ancestors {frame_ancestors}")
+    settings = app_settings(request)
+    if settings.embed_origins:  # e.g. a Hugging Face Space shows the app in an iframe
+        response.headers.setdefault("Content-Security-Policy", frame_ancestors(settings))
     else:
         response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     response.headers.setdefault("Referrer-Policy", "same-origin")
