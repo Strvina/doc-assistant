@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse
 
 from docassist import __version__
 from docassist.api.deps import ConversationsDep, SettingsDep, get_library
-from docassist.api.security import ensure_session, page_policy
+from docassist.api.security import UserDep, ensure_session, page_policy, permissions
 from docassist.ingest.loaders import SUPPORTED_EXTENSIONS
 
 WEB_DIR = Path(__file__).resolve().parents[2] / "web"
@@ -30,14 +30,19 @@ router = APIRouter()
 
 
 @router.get("/", include_in_schema=False)
-def index(request: Request, settings: SettingsDep, conversations: ConversationsDep) -> Response:
-    page = _index_html()
+def index(
+    request: Request, settings: SettingsDep, conversations: ConversationsDep, user: UserDep
+) -> Response:
+    """The app, or the sign-in page when accounts are on and nobody is signed in."""
+    sign_in = settings.login_required and user is None
+    page = _page("login.html", "login.js") if sign_in else _page("index.html", "app.js")
     headers = {
         "Cache-Control": "no-cache",
         "Content-Security-Policy": page_policy(settings, inline_script_hashes(page)),
     }
     response = HTMLResponse(page, headers=headers)
-    ensure_session(request, response, settings, conversations)
+    if not sign_in:
+        ensure_session(request, response, settings, conversations)
     return response
 
 
@@ -58,9 +63,14 @@ def config(
     response: Response,
     settings: SettingsDep,
     conversations: ConversationsDep,
+    user: UserDep,
 ) -> dict[str, Any]:
-    """What the web UI needs to know: available models, limits, demo mode."""
+    """What the web UI needs to know: available models, limits, demo mode, and who is signed
+    in and what they may do."""
+    if settings.login_required and user is None:
+        raise HTTPException(401, "Sign in first")
     ensure_session(request, response, settings, conversations)
+    can = permissions(user.role if user else "admin", settings)
     available = {
         "claude": bool(settings.anthropic_api_key),
         "openai": bool(settings.openai_api_key and settings.openai_model),
@@ -84,10 +94,13 @@ def config(
             "groq": settings.groq_model,
         },
         "allow_uploads": settings.allow_uploads,
+        "login": settings.login_required,
+        "user": {"username": user.username, "role": user.role} if user else None,
+        "can": can,
         "max_upload_mb": settings.max_upload_mb,
         "extensions": list(SUPPORTED_EXTENSIONS),
         # Reading pictures with an AI model sends them to Google; off in the public demo.
-        "vision": bool(settings.gemini_api_key) and settings.allow_uploads,
+        "vision": bool(settings.gemini_api_key) and can["edit_documents"],
         "max_questions_per_session": settings.max_questions_per_session,
         "top_k": settings.top_k,
         "embedding_model": settings.embedding_model,
@@ -111,11 +124,11 @@ def health(request: Request, settings: SettingsDep) -> dict[str, Any]:
     }
 
 
-def _index_html() -> str:
-    """index.html with versioned asset URLs, so browsers never mix a new app.js with an old
+def _page(name: str, script: str) -> str:
+    """A page with versioned asset URLs, so browsers never mix a new script with an old
     app.css after an update (the static files themselves are served without cache headers)."""
-    html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
-    for name in ("app.css", "app.js"):
+    html = (WEB_DIR / name).read_text(encoding="utf-8")
+    for name in ("app.css", script):
         digest = hashlib.sha256((WEB_DIR / name).read_bytes()).hexdigest()[:10]
         html = html.replace(f"/static/{name}", f"/static/{name}?v={digest}")
     return html

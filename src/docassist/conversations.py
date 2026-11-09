@@ -175,6 +175,14 @@ class ConversationStore:
                 break
         return found
 
+    def claim(self, owner: str, new_owner: str) -> int:
+        """Give every conversation of `owner` to `new_owner`: someone who signs in keeps what
+        they asked in this browser before they had an account. Returns how many moved."""
+        with closing(self._connect()) as db, db:
+            return db.execute(
+                "UPDATE conversations SET owner = ? WHERE owner = ?", (new_owner, owner)
+            ).rowcount
+
     def rename(self, owner: str, conversation_id: str, title: str) -> bool:
         """Give a conversation a new title. False if it is not the owner's."""
         with closing(self._connect()) as db, db:

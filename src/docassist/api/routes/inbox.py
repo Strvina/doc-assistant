@@ -1,9 +1,10 @@
 """The "Automatski uvoz" panel: the watched folder, its imports and failures (ADR-037).
 
-Anyone who may upload sees the panel, checks the folder now and retries or removes failed
-files. Choosing another folder, opening it in the file manager and the folder dialog work only
-from the computer the app runs on: a folder is a path on that computer, and a remote user must
-not be able to point the app at any folder of the server.
+An administrator sees the panel, checks the folder now and retries or removes failed files
+(without accounts: anyone who may upload). Choosing another folder, opening it in the file
+manager and the folder dialog work only from the computer the app runs on: a folder is a path
+on that computer, and a remote user must not be able to point the app at any folder of the
+server.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from docassist.api.deps import (
     inbox_config_file,
 )
 from docassist.api.schemas import FolderCheck, InboxUpdate
-from docassist.api.security import ACCESS, UPLOADS
+from docassist.api.security import ADMIN, ADMIN_CHANGES
 from docassist.config import Settings
 from docassist.inbox import FolderError, Inbox, InboxConfig, check_folder, waiting_in
 
@@ -56,10 +57,10 @@ def get_inbox(request: Request) -> Inbox:
 
 
 InboxDep = Annotated[Inbox, Depends(get_inbox)]
-LOCAL = [*UPLOADS, Depends(require_local)]
+LOCAL = [*ADMIN_CHANGES, Depends(require_local)]
 
 
-@router.get("", dependencies=ACCESS)
+@router.get("", dependencies=ADMIN)
 def inbox_status(request: Request, settings: SettingsDep) -> dict[str, Any]:
     """The watched folder, what waits in it, the latest imports and the failed files."""
     watched: Inbox | None = request.app.state.inbox
@@ -116,7 +117,7 @@ def open_folder(watched: InboxDep) -> dict[str, bool]:
     return {"ok": True}
 
 
-@router.post("/scan", dependencies=UPLOADS)
+@router.post("/scan", dependencies=ADMIN_CHANGES)
 def scan_now(
     request: Request, library: LibraryDep, settings: SettingsDep, watched: InboxDep
 ) -> dict[str, Any]:
@@ -128,7 +129,7 @@ def scan_now(
     }
 
 
-@router.post("/failed/{name}/retry", dependencies=UPLOADS)
+@router.post("/failed/{name}/retry", dependencies=ADMIN_CHANGES)
 def retry(name: str, watched: InboxDep) -> dict[str, bool]:
     """Put a failed file back into the folder; the next check tries it again."""
     if not watched.retry(name):
@@ -136,7 +137,7 @@ def retry(name: str, watched: InboxDep) -> dict[str, bool]:
     return {"ok": True}
 
 
-@router.delete("/failed/{name}", dependencies=UPLOADS)
+@router.delete("/failed/{name}", dependencies=ADMIN_CHANGES)
 def discard(name: str, watched: InboxDep) -> dict[str, bool]:
     """Delete a failed file and its reason."""
     if not watched.discard(name):

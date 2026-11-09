@@ -79,6 +79,10 @@ GitHub Actions · Docker / Hugging Face Spaces
   (uslovi za prelazak u ADR-046).
 - **Lista uživo (ADR-047):** dokument se vidi čim je indeksiran — tokom pravljenja indeksa (`Rebuild.library`,
   `get_readable_library`), pri uploadu više fajlova (fajl po fajl) i iz foldera (provera na 5 s).
+- **Nalozi i uloge (ADR-048):** `LOGIN_REQUIRED=true` → prijava (`web/login.html`), uloge employee / editor /
+  admin (`users.py`, provere u `api/security.py`: `EDITOR`, `ADMIN`, `UPLOADS`, `ADMIN_CHANGES`), razgovori po
+  osobi (`user:<id>`), korisnici iz CLI-ja (`users add|list|role|password|remove`). Podrazumevano isključeno:
+  bez toga sve radi kao pre. Provereno u browseru sa sva tri naloga.
 - **Kvalitet koda (ADR-033):** `api.py` podeljen na paket `docassist/api/` (ruteri po oblastima, `deps`,
   `security`, `schemas`); strogi `mypy` obavezan (CI + pre commita); šira ruff pravila. Pokrivenost 95 %.
 - **Samoosvežavanje indeksa (ADR-032):** zastareo ili nedovršen indeks web aplikacija pravi sama iz
@@ -109,10 +113,15 @@ GitHub Actions · Docker / Hugging Face Spaces
 
 ## Sledeći korak
 
-**Revizija 2026-11-09 (#41–#43) je urađena.** Predlozi koji su ostali (traže odluku korisnika):
-zaštita od DNS rebinding-a (spisak dozvoljenih `Host` imena), `ALLOWED_HOSTS` za server; pregled PDF-a sa
-označenim citatom u kešu (OCR strana ~1,5 s pri svakom kliku); WAL režim za SQLite ako bude više korisnika
-istovremeno; limit za `/escalate` i `/reports/gaps?classify=true` u javnom demo režimu.
+**Revizija 2026-11-09 (#41–#48) je urađena** (bezbednost, performanse, SQLite indeks umesto ChromaDB-a,
+WAL, lista uživo, nalozi i uloge). Sledeće, redom:
+1. **Panel „Korisnici“ za administratora** u UI-ju (dodaj, promeni ulogu, nova lozinka, isključi) — sada je
+   upravljanje korisnicima samo u komandnoj liniji (ADR-048).
+2. Korisnik sam menja svoju lozinku.
+3. Ako zatreba: vidljivost dokumenata po odeljenju; prijava firminim Microsoft/Google nalogom (traži firmin nalog
+   za proveru); `/feedback` i `/escalate` samo za sopstvena pitanja.
+Korisnik još nije uključio prijavu kod sebe (`LOGIN_REQUIRED=true` u `.env` + `users add <ime> --role admin`).
+Stari Chroma fajlovi u `data/index` čekaju njegovu potvrdu za brisanje.
 
 **Odluka (2026-11-06): nema demo videa ni online dema, i za sada nema Claude-a — samo razvoj aplikacije
 (besplatni Groq/Gemini).** (Ranije, 2026-11-04: online demo se ne objavljuje.)
@@ -258,3 +267,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-09 | Pregled citata pamti tekst strane (sken: 8,1 → 0,12 s od drugog klika); ADR-045 | #45 |
 | 2026-11-09 | SQLite za više korisnika odjednom (WAL; 40 istovremenih bez greške); PostgreSQL odbijen uz merenje; ADR-046 | #46 |
 | 2026-11-09 | Dokumenti se pojavljuju u listi čim su indeksirani, bez osvežavanja stranice; ADR-047 | #47 |
+| 2026-11-09 | Nalozi i tri uloge (zaposleni / urednik / administrator), stranica za prijavu, korisnici iz CLI-ja; ADR-048 | #48 |

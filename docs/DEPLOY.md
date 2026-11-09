@@ -166,6 +166,10 @@ Workflow `.github/workflows/deploy-server.yml` se bez `SERVER_HOST` sam preskač
   kom je server, pa ih na VPS-u nema; folder je `/state/inbox` u kontejneru. Fajlovi tamo stižu
   preko n8n-a (volume `inbox` je u n8n-u na `/inbox` — npr. tok *Email Trigger (IMAP)* → *Write
   Binary File* u `/inbox` za mejl `dokumenti@firma.rs`). Otpremanje kroz aplikaciju radi normalno.
+- **Nalozi.** Lični nalozi sa ulogama su u aplikaciji (ADR-048): napravi prvog administratora
+  (`docker compose -f deploy/server/compose.yaml exec app python -m docassist.cli users add <ime> --role admin`),
+  pa u `deploy/server/.env` stavi `LOGIN_REQUIRED=true` i pokreni `up -d` ponovo. Zajednička lozinka
+  u Caddy-ju može da ostane kao spoljna brava ili da se ukloni (`basic_auth` blok).
 - **Jedna lozinka za sve.** Za lične naloge bez izmene koda: Cloudflare Access ispred domena
   (prijava firminim mejlom; besplatno za mali tim) — tada se `basic_auth` blok iz `Caddyfile`-a
   može ukloniti.

@@ -97,6 +97,7 @@ const EXAMPLES = [
   { q: "Šta da radim ako se povredim na poslu?", tag: "SR → SR bezbednost" },
   { q: "What is the acceptance criterion for the insulation test?", tag: "EN → EN procedura" },
 ];
+const ROLE_LABELS = { employee: "Zaposleni", editor: "Urednik", admin: "Administrator" };
 const TOOL_LABELS = {
   search_documents: "Pretraga dokumenata",
   list_documents: "Spisak dokumenata",
@@ -197,6 +198,8 @@ async function api(path, options = {}) {
     } catch {}
     const error = new Error(detail);
     error.status = response.status;
+    // With accounts: signed out elsewhere, disabled or a new password. Show the sign-in page.
+    if (response.status === 401 && state.config?.login) location.reload();
     if (response.status === 503 && detail.includes("being rebuilt")) watchRebuild();
     throw error;
   }
@@ -229,7 +232,15 @@ async function loadConfig() {
     updateModelDot();
   });
   const zone = $("#dropzone");
-  zone.hidden = !state.config.allow_uploads;
+  zone.hidden = !state.config.can.edit_documents;
+  $("#insights-open").hidden = !state.config.can.see_gaps;
+  const user = state.config.user;  // null without accounts (LOGIN_REQUIRED=false)
+  $("#user-chip").hidden = !user;
+  if (user) {
+    $("#user-name").textContent = user.username;
+    $("#user-role").textContent = ROLE_LABELS[user.role] || user.role;
+    $("#logout").title = `Odjavi se (${user.username})`;
+  }
   $("#dropzone-hint").textContent = `PDF, Word, Excel, PowerPoint, TXT, slike · do ${state.config.max_upload_mb} MB`;
   if (state.config.extensions) $("#file-input").accept = state.config.extensions.join(",");
 }
@@ -348,6 +359,7 @@ function plural(n, one, few, many) {
 const failedFiles = (n) => `${n} ${plural(n, "fajl nije uspeo", "fajla nisu uspela", "fajlova nije uspelo")}`;
 
 async function loadInbox() {
+  if (!state.config.can.manage_inbox) return;  // an administrator's panel
   try {
     state.inbox = await api("/inbox");
   } catch {
@@ -361,7 +373,7 @@ async function loadInbox() {
 function renderInboxCard() {
   const card = $("#inbox-card");
   const data = state.inbox;
-  card.hidden = !data?.watched || !state.config.allow_uploads;
+  card.hidden = !data?.watched || !state.config.can.manage_inbox;
   if (card.hidden) return;
   let status = `Uključen · ${folderName(data.folder)}`;
   let tone = "ok";
@@ -537,7 +549,7 @@ function renderDocuments() {
   const matching = state.documents.filter((d) => d.source.toLowerCase().includes(filter));
   const docs = matching.slice(0, state.docsShown);
   $("#doc-count").textContent = state.documents.length;
-  $("#library-empty").hidden = state.documents.length > 0 || !state.config.allow_uploads;
+  $("#library-empty").hidden = state.documents.length > 0 || !state.config.can.edit_documents;
   list.reveal?.disconnect();
   list.replaceChildren(
     ...docs.map((doc) => {
@@ -549,7 +561,7 @@ function renderDocuments() {
         state.config.vision && PICTURE_TYPES.has(ext(doc.source)) && el("button", { class: "icon-btn", title: "Pročitaj slike AI modelom",
           "aria-label": `Pročitaj slike u ${doc.source} AI modelom`, html: ICONS.sparkle,
           onclick: (e) => { e.stopPropagation(); readPictures(doc); } }),
-        state.config.allow_uploads && el("button", { class: "icon-btn danger", title: "Obriši", "aria-label": `Obriši ${doc.source}`, html: ICONS.trash,
+        state.config.can.edit_documents && el("button", { class: "icon-btn danger", title: "Obriši", "aria-label": `Obriši ${doc.source}`, html: ICONS.trash,
           onclick: (e) => { e.stopPropagation(); deleteDocument(doc); } }),
       );
       const picked = state.scope.has(doc.doc_id);
@@ -1385,9 +1397,14 @@ async function openInsights() {
   openModal(modal);
   try {
     const data = await api("/insights");
-    const s = data.stats;
+    // An editor sees only the gaps (what to add to the documents); usage is for administrators.
+    const usage = state.config.can.see_usage;
+    $("#insights-title").textContent = usage ? "Kako se asistent koristi" : "Šta nedostaje u dokumentima";
+    $("#stat-grid").hidden = !usage;
+    $("#recent-section").hidden = !usage;
+    const s = data.stats || {};
     const pct = (v) => (v === null || v === undefined ? "—" : `${Math.round(v * 100)} %`);
-    $("#stat-grid").replaceChildren(
+    if (usage) $("#stat-grid").replaceChildren(
       ...[
         ["Pitanja", s.queries],
         ["Iz dokumenata", pct(s.found_rate)],
@@ -1396,7 +1413,7 @@ async function openInsights() {
         ["Ocene", `👍 ${s.thumbs_up} · 👎 ${s.thumbs_down}`],
       ].map(([label, value]) => el("div", { class: "stat" }, el("small", {}, label), el("strong", {}, value))),
     );
-    const canDelete = state.config?.allow_uploads;  // off in the public demo
+    const canDelete = state.config.can.delete_questions;  // administrators; off in the public demo
     const item = (q) => el("li", {
         class: `clickable${canDelete ? " removable" : ""}`, tabindex: 0, title: "Postavi ponovo",
         onclick: () => { closeModal($("#insights"), { restoreFocus: false }); const input = $("#composer-input"); input.value = q.question; autosize(input); input.focus(); },
@@ -1412,7 +1429,7 @@ async function openInsights() {
     const root = $("#insights .modal-card");
     const pages = (kind) => (before) => api(`/queries?kind=${kind}&limit=${LIST_PAGE}${before ? `&before=${before}` : ""}`);
     revealList($("#gaps"), { root, loadPage: pages("gaps"), render: item, empty: "Nema praznina — svako pitanje je imalo odgovor." });
-    revealList($("#recent"), { root, loadPage: pages("recent"), render: item, empty: "Još nema pitanja." });
+    if (usage) revealList($("#recent"), { root, loadPage: pages("recent"), render: item, empty: "Još nema pitanja." });
   } catch (error) {
     toast(`Statistika nije dostupna: ${error.message}`, "error");
   }
@@ -1563,6 +1580,10 @@ function bindEvents() {
   $("#inbox-close").addEventListener("click", () => closeModal($("#inbox")));
   $("#inbox").addEventListener("click", (event) => { if (event.target.id === "inbox") closeModal(event.currentTarget); });
   $("#queries-clear").addEventListener("click", clearQueries);
+  $("#logout").addEventListener("click", async () => {
+    try { await api("/auth/logout", { method: "POST" }); } catch {}
+    location.reload();  // the server now shows the sign-in page
+  });
   $("#insights").addEventListener("click", (event) => { if (event.target.id === "insights") closeModal(event.currentTarget); });
   $("#theme-toggle").addEventListener("click", () => {
     const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";

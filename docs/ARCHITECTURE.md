@@ -40,6 +40,7 @@ src/docassist/
     prompts.py        # sistemski prompt + <documents> kontekst
   rag.py              # answer() → Answer; Citation.passage; extract_citations
   agent/              # tools.py (alati, šeme, webhook), prompts.py, run_agent()
+  users.py            # korisnici, uloge (employee/editor/admin), scrypt lozinke, prijave (ADR-048)
   db.py               # SQLite veze za log/razgovore/uvoz: WAL, čekanje na zaključan fajl (ADR-046)
   logs.py             # QueryLog (SQLite) + gaps() za "praznine u dokumentaciji"
   pricing.py          # cene modela → procena troška
@@ -49,7 +50,7 @@ src/docassist/
     __init__.py       # create_app, SESSION_COOKIE, app (za uvicorn)
     app.py            # sastavlja aplikaciju: stanje, middleware, statika, ruteri
     deps.py           # zavisnosti: settings, biblioteka (+ osvežavanje), log, razgovori, modeli
-    security.py       # pristup (X-API-Key / sesija), limiti pitanja, kolačić, CSRF, CSP i zaglavlja
+    security.py       # ko zove (X-API-Key / sesija / prijavljen korisnik) i uloga, limiti, CSRF, CSP
     schemas.py        # Pydantic modeli zahteva/odgovora, to_response
     routes/           # web (UI, config, health) · documents · ask · conversations · monitoring
   cli.py              # index / search / ask / docs / delete

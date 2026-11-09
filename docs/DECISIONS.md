@@ -726,3 +726,38 @@ dokumenta su bila gotova posle 6 s, a lista je ostajala prazna ~4 min dok OCR ne
 serveru). Tokom pravljenja indeksa dokument se vidi i otvara, ali se o njemu ne može pitati dok
 se ne završe svi.
 
+### ADR-048 · Nalozi i tri uloge: zaposleni, urednik, administrator
+**Odluka:** uz `LOGIN_REQUIRED=true` svako se prijavljuje svojim nalogom (korisničko ime + lozinka,
+stranica `/` tada prikazuje prijavu). Tri uloge, svaka ima prava prethodne (`users.py`):
+
+| | Zaposleni | Urednik | Administrator |
+|---|:-:|:-:|:-:|
+| Pitanja, izvori, svoji razgovori, 👍/👎, prosleđivanje timu | ✅ | ✅ | ✅ |
+| Dodavanje/brisanje dokumenata, AI čitanje slika | — | ✅ | ✅ |
+| Praznine u dokumentaciji (i nedeljni izveštaj) | — | ✅ | ✅ |
+| Statistika, trošak, sva pitanja; brisanje iz loga | — | — | ✅ |
+| Automatski uvoz iz foldera | — | — | ✅ |
+
+Ulogu proverava server na svakoj ruti (`at_least("editor")`, `EDITOR`/`ADMIN`/`UPLOADS`/
+`ADMIN_CHANGES` u `api/security.py`); UI samo sakriva ono što uloga ne sme (`can` u `/api/config`).
+Korisnik se čita iz baze pri svakom zahtevu, pa promena uloge, isključen nalog ili nova lozinka važe
+odmah (nova lozinka i isključenje odjavljuju sa svih uređaja). Lozinka se čuva samo kao scrypt
+otisak sa solju (standardna biblioteka, bez nove zavisnosti). Prijava pravi novu sesiju (stari
+identifikator sesije nikad ne postaje prijavljen), 5 pogrešnih lozinki za isto ime sa iste adrese
+pauzira prijavu 15 min. Razgovori pripadaju osobi (`user:<id>`), pa je prate na svakom uređaju;
+razgovori iz browsera od pre naloga prelaze na onoga ko se u njemu prvi prijavi. Limit pitanja se
+za prijavljene broji po osobi, ne po IP adresi (cela firma često deli jednu). Uvek postoji bar
+jedan administrator. Korisnici se prave iz komandne linije: `docassist.cli users add <ime> --role
+admin` (lozinka se kuca skriveno ili stiže kroz `--password-stdin`, nikad kao argument).
+Bez `LOGIN_REQUIRED` (podrazumevano) sve radi kao pre: nema naloga, a API ključ (`X-API-Key`, n8n)
+u oba slučaja ima puna prava.
+**Zašto:** jedna zajednička lozinka (ADR-040) ne kaže ko sme da briše dokumente ni ko vidi tuđa
+pitanja i trošak. Uloge prate ono što aplikacija već ima (upload, praznine, praćenje), pa nema
+novih pojmova. Način prijave je odvojen od uloga: prijava firminim Microsoft/Google nalogom može
+da se doda kao drugi način dokazivanja identiteta bez izmene pravila — sada nije urađena jer bez
+firminog naloga ne može da se proveri. Provereno u browseru sa sva tri naloga (šta ko vidi, odjava,
+pogrešna lozinka, 403 sa servera i kad dugmeta nema), bez CSP prekršaja.
+**Cena:** zaboravljenu lozinku rešava administrator (`users password <ime>`), nema slanja mejla.
+Upravljanje korisnicima je za sada samo u komandnoj liniji. Svi prijavljeni vide sve dokumente
+(vidljivost po odeljenju je sledeći korak ako zatreba). `/feedback` i `/escalate` primaju `log_id`
+bilo kog pitanja, pa prijavljeni korisnik može da oceni ili prosledi i tuđe pitanje ako pogodi broj.

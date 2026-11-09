@@ -21,7 +21,7 @@ from docassist.api.deps import (
     inbox_config_file,
     library_of,
 )
-from docassist.api.routes import ask, conversations, documents, monitoring, reports, web
+from docassist.api.routes import ask, auth, conversations, documents, monitoring, reports, web
 from docassist.api.routes import inbox as inbox_routes
 from docassist.api.security import block_cross_site, security_headers
 from docassist.config import Settings
@@ -53,6 +53,8 @@ def create_app(
     state.library = None
     state.log = None
     state.conversations = None
+    state.users = None
+    state.login_failures = defaultdict(list)  # (address, user name) -> times of wrong passwords
     state.sessions = {}  # session id -> questions asked
     state.cancelled = set()  # request ids of questions the user cancelled
     state.ip_hits = defaultdict(deque)  # client ip -> timestamps of recent questions
@@ -65,7 +67,7 @@ def create_app(
     app.middleware("http")(block_cross_site)
     app.include_router(web.router)
     app.mount("/static", StaticFiles(directory=web.WEB_DIR), name="static")
-    for module in (documents, inbox_routes, ask, conversations, monitoring, reports):
+    for module in (auth, documents, inbox_routes, ask, conversations, monitoring, reports):
         app.include_router(module.router)
     return app
 
