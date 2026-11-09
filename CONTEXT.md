@@ -77,6 +77,8 @@ GitHub Actions · Docker / Hugging Face Spaces
 - **SQLite pod opterećenjem (ADR-046):** `db.Database` — WAL, `synchronous=NORMAL`, čekanje 30 s, tabele jednom po
   objektu. 40 istovremenih upisa: pre `database is locked`, sad bez greške, ~100/s. PostgreSQL razmotren i odbijen
   (uslovi za prelazak u ADR-046).
+- **Lista uživo (ADR-047):** dokument se vidi čim je indeksiran — tokom pravljenja indeksa (`Rebuild.library`,
+  `get_readable_library`), pri uploadu više fajlova (fajl po fajl) i iz foldera (provera na 5 s).
 - **Kvalitet koda (ADR-033):** `api.py` podeljen na paket `docassist/api/` (ruteri po oblastima, `deps`,
   `security`, `schemas`); strogi `mypy` obavezan (CI + pre commita); šira ruff pravila. Pokrivenost 95 %.
 - **Samoosvežavanje indeksa (ADR-032):** zastareo ili nedovršen indeks web aplikacija pravi sama iz
@@ -255,3 +257,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-09 | Indeks u SQLite-u + numpy umesto ChromaDB-a (izmereno: isti pogoci, brže, 48 paketa manje); ADR-044 | #44 |
 | 2026-11-09 | Pregled citata pamti tekst strane (sken: 8,1 → 0,12 s od drugog klika); ADR-045 | #45 |
 | 2026-11-09 | SQLite za više korisnika odjednom (WAL; 40 istovremenih bez greške); PostgreSQL odbijen uz merenje; ADR-046 | #46 |
+| 2026-11-09 | Dokumenti se pojavljuju u listi čim su indeksirani, bez osvežavanja stranice; ADR-047 | #47 |

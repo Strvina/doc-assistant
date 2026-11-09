@@ -174,6 +174,41 @@ def test_progress_and_questions_while_rebuilding(settings, monkeypatch):
     assert client.get("/documents/progress").json() == []
 
 
+def test_documents_appear_one_by_one_while_rebuilding(settings, monkeypatch):
+    """The list is not empty until the last (slowest) document is done (ADR-047)."""
+    stale_index(settings, monkeypatch, sources=("faq.txt", "pravilnik_o_radu.pdf"))
+    store_originals(settings, "faq.txt", "pravilnik_o_radu.pdf")
+    release = threading.Event()
+    add_file = Library.add_file
+
+    def slow_after_the_first(self, path):
+        if path.name != "faq.txt":
+            release.wait(10)  # the second document is still being read
+        return add_file(self, path)
+
+    monkeypatch.setattr(Library, "add_file", slow_after_the_first)
+    app, client = app_client(settings)
+    assert client.get("/documents").status_code == 503  # the rebuild starts
+
+    deadline = time.monotonic() + 10
+    listed = []
+    while not listed and time.monotonic() < deadline:
+        response = client.get("/documents")
+        listed = [d["source"] for d in response.json()] if response.status_code == 200 else []
+        time.sleep(0.02)
+    assert listed == ["faq.txt"]
+    faq = client.get("/documents").json()[0]["doc_id"]
+    assert client.get(f"/documents/{faq}/view").status_code == 200  # it can be opened
+    assert client.post("/ask", json={"question": "Kantina?"}).status_code == 503  # not asked yet
+
+    release.set()
+    wait_for_rebuild(app)
+    assert [d["source"] for d in client.get("/documents").json()] == [
+        "faq.txt",
+        "pravilnik_o_radu.pdf",
+    ]
+
+
 def test_a_failed_rebuild_is_reported(settings, monkeypatch):
     stale_index(settings, monkeypatch)
     store_originals(settings, "faq.txt")

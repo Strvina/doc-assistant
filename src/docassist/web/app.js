@@ -135,6 +135,7 @@ const state = {
   viewing: null, // doc_id shown in the viewer
   inbox: null, // GET /inbox: the folder whose files are imported automatically
   pickingFolder: false, // the Windows folder dialog is open
+  uploading: false, // files are being uploaded one by one (the upload loads the list itself)
   conversationsMore: false, // more saved conversations to load when the list is scrolled
   docFilter: "", // the library search the list was drawn for
   docsShown: DOCUMENT_PAGE, // documents drawn so far (more appear when scrolling)
@@ -279,6 +280,8 @@ function watchRebuild() {
         ? `: dokument ${Math.min(rebuild.done + 1, rebuild.total)} / ${rebuild.total}${rebuild.source ? ` (${rebuild.source})` : ""}`
         : "…";
       status.textContent = `Osvežavam indeks posle nadogradnje${step}${ocr.length ? ` · ${progressText(ocr)}` : ""}`;
+      // Documents already indexed again are listed right away (ADR-047), not only at the end.
+      try { await refreshDocuments(); } catch {}
       return;
     }
     clearInterval(rebuildWatch);
@@ -288,7 +291,8 @@ function watchRebuild() {
       await loadDocuments();
       toast("Indeks je osvežen — možete da postavljate pitanja.");
     } catch (error) {
-      toast(`Indeks: ${error.message}`, "error");
+      // 503: the server restarted and is rebuilding again; api() is already watching it.
+      if (error.status !== 503) toast(`Indeks: ${error.message}`, "error");
     }
   }, 1500);
 }
@@ -298,25 +302,33 @@ async function loadDocuments() {
   renderDocuments();
 }
 
+// Load the list again, but redraw it only when a document came, went or changed: a redraw
+// starts the list from the top.
+async function refreshDocuments() {
+  const documents = await api("/documents");
+  const key = (docs) => docs.map((d) => `${d.doc_id}:${d.chunks}`).join(",");
+  if (key(documents) === key(state.documents)) return [];
+  const known = new Set(state.documents.map((d) => d.doc_id));
+  state.documents = documents;
+  renderDocuments();
+  return documents.filter((d) => !known.has(d.doc_id));
+}
+
 // Documents can also arrive without this page: the inbox folder (ADR-036) or another user.
 // While the page is visible, the list is checked now and then and new documents announced.
-const LIBRARY_REFRESH_MS = 15000;
+// The list comes from memory on the server (ADR-042), so asking often costs next to nothing.
+const LIBRARY_REFRESH_MS = 5000;
 
 function watchLibrary() {
   setInterval(async () => {
-    if (document.hidden || state.pending || rebuildWatch) return;
+    if (document.hidden || state.pending || rebuildWatch || state.uploading) return;
     loadInbox();
-    const known = new Set(state.documents.map((d) => d.doc_id));
-    let documents;
+    let added;
     try {
-      documents = await api("/documents");
+      added = await refreshDocuments();
     } catch {
       return; // the server may be restarting: try again next time
     }
-    const added = documents.filter((d) => !known.has(d.doc_id));
-    if (!added.length && documents.length === state.documents.length) return;
-    state.documents = documents;
-    renderDocuments();
     for (const doc of added) toast(`Novi dokument u biblioteci: ${prettyName(doc.source)}`);
   }, LIBRARY_REFRESH_MS);
 }
@@ -626,31 +638,40 @@ async function readPictures(doc) {
 
 async function uploadFiles(files) {
   if (!files.length) return;
-  const form = new FormData();
-  for (const file of files) form.append("files", file);
-  const count = `${files.length} ${files.length === 1 ? "dokument" : "dokumenta"}`;
-  // A status that stays until the upload is done: scans are read page by page (OCR).
-  const status = el("div", { class: "toast info progress", role: "status" }, `Indeksiram ${count}…`);
+  // One file per request, so each document shows up in the list as soon as it is indexed
+  // (ADR-047): a quick text file does not wait for a scan that takes minutes of OCR.
+  const status = el("div", { class: "toast info progress", role: "status" });
   $("#toasts").append(status);
+  const step = (i) => (files.length > 1 ? `${i + 1} / ${files.length}: ` : "");
+  let current = 0;
   const poll = setInterval(async () => {
     try {
       const running = await api("/documents/progress");
-      if (running.length) status.textContent = progressText(running);
+      if (running.length) status.textContent = `${step(current)}${progressText(running)}`;
     } catch {}
   }, 1000);
+  state.uploading = true;
   try {
-    const results = await api("/documents", { method: "POST", body: form });
-    for (const r of results) {
-      if (r.status === "failed") toast(`${r.source}: ${r.error}`, "error");
-      else toast(r.status === "indexed" ? `${r.source}: dodato (${r.chunks_added} pasusa)` : `${r.source}: već postoji`);
+    for (const [i, file] of files.entries()) {
+      current = i;
+      status.textContent = `Indeksiram ${step(i)}${file.name}…`;
+      const form = new FormData();
+      form.append("files", file);
+      try {
+        for (const r of await api("/documents", { method: "POST", body: form })) {
+          if (r.status === "failed") toast(`${r.source}: ${r.error}`, "error");
+          else toast(r.status === "indexed" ? `${r.source}: dodato (${r.chunks_added} pasusa)` : `${r.source}: već postoji`);
+        }
+      } catch (error) {
+        toast(`${file.name}: upload nije uspeo — ${error.message}`, "error");
+      }
+      try { await loadDocuments(); } catch {}
     }
-  } catch (error) {
-    toast(`Upload nije uspeo: ${error.message}`, "error");
   } finally {
+    state.uploading = false;
     clearInterval(poll);
     status.remove();
   }
-  await loadDocuments();
 }
 
 async function loadDemo() {

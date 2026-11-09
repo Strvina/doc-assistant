@@ -40,6 +40,8 @@ class Rebuild:
     failed: list[str] = field(default_factory=list)
     error: str | None = None
     finished: bool = False
+    # The index being rebuilt: the documents done so far can be listed and opened (ADR-047).
+    library: Library | None = None
 
     @property
     def message(self) -> str:
@@ -84,6 +86,7 @@ def rebuild(settings: Settings, status: Rebuild) -> Library:
     """Delete the index and index every stored original again; `status` follows along."""
     mark_started(settings.index_dir)
     library = build_library(settings, rebuild=True)
+    status.library = library
     files = originals(settings.documents_dir)
     status.total = len(files)
     for path in files:

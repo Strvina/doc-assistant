@@ -97,6 +97,23 @@ def _open_library(state: Any, settings: Settings) -> None:
 LibraryDep = Annotated[Library, Depends(get_library)]
 
 
+def get_readable_library(request: Request, settings: SettingsDep) -> Library:
+    """The library for listing, viewing and downloading. While a stale index is rebuilt, the
+    part done so far: each document appears as soon as it is indexed again (ADR-047), instead
+    of an empty list until the last (often the slowest, scanned) document is done. Questions
+    and changes still wait for the whole index."""
+    state = request.app.state
+    rebuilding = state.rebuild
+    if state.library is None and rebuilding is not None and not rebuilding.finished:
+        partial: Library | None = rebuilding.library
+        if partial is not None:
+            return partial
+    return library_of(state, settings)
+
+
+ReadableLibraryDep = Annotated[Library, Depends(get_readable_library)]
+
+
 def get_store(library: LibraryDep) -> VectorStore:
     return library.store
 
