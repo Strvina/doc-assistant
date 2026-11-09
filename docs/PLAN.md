@@ -100,6 +100,10 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 - [x] „Scroll to reveal“ u Praćenju, razgovorima, dokumentima i dugačkom razgovoru; brže skrolovanje (ADR-039)
 - [x] Spremno za sopstveni server: Caddy (HTTPS + lozinka), n8n, rezervne kopije, auto-ažuriranje (ADR-040) — server nije iznajmljen
 
+## Dodatno — revizija kvaliteta (2026-11-09)
+
+- [x] Bezbednost: zaštita od zahteva sa tuđih sajtova (CSRF), limit po IP-u bez lažnog zaglavlja, CSP za stranicu (ADR-041)
+
 ## Dodatno — formati
 
 - [x] Excel (`.xlsx`, list = strana) i PowerPoint (`.pptx`, slajd = strana, sa beleškama); citati za

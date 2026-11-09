@@ -48,7 +48,7 @@ src/docassist/
     __init__.py       # create_app, SESSION_COOKIE, app (za uvicorn)
     app.py            # sastavlja aplikaciju: stanje, middleware, statika, ruteri
     deps.py           # zavisnosti: settings, biblioteka (+ osvežavanje), log, razgovori, modeli
-    security.py       # pristup (X-API-Key / sesija), limiti pitanja, kolačić, bezbednosna zaglavlja
+    security.py       # pristup (X-API-Key / sesija), limiti pitanja, kolačić, CSRF, CSP i zaglavlja
     schemas.py        # Pydantic modeli zahteva/odgovora, to_response
     routes/           # web (UI, config, health) · documents · ask · conversations · monitoring
   cli.py              # index / search / ask / docs / delete

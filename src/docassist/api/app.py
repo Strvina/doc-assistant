@@ -23,7 +23,7 @@ from docassist.api.deps import (
 )
 from docassist.api.routes import ask, conversations, documents, monitoring, reports, web
 from docassist.api.routes import inbox as inbox_routes
-from docassist.api.security import security_headers
+from docassist.api.security import block_cross_site, security_headers
 from docassist.config import Settings
 from docassist.factory import build_llm, build_vision
 from docassist.library import Library
@@ -62,6 +62,7 @@ def create_app(
     state.inbox = None  # inbox.Inbox while the server watches the inbox folder (ADR-036)
 
     app.middleware("http")(security_headers)
+    app.middleware("http")(block_cross_site)
     app.include_router(web.router)
     app.mount("/static", StaticFiles(directory=web.WEB_DIR), name="static")
     for module in (documents, inbox_routes, ask, conversations, monitoring, reports):
