@@ -22,6 +22,7 @@ from docassist.library import Library
 from docassist.llm import LLMProvider
 from docassist.logs import QueryLog
 from docassist.retrieval import EmbedderMismatchError, VectorStore
+from docassist.users import UserStore
 
 SAMPLE_DOCS = Path(__file__).resolve().parents[3] / "data" / "sample_docs"
 
@@ -139,6 +140,17 @@ def get_conversations(request: Request, settings: SettingsDep) -> ConversationSt
 
 
 ConversationsDep = Annotated[ConversationStore, Depends(get_conversations)]
+
+
+def get_users(request: Request, settings: SettingsDep) -> UserStore:
+    """The people who may sign in (ADR-048); kept next to the conversations."""
+    state = request.app.state
+    if state.users is None:
+        state.users = UserStore(settings.log_db)
+    return state.users
+
+
+UsersDep = Annotated[UserStore, Depends(get_users)]
 
 
 def get_llm_factory(request: Request) -> LLMFactory:

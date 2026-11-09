@@ -19,7 +19,7 @@ from docassist.api.deps import (
     StoreDep,
 )
 from docassist.api.schemas import AskRequest, AskResponse, CancelRequest, to_response
-from docassist.api.security import ACCESS, ClientDep, OwnerDep, check_limits
+from docassist.api.security import ACCESS, ClientDep, OwnerDep, UserDep, check_limits
 from docassist.config import Settings
 from docassist.conversations import ConversationStore
 from docassist.factory import MissingAPIKeyError, build_tool_context
@@ -27,6 +27,7 @@ from docassist.llm import LLMError, LLMProvider
 from docassist.logs import QueryLog
 from docassist.rag import Answer, answer, answer_stream
 from docassist.retrieval import VectorStore
+from docassist.users import User
 
 router = APIRouter(prefix="/ask", tags=["questions"])
 
@@ -39,13 +40,14 @@ def ask(
     request: Request,
     kind: ClientDep,
     who: OwnerDep,
+    user: UserDep,
     settings: SettingsDep,
     store: StoreDep,
     log: LogDep,
     conversations: ConversationsDep,
     llm_factory: LLMFactoryDep,
 ) -> AskResponse:
-    llm, history = _prepare(body, request, kind, who, settings, conversations, llm_factory)
+    llm, history = _prepare(body, request, kind, who, user, settings, conversations, llm_factory)
     scope = _scope(body, store)
     try:
         if body.agent:
@@ -68,6 +70,7 @@ def ask_stream(
     request: Request,
     kind: ClientDep,
     who: OwnerDep,
+    user: UserDep,
     settings: SettingsDep,
     store: StoreDep,
     log: LogDep,
@@ -81,7 +84,7 @@ def ask_stream(
     If the client goes away (Stop button), the stream is closed: the model stops
     generating and nothing is saved.
     """
-    llm, history = _prepare(body, request, kind, who, settings, conversations, llm_factory)
+    llm, history = _prepare(body, request, kind, who, user, settings, conversations, llm_factory)
     scope = _scope(body, store)
 
     def events() -> Iterator[bytes]:
@@ -138,6 +141,7 @@ def _prepare(
     request: Request,
     kind: str,
     who: str,
+    user: User | None,
     settings: Settings,
     conversations: ConversationStore,
     llm_factory: LLMFactory,
@@ -146,7 +150,7 @@ def _prepare(
     if body.conversation_id and not conversations.exists(who, body.conversation_id):
         raise HTTPException(404, f"No conversation {body.conversation_id!r}")
     if kind != "api":
-        check_limits(request, settings)
+        check_limits(request, settings, user)
     history = list(body.history)
     if body.conversation_id and not history:  # follow-ups use the saved conversation
         history = conversations.history(who, body.conversation_id)

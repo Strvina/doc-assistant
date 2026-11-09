@@ -92,7 +92,12 @@ curl -X POST localhost:8000/ask -H "Content-Type: application/json" \
 Without `API_TOKEN` the app is open (internal network). With it, integrations send `X-API-Key`
 and browsers use a session cookie issued by the web UI. Either way, a browser may change data
 (upload, delete, ask) only from the app's own pages: requests that another website sends
-through the user's browser are refused (CSRF, ADR-041). The question limit per IP address
+through the user's browser are refused (CSRF, ADR-041). With `LOGIN_REQUIRED=true` everyone signs in
+with their own account and has one of three roles (ADR-048): an **employee** asks and keeps
+their conversations, an **editor** also manages the documents and sees the gaps in the
+documentation, an **administrator** also sees usage and cost and manages the inbox folder.
+Users are created with `uv run python -m docassist.cli users add <name> --role admin`.
+The question limit per IP address
 counts the connection's address; behind a proxy, uvicorn's `--forwarded-allow-ips` decides
 which proxy may name the real one.
 

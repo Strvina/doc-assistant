@@ -10,8 +10,9 @@ from fastapi import APIRouter, HTTPException, Query
 from docassist.agent.tools import ToolError, new_escalation
 from docassist.api.deps import LogDep, SettingsDep
 from docassist.api.schemas import EscalateRequest, EscalateResponse, FeedbackRequest, fields_of
-from docassist.api.security import ACCESS, UPLOADS
+from docassist.api.security import ACCESS, ADMIN, ADMIN_CHANGES, EDITOR, RoleDep
 from docassist.factory import build_escalator
+from docassist.users import has_role
 
 router = APIRouter(tags=["monitoring"])
 
@@ -60,26 +61,29 @@ def escalate(body: EscalateRequest, settings: SettingsDep, log: LogDep) -> Escal
     return EscalateResponse(reference=reference, team=team_id)
 
 
-@router.get("/stats", dependencies=ACCESS)
+@router.get("/stats", dependencies=ADMIN)
 def stats(log: LogDep) -> dict[str, Any]:
     return fields_of(log.stats())
 
 
-@router.get("/queries", dependencies=ACCESS)
+@router.get("/queries", dependencies=EDITOR)
 def list_queries(
     log: LogDep,
+    role: RoleDep,
     kind: Annotated[Literal["recent", "gaps"], Query(description="All questions or the gaps")],
     before: Annotated[int | None, Query(ge=1, description="Only older than this id")] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> dict[str, Any]:
     """One page of the monitoring lists, newest first: `next` is the `before` of the next
     page, or None after the last one (the UI loads it when the list is scrolled down)."""
+    if kind == "recent" and not has_role(role, "admin"):  # everyone's questions: usage
+        raise HTTPException(403, "This needs the admin role")
     rows = (log.recent if kind == "recent" else log.gaps)(limit, before)
     items = _slim(rows)
     return {"items": items, "next": items[-1]["id"] if len(items) == limit else None}
 
 
-@router.delete("/queries/{query_id}", dependencies=UPLOADS)
+@router.delete("/queries/{query_id}", dependencies=ADMIN_CHANGES)
 def delete_query(query_id: int, log: LogDep) -> dict[str, bool]:
     """Remove one question from the log (monitoring lists and statistics)."""
     if not log.delete(query_id):
@@ -87,21 +91,20 @@ def delete_query(query_id: int, log: LogDep) -> dict[str, bool]:
     return {"ok": True}
 
 
-@router.delete("/queries", dependencies=UPLOADS)
+@router.delete("/queries", dependencies=ADMIN_CHANGES)
 def clear_queries(log: LogDep) -> dict[str, int]:
     """Remove every question from the log. Saved conversations are kept."""
     return {"deleted": log.clear()}
 
 
-@router.get("/insights", dependencies=ACCESS)
-def insights(log: LogDep) -> dict[str, Any]:
-    """Monitoring: usage numbers, latest questions and the gaps in the documentation (the
-    first page of each; more with GET /queries)."""
-    return {
-        "stats": fields_of(log.stats()),
-        "recent": _slim(log.recent(LIST_LIMIT)),
-        "gaps": _slim(log.gaps(LIST_LIMIT)),
-    }
+@router.get("/insights", dependencies=EDITOR)
+def insights(log: LogDep, role: RoleDep) -> dict[str, Any]:
+    """Monitoring: the gaps in the documentation, and for an administrator also the usage
+    numbers and the latest questions (the first page of each; more with GET /queries)."""
+    gaps = {"gaps": _slim(log.gaps(LIST_LIMIT))}
+    if not has_role(role, "admin"):
+        return gaps
+    return {"stats": fields_of(log.stats()), "recent": _slim(log.recent(LIST_LIMIT)), **gaps}
 
 
 def _slim(rows: list[dict[str, object]]) -> list[dict[str, object]]:

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="sr" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prijava · Doc Assistant</title>
+  <link rel="icon" href="/static/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/app.css">
+  <script>
+    // Apply the saved/system theme before first paint (no flash).
+    try {
+      const saved = localStorage.getItem("da-theme");
+      const dark = saved ? saved === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+    } catch (e) {}
+  </script>
+</head>
+<body class="login-page">
+  <main class="login-card">
+    <div class="login-brand">
+      <img src="/static/logo.svg" alt="" width="40" height="40">
+      <div>
+        <strong>Doc Assistant</strong>
+        <small>Panelvolt · interna dokumentacija</small>
+      </div>
+    </div>
+    <h1>Prijava</h1>
+    <p class="muted">Prijavi se nalogom koji ti je dao administrator.</p>
+    <form id="login-form" autocomplete="on">
+      <label for="login-username">Korisničko ime</label>
+      <input id="login-username" name="username" type="text" autocomplete="username"
+             autocapitalize="none" spellcheck="false" maxlength="64" required autofocus>
+      <label for="login-password">Lozinka</label>
+      <input id="login-password" name="password" type="password" autocomplete="current-password"
+             maxlength="200" required>
+      <p class="msg-error" id="login-error" role="alert" hidden></p>
+      <button class="btn primary" type="submit" id="login-submit">Prijavi se</button>
+    </form>
+  </main>
+  <script type="module" src="/static/login.js"></script>
+</body>
+</html>

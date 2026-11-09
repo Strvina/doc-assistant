@@ -102,6 +102,8 @@ class Settings:
     # Files dropped here are imported (ADR-036); checked every `inbox_poll_s` s, 0 = off.
     inbox_dir: Path = Path("data/inbox")
     inbox_poll_s: int = 10
+    # People sign in with their own account and get a role (ADR-048); false = no accounts.
+    login_required: bool = False
 
     @classmethod
     def from_env(cls, load_dotenv_file: bool = True) -> Settings:
@@ -155,6 +157,7 @@ class Settings:
             max_upload_mb=int(_env("MAX_UPLOAD_MB", "20")),
             inbox_dir=Path(_env("INBOX_DIR", "data/inbox")),
             inbox_poll_s=int(_env("INBOX_POLL_S", "10")),
+            login_required=_env("LOGIN_REQUIRED", "false").lower() in ("1", "true", "yes"),
         )
 
 

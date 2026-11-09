@@ -125,6 +125,39 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 [data-theme="dark"] .moon { display: none; }
 .only-mobile { display: none; }
 
+/* Who is signed in (ADR-048): name, role and the sign-out button. */
+.user-chip {
+  display: flex; align-items: center; gap: 4px;
+  margin-left: 6px; padding-left: 12px;
+  border-left: 1px solid rgba(255, 255, 255, .16);
+}
+.user-text { display: flex; flex-direction: column; line-height: 1.15; text-align: right; }
+.user-text strong { font-size: 13px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-text small { font-size: 11px; color: #9fb4cc; }
+
+/* --- sign-in page ---------------------------------------------------------------------- */
+.login-page { display: grid; place-items: center; padding: 24px; }
+.login-card {
+  width: min(380px, 100%); padding: 28px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  border-top: 3px solid var(--amber); box-shadow: var(--shadow-2);
+}
+.login-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+.login-brand div { display: flex; flex-direction: column; line-height: 1.2; }
+.login-brand strong { font-size: 17px; }
+.login-brand small { font-size: 12px; color: var(--muted); }
+.login-card h1 { margin: 0 0 4px; font-size: 22px; }
+.login-card .muted { margin: 0 0 18px; font-size: 13.5px; }
+.login-card form { display: grid; gap: 6px; }
+.login-card label { font-size: 13px; font-weight: 600; color: var(--ink-2); margin-top: 8px; }
+.login-card input {
+  height: 40px; padding: 0 12px; font: inherit; color: var(--ink);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-2);
+}
+.login-card .msg-error { margin: 10px 0 0; }
+.login-card .btn { margin-top: 16px; height: 42px; }
+.login-card .btn:disabled { opacity: .6; cursor: default; }
+
 /* --- layout ---------------------------------------------------------------------------- */
 .layout {
   height: calc(100% - var(--topbar));
@@ -581,6 +614,7 @@ kbd { font: 600 10.5px/1 var(--mono); padding: 2px 5px; border-radius: 4px; bord
 .stat small { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 .stat strong { font: 700 22px/1.1 var(--mono); }
 .insight-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+.insight-cols:has(#recent-section[hidden]) { grid-template-columns: 1fr; }  /* an editor: gaps only */
 .insight-cols h3 { margin: 0 0 4px; font-size: 15px; }
 .insight-cols .muted { margin: 0 0 10px; font-size: 12.5px; }
 .q-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
@@ -637,6 +671,8 @@ kbd { font: 600 10.5px/1 var(--mono); padding: 2px 5px; border-radius: 4px; bord
   .msg-user { max-width: 92%; }
   .topbar { gap: 8px; padding: 0 10px; }
   .topbar-actions { gap: 0; }
+  .user-chip { margin-left: 2px; padding-left: 4px; }
+  .user-text { display: none; }  /* the sign-out button stays; the name is in its tooltip */
 }
 @media (max-width: 520px) {
   .brand-text { display: none; }

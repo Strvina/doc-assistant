@@ -27,6 +27,7 @@ def isolated_data(tmp_path, monkeypatch):
         "GROQ_FALLBACK_MODEL",
         "API_TOKEN",
         "ESCALATION_WEBHOOK_URL",
+        "LOGIN_REQUIRED",
     ):
         monkeypatch.setenv(key, "")  # empty beats a value load_dotenv() would add
     return tmp_path

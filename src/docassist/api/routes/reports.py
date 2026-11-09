@@ -11,14 +11,14 @@ from fastapi.responses import HTMLResponse
 
 from docassist import reports
 from docassist.api.deps import LLMFactoryDep, LogDep, SettingsDep
-from docassist.api.security import ACCESS
+from docassist.api.security import EDITOR
 from docassist.factory import MissingAPIKeyError
 from docassist.llm import LLMError
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 
-@router.get("/gaps", dependencies=ACCESS, response_model=None)
+@router.get("/gaps", dependencies=EDITOR, response_model=None)
 def gap_report(
     log: LogDep,
     settings: SettingsDep,
