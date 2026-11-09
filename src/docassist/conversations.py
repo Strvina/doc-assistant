@@ -140,6 +140,17 @@ class ConversationStore:
         LIKE only folds ASCII letters, and one person's conversations are few.
         """
         words = fold(query).split()
+        if not words:  # just the next page: SQL picks it, without reading every answer
+            with closing(self._connect()) as db:
+                db.row_factory = sqlite3.Row
+                rows = db.execute(
+                    "SELECT c.id, c.title, c.created_at, c.updated_at,"
+                    " (SELECT COUNT(*) FROM turns t WHERE t.conversation_id = c.id) AS turns"
+                    " FROM conversations c WHERE c.owner = ?"
+                    " ORDER BY c.updated_at DESC, c.rowid DESC LIMIT ? OFFSET ?",
+                    (owner, limit, offset),
+                ).fetchall()
+            return [dict(row) for row in rows]
         with closing(self._connect()) as db:
             db.row_factory = sqlite3.Row
             rows = db.execute(

@@ -64,6 +64,9 @@ GitHub Actions · Docker / Hugging Face Spaces
   limit po IP-u broji adresu veze, ne `X-Forwarded-For`; stranica `/` ima CSP (inline skripta preko sha256).
   Provereno u browseru: bez CSP prekršaja. `chromadb` 1.5.9 ima prijavljene ranjivosti samo u Chroma HTTP
   serveru, koji aplikacija ne koristi (indeks se otvara iz fajla); ispravka još ne postoji.
+- **Performanse (ADR-042):** lista dokumenata u memoriji (42 → 0,6 ms; briše se pri promeni indeksa ili broja
+  delova), jedan HTTP klijent po servisu i ključu (`shared_client`, timeout 120/300 s), stranice razgovora u SQL-u,
+  odgovor koji stiže crta se jednom po frejmu.
 - **Kvalitet koda (ADR-033):** `api.py` podeljen na paket `docassist/api/` (ruteri po oblastima, `deps`,
   `security`, `schemas`); strogi `mypy` obavezan (CI + pre commita); šira ruff pravila. Pokrivenost 95 %.
 - **Samoosvežavanje indeksa (ADR-032):** zastareo ili nedovršen indeks web aplikacija pravi sama iz
@@ -232,3 +235,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-06 | „Scroll to reveal“ svuda (Praćenje, razgovori, dokumenti, dugačak razgovor) i brže skrolovanje; ADR-039 | #39 |
 | 2026-11-07 | Priprema za sopstveni server (Caddy HTTPS + lozinka, n8n, rezervne kopije, deploy Action), probano lokalno; ADR-040 | #40 |
 | 2026-11-09 | Revizija 1/3 — bezbednost: CSRF zaštita, limit po IP-u bez lažnog zaglavlja, CSP za stranicu; ADR-041 | #41 |
+| 2026-11-09 | Revizija 2/3 — performanse: lista dokumenata u memoriji, deljeni HTTP klijenti sa timeout-om, stranice razgovora u SQL-u, crtanje po frejmu; ADR-042 | #42 |

@@ -9,6 +9,7 @@ one answers. An endpoint that is out of quota is skipped until it resets.
 
 from __future__ import annotations
 
+import functools
 import json
 import re
 import time
@@ -23,6 +24,10 @@ from docassist.llm.base import AgentRun, LLMError, LLMResult, Message, StopReaso
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+BASE_URLS = {"gemini": GEMINI_BASE_URL, "groq": GROQ_BASE_URL}
+# Seconds without a byte from the service before the request fails (the SDK default is 600):
+# a stuck request would otherwise hold the question, and a server thread, for ten minutes.
+REQUEST_TIMEOUT_S = 120.0
 
 OVERLOADED_STATUS = (500, 502, 503, 504)
 TOO_LARGE_STATUS = 413  # Groq: request is over the per-minute token limit of this model
@@ -58,10 +63,16 @@ class Endpoint:
 def endpoint(
     service: str, model: str, api_key: str, *, max_tokens: int = 4096, client: Any = None
 ) -> Endpoint:
-    base_url = {"gemini": GEMINI_BASE_URL, "groq": GROQ_BASE_URL}[service]
-    return Endpoint(
-        service, model, client or openai.OpenAI(api_key=api_key, base_url=base_url), max_tokens
-    )
+    return Endpoint(service, model, client or shared_client(service, api_key), max_tokens)
+
+
+@functools.cache
+def shared_client(service: str, api_key: str) -> openai.OpenAI:
+    """One SDK client per service and key for the whole process. A provider is built per
+    question; a client of its own would open a new HTTPS connection every time (measured:
+    0.1-0.17 s of the ~1 s answer) and leave the old connection pool for the garbage
+    collector. The client is thread-safe."""
+    return openai.OpenAI(api_key=api_key, base_url=BASE_URLS[service], timeout=REQUEST_TIMEOUT_S)
 
 
 class ChatCompletionsProvider:

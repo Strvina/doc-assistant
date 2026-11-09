@@ -984,8 +984,11 @@ async function ask(question) {
   // replaces it when the answer is complete.
   let live = null;
   let written = "";
-  const showPiece = (piece) => {
-    written += piece;
+  // Pieces arrive faster than the screen refreshes (a fast model sends dozens per second), and
+  // each render parses the whole answer again: draw at most once per frame, with what is there.
+  let frame = 0;
+  const draw = () => {
+    frame = 0;
     if (!live) {
       live = el("article", { class: "answer streaming" }, el("div", { class: "answer-body" }));
       waiting.replaceWith(live);
@@ -994,6 +997,10 @@ async function ask(question) {
     body.innerHTML = renderAnswerText(written, [], [], true);
     body.append(el("span", { class: "caret", "aria-hidden": "true" }));
     scrollToBottom();
+  };
+  const showPiece = (piece) => {
+    written += piece;
+    if (!frame) frame = requestAnimationFrame(draw);
   };
 
   try {
@@ -1025,6 +1032,7 @@ async function ask(question) {
       (live || waiting).replaceWith(el("div", { class: "msg-error" }, text));
     }
   } finally {
+    cancelAnimationFrame(frame); // the finished answer (or the error) is already in place
     if (state.pending === pending) state.pending = null;
     setBusy(false);
     scrollToBottom();
