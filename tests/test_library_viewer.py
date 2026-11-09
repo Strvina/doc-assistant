@@ -1,9 +1,12 @@
+import os
+import shutil
 from pathlib import Path
 
 import docx
 import pymupdf
 import pytest
 
+from docassist import viewer
 from docassist.ingest import DocumentLoadError, UnsupportedFileTypeError
 from docassist.library import Library, guess_language, safe_name
 from docassist.retrieval import FakeEmbedder, VectorStore
@@ -123,6 +126,30 @@ def test_pdf_highlights_only_the_cited_blocks():
         assert kind == "Highlight"
         assert "M8" in text
         assert not any(True for _ in pdf[0].annots())
+
+
+def test_page_blocks_are_read_once_per_page_and_file_version(tmp_path, monkeypatch):
+    """OCR of a scanned page takes ~1.5 s: a second citation on the page must not wait."""
+    pdf_path = tmp_path / "manual.pdf"
+    shutil.copyfile(SAMPLE_DOCS / "montageanleitung_pv400.pdf", pdf_path)
+    reads = []
+    original = viewer.pdf_page_blocks
+    monkeypatch.setattr(viewer, "pdf_page_blocks", lambda page: reads.append(1) or original(page))
+
+    first = pdf_with_highlights(pdf_path, 2, "M8 20 Nm 13 mm")
+    again = pdf_with_highlights(pdf_path, 2, "M10 40 Nm 17 mm")  # another citation, same page
+    assert len(reads) == 1
+    with pymupdf.open("pdf", first) as pdf, pymupdf.open("pdf", again) as other:
+        assert "M8" in pdf[1].get_textbox(next(pdf[1].annots()).rect)
+        assert "M10" in other[1].get_textbox(next(other[1].annots()).rect)
+
+    pdf_with_highlights(pdf_path, 1, "Montageanleitung")  # another page is read
+    assert len(reads) == 2
+
+    shutil.copyfile(SAMPLE_DOCS / "pravilnik_o_radu.pdf", pdf_path)  # a new file, same name
+    os.utime(pdf_path, ns=(1, 1))
+    pdf_with_highlights(pdf_path, 2, "odmor")
+    assert len(reads) == 3  # never the blocks of the old file
 
 
 def test_pdf_without_passage_is_unchanged_in_content():

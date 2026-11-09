@@ -676,3 +676,14 @@ od 96 strana), pitanje, citat i pregled rade.
 hiljada delova trebalo bi preći na približan indeks (npr. sqlite-vec ili Qdrant) iza istog API-ja.
 Prvo pokretanje posle nadogradnje ponovo pravi indeks (OCR skenova traje).
 
+### ADR-045 · Pregled citata: tekst strane se pamti
+**Odluka:** `viewer.pdf_with_highlights` pamti tekst-blokove poslednjih 200 pregledanih PDF strana
+(`_BLOCK_CACHE`), po ključu putanja + vreme izmene + veličina fajla + strana. Izmenjen fajl istog
+imena je novi ključ, pa se blokovi starog fajla nikad ne koriste. OCR se radi van zaključavanja,
+pa druge strane ne čekaju.
+**Zašto:** na skenu se blokovi strane dobijaju OCR-om. Izmereno na pravom skenu od 96 strana:
+prvi klik na citat 8,1 s, svaki sledeći na istoj strani (isti ili drugi citat) 0,12 s — ranije
+je svaki klik čekao ceo OCR.
+**Cena:** do ~200 strana teksta u memoriji (nekoliko MB); prvi klik na novu stranu skena i dalje
+čeka OCR.
+
