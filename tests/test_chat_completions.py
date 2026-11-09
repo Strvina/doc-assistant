@@ -266,6 +266,24 @@ def test_factory_builds_the_free_chain(monkeypatch):
     assert len(build_llm(replace(settings, groq_api_key="gsk"), "groq")._endpoints) == 2
 
 
+def test_questions_reuse_one_http_client_per_service(monkeypatch):
+    """A provider is built per question; its client (and HTTPS connections) is shared."""
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "fake")
+    settings = replace(
+        Settings.from_env(load_dotenv_file=False), groq_api_key="gsk", gemini_api_key="g-key"
+    )
+
+    first, second = build_llm(settings, "groq"), build_llm(settings, "groq")
+
+    clients = [ep.client for ep in first._endpoints]
+    assert [ep.client for ep in second._endpoints] == clients  # the same objects
+    assert clients[0] is clients[1]  # both Groq models
+    assert clients[2] is clients[3] and clients[0] is not clients[2]  # Gemini has its own
+    assert clients[0].timeout == 120  # not the SDK's ten minutes
+    other_key = build_llm(replace(settings, groq_api_key="gsk-2"), "groq")
+    assert other_key._endpoints[0].client is not clients[0]
+
+
 def test_last_agent_step_has_no_tools_so_the_model_must_answer():
     call = {
         "id": "c1",

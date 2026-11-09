@@ -607,3 +607,24 @@ otiska (test `test_index_page_runs_only_its_own_scripts`). DNS rebinding (napada
 pokazuje na 127.0.0.1) ovo ne zaustavlja — za to treba spisak dozvoljenih `Host` imena, koji
 zavisi od toga gde aplikacija radi.
 
+### ADR-042 · Brže: lista dokumenata u memoriji, deljeni HTTP klijenti, manje crtanja
+**Odluka:** (1) `VectorStore.documents()` pamti listu dokumenata dok ovaj store ne promeni indeks
+(dodavanje/brisanje je briše), a čita je ponovo i kad se promeni broj delova (drugi proces) — isto
+pravilo kao za BM25 indeks (ADR-023). Na tome rade i `Library.get`/`original` (svaki klik na
+citat, pregled, preuzimanje) i izbor dokumenata u `/ask`. (2) Jedan SDK klijent po servisu i
+ključu za ceo proces (`shared_client` u `chat_completions.py`, `claude.py`, `openai_provider.py`),
+sa timeout-om 120 s (Groq/Gemini), odnosno 300 s (Claude/OpenAI, do 16.000 tokena u jednom
+odgovoru) umesto podrazumevanih 600 s. (3) `GET /conversations` bez pretrage uzima stranicu u
+SQL-u (`LIMIT/OFFSET`) umesto da čita sve odgovore vlasnika. (4) Tekst koji stiže u delovima
+crta se najviše jednom po frejmu (`requestAnimationFrame`), ne posle svakog delića.
+**Zašto:** izmereno na pravom indeksu (946 delova, 7 dokumenata): `documents()` 42 ms → 0,6 ms,
+a staro vreme raste linearno sa bibliotekom (~2 s za 50.000 delova pri svakom kliku na citat i
+svakom osvežavanju liste na 15 s). Provajder se pravi za svako pitanje, pa je svako pitanje
+otvaralo novu HTTPS vezu (izmereno ka api.groq.com: 0,10–0,17 s na odgovor od ~1 s), a stari
+klijenti su ostajali otvoreni do sakupljanja smeća. Zaglavljen zahtev je mogao 10 minuta da drži
+pitanje i nit servera. Brz model šalje desetine delića u sekundi, a svako crtanje ponovo
+parsira ceo odgovor; provereno u browseru sa 43 i 58 delića: odgovor se prikazuje ceo, bez grešaka.
+**Cena:** ako drugi proces zameni dokument novom verzijom sa *istim* brojem delova, server vidi
+staru listu dok se indeks ne promeni ponovo — server je jedini koji menja indeks dok radi (CLI
+`index` se pokreće kad server ne radi).
+

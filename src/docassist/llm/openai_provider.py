@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import json
 from typing import Any
 
@@ -11,6 +12,13 @@ from docassist.agent.tools import Tool, execute_tool
 from docassist.llm.base import AgentRun, LLMError, LLMResult, Message, StopReason, ToolCall
 
 DEFAULT_MAX_OUTPUT_TOKENS = 16000
+REQUEST_TIMEOUT_S = 300.0  # seconds without a byte from the API (the SDK default is 600)
+
+
+@functools.cache
+def shared_client(api_key: str | None) -> openai.OpenAI:
+    """One SDK client per key for the process, so HTTPS connections are reused."""
+    return openai.OpenAI(api_key=api_key, timeout=REQUEST_TIMEOUT_S)
 
 
 class OpenAIProvider:
@@ -24,7 +32,7 @@ class OpenAIProvider:
     ) -> None:
         if not model:
             raise ValueError("OPENAI_MODEL is not set")
-        self._client = client or openai.OpenAI(api_key=api_key)
+        self._client = client or shared_client(api_key)
         self._model = model
         self._max_output_tokens = max_output_tokens
 

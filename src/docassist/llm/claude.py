@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 from typing import Any
 
 import anthropic
@@ -10,6 +11,9 @@ from docassist.agent.tools import Tool, execute_tool
 from docassist.llm.base import AgentRun, LLMError, LLMResult, Message, StopReason, ToolCall
 
 DEFAULT_MAX_TOKENS = 16000  # room for adaptive thinking + the answer; non-streaming request
+# Seconds without a byte from the API before the request fails (the SDK default is 600). Long
+# enough for DEFAULT_MAX_TOKENS of thinking and answer in one non-streaming response.
+REQUEST_TIMEOUT_S = 300.0
 
 # Server-side refusal fallback: if a safety classifier declines, the API retries the request
 # on Anthropic's recommended model for that category. Not available for Haiku models.
@@ -23,6 +27,13 @@ _STOP_REASONS: dict[str, StopReason] = {
 }
 
 
+@functools.cache
+def shared_client(api_key: str | None) -> anthropic.Anthropic:
+    """One SDK client per key for the process: its HTTPS connections are reused by every
+    question instead of being opened again (a provider is built per question)."""
+    return anthropic.Anthropic(api_key=api_key, timeout=REQUEST_TIMEOUT_S)
+
+
 class ClaudeProvider:
     def __init__(
         self,
@@ -33,7 +44,7 @@ class ClaudeProvider:
         max_tokens: int = DEFAULT_MAX_TOKENS,
         client: Any = None,
     ) -> None:
-        self._client = client or anthropic.Anthropic(api_key=api_key)
+        self._client = client or shared_client(api_key)
         self._model = model
         self._effort = effort
         self._max_tokens = max_tokens

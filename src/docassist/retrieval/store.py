@@ -76,6 +76,9 @@ class VectorStore:
         self._name = collection
         self._hybrid = hybrid
         self._keywords: KeywordIndex | None = None  # built on first search, dropped on change
+        # (chunk count, documents): reading every chunk's metadata takes ~40 ms per 1,000
+        # chunks, and the list is read by every citation click and every library refresh.
+        self._documents: tuple[int, list[DocumentInfo]] | None = None
 
         if rebuild and collection in {c.name for c in client.list_collections()}:
             client.delete_collection(collection)
@@ -117,6 +120,7 @@ class VectorStore:
             return 0
         if existing["ids"]:
             self._collection.delete(where={"source": source})
+            self._changed()
 
         embeddings = self._embedder.embed([c.text for c in chunks])
         for start in range(0, len(chunks), _ADD_BATCH):
@@ -127,7 +131,7 @@ class VectorStore:
                 documents=[c.text for c in batch],
                 metadatas=[{"source": c.source, "page": c.page, "doc_id": c.doc_id} for c in batch],
             )
-        self._keywords = None
+        self._changed()
         return len(chunks)
 
     def search(
@@ -255,8 +259,23 @@ class VectorStore:
             )
         return self._keywords
 
+    def _changed(self) -> None:
+        """Forget what was derived from the chunks (after adding or deleting some)."""
+        self._keywords = None
+        self._documents = None
+
     def documents(self) -> list[DocumentInfo]:
-        """All indexed documents, sorted by name."""
+        """All indexed documents, sorted by name.
+
+        Kept until this store changes the index; like the keyword index, it is also read
+        again when the number of chunks changed (another process added or deleted some).
+        """
+        count = self.count()
+        if self._documents is None or self._documents[0] != count:
+            self._documents = (count, self._read_documents())
+        return list(self._documents[1])
+
+    def _read_documents(self) -> list[DocumentInfo]:
         metadatas = self._collection.get(include=["metadatas"])["metadatas"] or []
         grouped: dict[str, dict[str, Any]] = {}
         for meta in metadatas:
@@ -287,7 +306,7 @@ class VectorStore:
         ids = self._collection.get(where={"doc_id": doc_id})["ids"]
         if ids:
             self._collection.delete(ids=ids)
-            self._keywords = None
+            self._changed()
         return len(ids)
 
     def count(self) -> int:

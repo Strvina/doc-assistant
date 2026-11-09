@@ -66,11 +66,8 @@ def build_free_llm(settings: Settings, service: str) -> LLMProvider:
         key, names, max_tokens = models[name]
         if not key:
             continue
-        client = None
-        for model in filter(None, names):
-            ep = endpoint(name, model, key, max_tokens=max_tokens, client=client)
-            client = ep.client  # one HTTP client per service
-            endpoints.append(ep)
+        # The models of one service share its HTTP client (`chat_completions.shared_client`).
+        endpoints += [endpoint(name, m, key, max_tokens=max_tokens) for m in filter(None, names)]
     return ChatCompletionsProvider(service, endpoints)
 
 
@@ -86,11 +83,7 @@ def build_vision(settings: Settings) -> tuple[ReadImage, str]:
     from docassist.llm.chat_completions import ChatCompletionsProvider, endpoint
 
     models = [m for m in (settings.gemini_model, settings.gemini_fallback_model) if m]
-    endpoints, client = [], None
-    for model in models:
-        ep = endpoint("gemini", model, settings.gemini_api_key, max_tokens=8192, client=client)
-        client = ep.client
-        endpoints.append(ep)
+    endpoints = [endpoint("gemini", m, settings.gemini_api_key, max_tokens=8192) for m in models]
     return llm_reader(ChatCompletionsProvider("gemini", endpoints)), " / ".join(models)
 
 

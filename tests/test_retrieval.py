@@ -187,6 +187,29 @@ def test_documents_and_delete(store):
     assert [d.source for d in store.documents()] == ["b.pdf"]
 
 
+def test_document_list_is_read_once_until_the_index_changes(tmp_path, monkeypatch):
+    store = VectorStore(tmp_path, FakeEmbedder())
+    store.add_document([chunk("a.pdf", 1, 0, "first", doc_id="A1")])
+    reads = []
+    original = store._read_documents
+    monkeypatch.setattr(store, "_read_documents", lambda: reads.append(1) or original())
+
+    store.documents()
+    store.documents()
+    assert len(reads) == 1  # the second call is served from memory
+
+    # A new version with the same number of chunks: the count alone would not show it.
+    store.add_document([chunk("a.pdf", 1, 0, "second", doc_id="A2")])
+    assert [d.doc_id for d in store.documents()] == ["A2"]
+
+    # Another process (another store on the same folder) adds a document.
+    VectorStore(tmp_path, FakeEmbedder()).add_document([chunk("b.pdf", 1, 0, "x", doc_id="B")])
+    assert [d.source for d in store.documents()] == ["a.pdf", "b.pdf"]
+
+    store.documents().clear()  # callers get a copy: the kept list stays whole
+    assert len(store.documents()) == 2
+
+
 def test_index_persists_between_instances(tmp_path):
     VectorStore(tmp_path, FakeEmbedder()).add_document([chunk("a.txt", 1, 0, "persisted")])
 

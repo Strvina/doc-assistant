@@ -103,6 +103,7 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 ## Dodatno — revizija kvaliteta (2026-11-09)
 
 - [x] Bezbednost: zaštita od zahteva sa tuđih sajtova (CSRF), limit po IP-u bez lažnog zaglavlja, CSP za stranicu (ADR-041)
+- [x] Performanse: lista dokumenata iz memorije, jedan HTTP klijent po servisu (+ timeout), stranice razgovora u SQL-u, crtanje odgovora jednom po frejmu (ADR-042)
 
 ## Dodatno — formati
 
