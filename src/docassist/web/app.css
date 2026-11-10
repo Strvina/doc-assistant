@@ -266,6 +266,15 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .account-form .btn { justify-self: start; }
 .account-form .btn:disabled { opacity: .6; cursor: default; }
 @media (max-width: 520px) { .account-facts { grid-template-columns: 1fr 1fr; } }
+/* A temporary password (ADR-051): only "set your own" (or sign out) until it is replaced. */
+.account-required-note, .account-logout { display: none; }
+#account[data-required] .account-required-note {
+  display: block; margin: 12px 0 0; padding: 10px 12px; font-size: 13.5px; line-height: 1.5;
+  border-radius: var(--radius-sm); background: var(--amber-soft);
+  border-left: 3px solid var(--amber);
+}
+#account[data-required] .account-logout { display: inline-flex; }
+#account[data-required] #account-close, #account[data-required] .account-name-section { display: none; }
 /* Users and roles, for administrators (ADR-049). */
 .modal-card.users-modal { width: min(780px, 100%); }
 .users-intro { margin: -6px 0 16px; font-size: 13.5px; line-height: 1.55; }

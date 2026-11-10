@@ -101,7 +101,8 @@ Administrators can also add accounts, change roles or passwords, disable account
 from the **Users and roles** panel (ADR-049). Removing an account also removes its saved conversations;
 disabling it preserves them. A click on one's name opens the account menu: **My account** changes the
 full name and, given the current one, the password (ADR-050). Only the person who asked a question can
-rate its answer or forward it to a team.
+rate its answer or forward it to a team. A password an administrator sets in the panel is temporary:
+at the next sign-in the user has to choose their own before anything else works (ADR-051).
 The question limit per IP address
 counts the connection's address; behind a proxy, uvicorn's `--forwarded-allow-ips` decides
 which proxy may name the real one.

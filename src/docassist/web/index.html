@@ -272,7 +272,7 @@
       <form class="user-add" id="user-add" autocomplete="off">
         <input id="new-username" type="text" placeholder="Korisničko ime" aria-label="Korisničko ime novog korisnika"
                autocapitalize="none" spellcheck="false" maxlength="64" required>
-        <input id="new-password" type="password" placeholder="Lozinka (najmanje 8 znakova)"
+        <input id="new-password" type="password" placeholder="Privremena lozinka (8+ znakova)"
                aria-label="Lozinka novog korisnika" autocomplete="new-password" minlength="8" maxlength="200" required>
         <select id="new-role" aria-label="Uloga novog korisnika"></select>
         <button class="btn small primary" type="submit">Dodaj korisnika</button>
@@ -288,6 +288,8 @@
         <div>
           <p class="eyebrow">Nalog</p>
           <h2 id="account-title">Moj nalog</h2>
+          <p class="account-required-note">Administrator ti je dao privremenu lozinku. Pre nego što
+            nastaviš, postavi svoju — samo ćeš je ti znati.</p>
         </div>
         <button class="icon-btn" id="account-close" aria-label="Zatvori">
           <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
@@ -298,7 +300,7 @@
         <div><dt>Uloga</dt><dd id="account-role"></dd></div>
         <div><dt>Nalog od</dt><dd id="account-since"></dd></div>
       </dl>
-      <section>
+      <section class="account-name-section">
         <h3>Lični podaci</h3>
         <form class="account-form" id="account-form" autocomplete="on">
           <label for="account-full-name">Ime i prezime</label>
@@ -313,14 +315,17 @@
         <form class="account-form" id="password-form" autocomplete="on">
           <!-- for the browser's password manager: whose password this is -->
           <input type="text" id="password-username" autocomplete="username" hidden>
-          <label for="current-password">Trenutna lozinka</label>
+          <label for="current-password" id="current-password-label">Trenutna lozinka</label>
           <input id="current-password" type="password" autocomplete="current-password" maxlength="200" required>
           <label for="new-password-own">Nova lozinka</label>
           <input id="new-password-own" type="password" autocomplete="new-password" minlength="8" maxlength="200" required>
           <label for="new-password-again">Nova lozinka još jednom</label>
           <input id="new-password-again" type="password" autocomplete="new-password" minlength="8" maxlength="200" required>
           <p class="muted">Najmanje 8 znakova. Ostali uređaji na kojima si prijavljen biće odjavljeni.</p>
-          <button class="btn small primary" type="submit">Promeni lozinku</button>
+          <div class="modal-actions">
+            <button class="btn small primary" type="submit">Promeni lozinku</button>
+            <button class="btn small account-logout" type="button" id="account-logout">Odjavi se</button>
+          </div>
         </form>
       </section>
     </div>

@@ -22,7 +22,7 @@ def list_users(users: UsersDep, me: UserDep) -> list[UserOut]:
 @router.post("", status_code=201)
 def add_user(body: UserCreate, users: UsersDep, me: UserDep) -> UserOut:
     try:
-        created = users.add(body.username, body.password, body.role)
+        created = users.add(body.username, body.password, body.role, temporary=True)
     except UserError as exc:
         raise refused(exc) from exc
     return _out(created, me)
@@ -43,8 +43,8 @@ def change_user(user_id: int, body: UserUpdate, users: UsersDep, me: UserDep) ->
             users.set_role(user_id, body.role)
         if body.disabled is not None and body.disabled != target.disabled:
             users.set_disabled(user_id, body.disabled)
-        if body.password is not None:
-            users.set_password(user_id, body.password)
+        if body.password is not None:  # temporary: the user sets their own at sign-in
+            users.set_password(user_id, body.password, temporary=True)
     except UserError as exc:
         raise refused(exc) from exc
     changed = users.get(user_id)

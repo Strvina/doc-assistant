@@ -91,6 +91,9 @@ GitHub Actions · Docker / Hugging Face Spaces
   trenutnu; ostali uređaji se odjavljuju), *Korisnici i uloge* (admin, premešteno iz zaglavlja), *Odjavi se*.
   Nove lične stavke idu u taj meni. 👍/👎 i prosleđivanje timu samo za odgovore iz sopstvenih razgovora
   (`ConversationStore.owns_answer`). Provereno u browseru (Playwright, probni server na :8765).
+- **Privremena lozinka (ADR-051):** lozinka iz panela (nov nalog, „Nova lozinka“) je privremena → posle prijave
+  samo prozor „Postavi svoju lozinku“, server ostalo odbija (403 `change_password` u `client_kind`). Lozinke iz
+  CLI-ja nisu privremene. Provereno u browseru.
 - **Kvalitet koda (ADR-033):** `api.py` podeljen na paket `docassist/api/` (ruteri po oblastima, `deps`,
   `security`, `schemas`); strogi `mypy` obavezan (CI + pre commita); šira ruff pravila. Pokrivenost 95 %.
 - **Samoosvežavanje indeksa (ADR-032):** zastareo ili nedovršen indeks web aplikacija pravi sama iz
@@ -275,3 +278,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-09 | Nalozi i tri uloge (zaposleni / urednik / administrator), stranica za prijavu, korisnici iz CLI-ja; ADR-048 | #48 |
 | 2026-11-10 | Panel za administraciju naloga u web UI-ju (započeo Codex, pregledano i dorađeno); ADR-049 | #49 |
 | 2026-11-10 | Meni naloga (Moj nalog: ime i prezime, sopstvena lozinka), ocene i prosleđivanje samo za sopstvena pitanja; ispravljena širina prozora; ADR-050 | #50 |
+| 2026-11-10 | Privremena lozinka od administratora — pri prvoj prijavi korisnik postavlja svoju; poruke u panelu u neutralnom rodu; ADR-051 | #51 |

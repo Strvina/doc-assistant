@@ -96,7 +96,12 @@ def config(
         "allow_uploads": settings.allow_uploads,
         "login": settings.login_required,
         "user": (
-            {"username": user.username, "full_name": user.full_name, "role": user.role}
+            {
+                "username": user.username,
+                "full_name": user.full_name,
+                "role": user.role,
+                "must_change_password": user.must_change_password,
+            }
             if user
             else None
         ),

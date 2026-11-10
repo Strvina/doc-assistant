@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS users (
     role          TEXT    NOT NULL,             -- employee | editor | admin
     disabled      INTEGER NOT NULL DEFAULT 0,
     created_at    TEXT    NOT NULL,
-    full_name     TEXT    NOT NULL DEFAULT ''   -- what the person calls themselves; may be empty
+    full_name     TEXT    NOT NULL DEFAULT '',  -- what the person calls themselves; may be empty
+    must_change_password INTEGER NOT NULL DEFAULT 0  -- 1: a temporary password from an admin
 );
 CREATE TABLE IF NOT EXISTS user_sessions (
     session_id TEXT PRIMARY KEY,                -- the browser's session cookie
@@ -58,8 +59,17 @@ CREATE INDEX IF NOT EXISTS user_sessions_user ON user_sessions (user_id);
 def _create(db: sqlite3.Connection) -> None:
     db.executescript(_SCHEMA)
     columns = {row[1] for row in db.execute("PRAGMA table_info(users)")}
-    if "full_name" not in columns:  # a users table from before the account menu
-        db.execute("ALTER TABLE users ADD COLUMN full_name TEXT NOT NULL DEFAULT ''")
+    for column, statement in _MIGRATIONS.items():  # a users table of an earlier version
+        if column not in columns:
+            db.execute(statement)
+
+
+_MIGRATIONS = {
+    "full_name": "ALTER TABLE users ADD COLUMN full_name TEXT NOT NULL DEFAULT ''",
+    "must_change_password": (
+        "ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0"
+    ),
+}
 
 
 class UserError(ValueError):
@@ -79,6 +89,7 @@ class User:
     disabled: bool = False
     created_at: str = ""
     full_name: str = ""
+    must_change_password: bool = False  # signed in with a temporary password (ADR-051)
 
     @property
     def display_name(self) -> str:
@@ -129,7 +140,11 @@ class UserStore:
 
     # --- users -----------------------------------------------------------------------------
 
-    def add(self, username: str, password: str, role: str = "employee") -> User:
+    def add(
+        self, username: str, password: str, role: str = "employee", *, temporary: bool = False
+    ) -> User:
+        """A new user. A `temporary` password (one an administrator chose) has to be replaced
+        by the user's own at the first sign-in."""
         username = _checked_username(username)
         _check_role(role)
         _check_password(password)
@@ -137,15 +152,15 @@ class UserStore:
         try:
             with closing(self._connect()) as db, db:
                 cursor = db.execute(
-                    "INSERT INTO users (username, password_hash, role, created_at)"
-                    " VALUES (?, ?, ?, ?)",
-                    (username, hash_password(password), role, now),
+                    "INSERT INTO users (username, password_hash, role, created_at,"
+                    " must_change_password) VALUES (?, ?, ?, ?, ?)",
+                    (username, hash_password(password), role, now, int(temporary)),
                 )
                 user_id = cursor.lastrowid
         except sqlite3.IntegrityError as exc:
             raise UserError(f"A user named {username!r} already exists", "taken") from exc
         assert user_id is not None  # set by every INSERT
-        return User(user_id, username, role, created_at=now)
+        return User(user_id, username, role, created_at=now, must_change_password=temporary)
 
     def all(self) -> list[User]:
         with closing(self._connect()) as db:
@@ -188,11 +203,25 @@ class UserStore:
         if disabled:
             self.sign_out_everywhere(user_id)
 
-    def set_password(self, user_id: int, password: str, *, keep_session: str | None = None) -> None:
+    def set_password(
+        self,
+        user_id: int,
+        password: str,
+        *,
+        temporary: bool = False,
+        keep_session: str | None = None,
+    ) -> None:
         """A new password signs the user out everywhere (whoever knew the old one too), except
-        in `keep_session`: the browser where they changed it themselves."""
+        in `keep_session`: the browser where they changed it themselves. A `temporary` one (set
+        by an administrator) has to be replaced at the next sign-in."""
         _check_password(password)
-        self._change(user_id, "password_hash = ?", hash_password(password), keeps_admin=True)
+        self._change(
+            user_id,
+            "password_hash = ?, must_change_password = ?",
+            hash_password(password),
+            int(temporary),
+            keeps_admin=True,
+        )
         self.sign_out_everywhere(user_id, keep_session=keep_session)
 
     def change_own_password(
@@ -221,12 +250,13 @@ class UserStore:
             if not db.execute("DELETE FROM users WHERE id = ?", (user_id,)).rowcount:
                 raise UserError("No such user", "missing")
 
-    def _change(self, user_id: int, assignment: str, value: object, *, keeps_admin: bool) -> None:
+    def _change(self, user_id: int, assignment: str, *values: object, keeps_admin: bool) -> None:
         # `assignment` is one of the fixed column assignments above, never user input.
         with closing(self._connect()) as db, db:
             if not keeps_admin:
                 self._keep_an_admin(db, user_id)
-            updated = db.execute(f"UPDATE users SET {assignment} WHERE id = ?", (value, user_id))
+            sql = f"UPDATE users SET {assignment} WHERE id = ?"
+            updated = db.execute(sql, (*values, user_id))
             if not updated.rowcount:
                 raise UserError("No such user", "missing")
 
@@ -286,6 +316,7 @@ def _user(row: sqlite3.Row) -> User:
         bool(row["disabled"]),
         row["created_at"],
         row["full_name"],
+        bool(row["must_change_password"]),
     )
 
 
