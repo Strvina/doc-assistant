@@ -99,7 +99,9 @@ documentation, an **administrator** also sees usage and cost and manages the inb
 Users are created with `uv run python -m docassist.cli users add <name> --role admin`.
 Administrators can also add accounts, change roles or passwords, disable accounts, and remove accounts
 from the **Users and roles** panel (ADR-049). Removing an account also removes its saved conversations;
-disabling it preserves them.
+disabling it preserves them. A click on one's name opens the account menu: **My account** changes the
+full name and, given the current one, the password (ADR-050). Only the person who asked a question can
+rate its answer or forward it to a team.
 The question limit per IP address
 counts the connection's address; behind a proxy, uvicorn's `--forwarded-allow-ips` decides
 which proxy may name the real one.

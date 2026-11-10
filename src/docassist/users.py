@@ -30,6 +30,7 @@ ROLES = ("employee", "editor", "admin")  # in rising order of rights
 MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_LENGTH = 200  # scrypt would hash megabytes just as gladly: a cheap way to stall us
 _USERNAME = re.compile(r"[a-z0-9][a-z0-9._@-]{2,63}")
+MAX_FULL_NAME_LENGTH = 100
 
 # scrypt cost: ~65 ms and 16 MB per check on a laptop — slow for someone guessing passwords
 # from a stolen file, unnoticeable for one sign-in.
@@ -42,7 +43,8 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT    NOT NULL,             -- scrypt$n$r$p$salt$hash (hex)
     role          TEXT    NOT NULL,             -- employee | editor | admin
     disabled      INTEGER NOT NULL DEFAULT 0,
-    created_at    TEXT    NOT NULL
+    created_at    TEXT    NOT NULL,
+    full_name     TEXT    NOT NULL DEFAULT ''   -- what the person calls themselves; may be empty
 );
 CREATE TABLE IF NOT EXISTS user_sessions (
     session_id TEXT PRIMARY KEY,                -- the browser's session cookie
@@ -51,6 +53,13 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 );
 CREATE INDEX IF NOT EXISTS user_sessions_user ON user_sessions (user_id);
 """
+
+
+def _create(db: sqlite3.Connection) -> None:
+    db.executescript(_SCHEMA)
+    columns = {row[1] for row in db.execute("PRAGMA table_info(users)")}
+    if "full_name" not in columns:  # a users table from before the account menu
+        db.execute("ALTER TABLE users ADD COLUMN full_name TEXT NOT NULL DEFAULT ''")
 
 
 class UserError(ValueError):
@@ -69,6 +78,11 @@ class User:
     role: str
     disabled: bool = False
     created_at: str = ""
+    full_name: str = ""
+
+    @property
+    def display_name(self) -> str:
+        return self.full_name or self.username
 
     def has(self, role: str) -> bool:
         """True when this user has at least the rights of `role`."""
@@ -105,7 +119,7 @@ _NO_USER_HASH = hash_password(secrets.token_hex(16))
 
 class UserStore:
     def __init__(self, path: str | Path) -> None:
-        self._db = Database(Path(path), lambda db: db.executescript(_SCHEMA))
+        self._db = Database(Path(path), _create)
 
     def _connect(self) -> sqlite3.Connection:
         db = self._db.connect()
@@ -174,11 +188,32 @@ class UserStore:
         if disabled:
             self.sign_out_everywhere(user_id)
 
-    def set_password(self, user_id: int, password: str) -> None:
-        """A new password signs the user out everywhere (whoever knew the old one too)."""
+    def set_password(self, user_id: int, password: str, *, keep_session: str | None = None) -> None:
+        """A new password signs the user out everywhere (whoever knew the old one too), except
+        in `keep_session`: the browser where they changed it themselves."""
         _check_password(password)
         self._change(user_id, "password_hash = ?", hash_password(password), keeps_admin=True)
-        self.sign_out_everywhere(user_id)
+        self.sign_out_everywhere(user_id, keep_session=keep_session)
+
+    def change_own_password(
+        self, user_id: int, current: str, new: str, *, keep_session: str
+    ) -> None:
+        """The user changes their own password: only with the current one."""
+        with closing(self._connect()) as db:
+            row = db.execute("SELECT password_hash FROM users WHERE id = ?", (user_id,)).fetchone()
+        if row is None:
+            raise UserError("No such user", "missing")
+        if len(current) > MAX_PASSWORD_LENGTH or not verify_password(current, row["password_hash"]):
+            raise UserError("The current password is wrong", "wrong_password")
+        if new == current:
+            raise UserError("The new password is the same as the current one", "same_password")
+        self.set_password(user_id, new, keep_session=keep_session)
+
+    def set_full_name(self, user_id: int, full_name: str) -> None:
+        full_name = " ".join(full_name.split())  # no stray spaces or line breaks
+        if len(full_name) > MAX_FULL_NAME_LENGTH:
+            raise UserError(f"A name has at most {MAX_FULL_NAME_LENGTH} characters", "full_name")
+        self._change(user_id, "full_name = ?", full_name, keeps_admin=True)
 
     def remove(self, user_id: int) -> None:
         with closing(self._connect()) as db, db:
@@ -226,9 +261,12 @@ class UserStore:
         with closing(self._connect()) as db, db:
             db.execute("DELETE FROM user_sessions WHERE session_id = ?", (session_id,))
 
-    def sign_out_everywhere(self, user_id: int) -> None:
+    def sign_out_everywhere(self, user_id: int, *, keep_session: str | None = None) -> None:
         with closing(self._connect()) as db, db:
-            db.execute("DELETE FROM user_sessions WHERE user_id = ?", (user_id,))
+            db.execute(
+                "DELETE FROM user_sessions WHERE user_id = ? AND session_id IS NOT ?",
+                (user_id, keep_session),
+            )
 
     def signed_in(self, session_id: str) -> User | None:
         """Who a session cookie belongs to. Read on every request, so a changed role or a
@@ -241,7 +279,14 @@ class UserStore:
 
 
 def _user(row: sqlite3.Row) -> User:
-    return User(row["id"], row["username"], row["role"], bool(row["disabled"]), row["created_at"])
+    return User(
+        row["id"],
+        row["username"],
+        row["role"],
+        bool(row["disabled"]),
+        row["created_at"],
+        row["full_name"],
+    )
 
 
 def _checked_username(username: str) -> str:

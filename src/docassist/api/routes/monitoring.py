@@ -8,9 +8,9 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, HTTPException, Query
 
 from docassist.agent.tools import ToolError, new_escalation
-from docassist.api.deps import LogDep, SettingsDep
+from docassist.api.deps import ConversationsDep, LogDep, SettingsDep
 from docassist.api.schemas import EscalateRequest, EscalateResponse, FeedbackRequest, fields_of
-from docassist.api.security import ACCESS, ADMIN, ADMIN_CHANGES, EDITOR, RoleDep
+from docassist.api.security import ACCESS, ADMIN, ADMIN_CHANGES, EDITOR, OwnerDep, RoleDep
 from docassist.factory import build_escalator
 from docassist.users import has_role
 
@@ -25,18 +25,28 @@ INSIGHT_FIELDS = (
 
 
 @router.post("/feedback", dependencies=ACCESS)
-def feedback(body: FeedbackRequest, log: LogDep) -> dict[str, bool]:
+def feedback(
+    body: FeedbackRequest, log: LogDep, conversations: ConversationsDep, who: OwnerDep
+) -> dict[str, bool]:
     if body.rating not in RATINGS:
         raise HTTPException(422, "rating must be 1, -1 or 0")
+    if not conversations.owns_answer(who, body.log_id):
+        raise _no_query(body.log_id)
     if not log.set_feedback(body.log_id, body.rating or None):
         raise _no_query(body.log_id)
     return {"ok": True}
 
 
 @router.post("/escalate", dependencies=ACCESS)
-def escalate(body: EscalateRequest, settings: SettingsDep, log: LogDep) -> EscalateResponse:
+def escalate(
+    body: EscalateRequest,
+    settings: SettingsDep,
+    log: LogDep,
+    conversations: ConversationsDep,
+    who: OwnerDep,
+) -> EscalateResponse:
     """Forward an unanswered question to a person (n8n webhook or the local outbox)."""
-    query = log.get(body.log_id)
+    query = log.get(body.log_id) if conversations.owns_answer(who, body.log_id) else None
     if query is None:
         raise _no_query(body.log_id)
     if query["escalation"]:  # one e-mail per question, however often the button is clicked

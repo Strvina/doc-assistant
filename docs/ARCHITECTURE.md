@@ -40,7 +40,7 @@ src/docassist/
     prompts.py        # sistemski prompt + <documents> kontekst
   rag.py              # answer() → Answer; Citation.passage; extract_citations
   agent/              # tools.py (alati, šeme, webhook), prompts.py, run_agent()
-  users.py            # korisnici, uloge, scrypt lozinke i prijave (ADR-048); admin panel (ADR-049)
+  users.py            # korisnici, uloge, scrypt lozinke, prijave (ADR-048), ime i prezime (ADR-050)
   db.py               # SQLite veze za log/razgovore/uvoz: WAL, čekanje na zaključan fajl (ADR-046)
   logs.py             # QueryLog (SQLite) + gaps() za "praznine u dokumentaciji"
   pricing.py          # cene modela → procena troška
@@ -53,6 +53,7 @@ src/docassist/
     security.py       # ko zove (X-API-Key / sesija / prijavljen korisnik) i uloga, limiti, CSRF, CSP
     schemas.py        # Pydantic modeli zahteva/odgovora, to_response
     routes/           # web (UI, config, health) · documents · ask · conversations · monitoring
+                      # · auth · account (sopstveni nalog) · users (admin panel)
   cli.py              # index / search / ask / docs / delete
   web/                # index.html, app.css, app.js, logo.svg (bez build koraka)
 eval/questions.yaml   # 36 pitanja za evaluaciju

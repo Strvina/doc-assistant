@@ -94,7 +94,26 @@ class UserOut(BaseModel):
     role: str
     disabled: bool
     created_at: str
+    full_name: str = ""
     me: bool = False  # the signed-in administrator looking at the list
+
+
+class AccountOut(BaseModel):
+    """The signed-in user's own account."""
+
+    username: str
+    full_name: str
+    role: str
+    created_at: str
+
+
+class AccountUpdate(BaseModel):
+    full_name: str = Field(max_length=200)
+
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(min_length=1, max_length=200)
+    new_password: str = Field(min_length=1, max_length=200)
 
 
 class RenameRequest(BaseModel):

@@ -760,7 +760,8 @@ pogrešna lozinka, 403 sa servera i kad dugmeta nema), bez CSP prekršaja.
 **Cena:** zaboravljenu lozinku rešava administrator (`users password <ime>`), nema slanja mejla.
 Upravljanje korisnicima je za sada samo u komandnoj liniji. Svi prijavljeni vide sve dokumente
 (vidljivost po odeljenju je sledeći korak ako zatreba). `/feedback` i `/escalate` primaju `log_id`
-bilo kog pitanja, pa prijavljeni korisnik može da oceni ili prosledi i tuđe pitanje ako pogodi broj.
+bilo kog pitanja, pa prijavljeni korisnik može da oceni ili prosledi i tuđe pitanje ako pogodi broj
+(ispravljeno u ADR-050).
 
 ### ADR-049 · Administracija naloga iz web UI-ja
 **Odluka:** kada je prijava uključena, administrator dobija panel „Korisnici i uloge“: može da doda
@@ -774,3 +775,21 @@ je dugme sakriveno u UI-ju.
 zaposlenih. Zadržano je kao put za početno pravljenje administratora i oporavak naloga.
 **Cena:** lozinku administrator mora bezbedno da saopšti korisniku. Brisanje razgovora je trajno;
 UI zato prikazuje potvrdu, a privremeni gubitak pristupa treba rešavati opcijom „Isključi“.
+
+### ADR-050 · Meni naloga, sopstveni podaci i ocene samo za sopstvena pitanja
+**Odluka:** ime prijavljenog korisnika gore desno postaje dugme sa padajućim menijem: *Moj nalog*,
+*Korisnici i uloge* (samo administrator; dugme je premešteno iz zaglavlja) i *Odjavi se*. Nove
+stavke idu u taj meni. *Moj nalog* (`/account`) prikazuje korisničko ime, ulogu i datum, menja
+**ime i prezime** (`users.full_name`, prazno = prikazuje se korisničko ime) i **lozinku** uz
+trenutnu lozinku: ostali uređaji se odjavljuju, ovaj browser ostaje prijavljen. Pogrešna
+trenutna lozinka se broji kao pogrešna prijava (5 u 15 min po imenu i adresi), da neko za tuđim
+otključanim računarom ne bi mogao da je pogađa. Korisničko ime i uloga se ovde ne menjaju.
+
+`/feedback` i `/escalate` primaju `log_id` samo odgovora iz **sopstvenih** sačuvanih razgovora
+(`ConversationStore.owns_answer`: odgovor u `turns.response` sa tim `log_id`, razgovor tog
+vlasnika); tuđi broj daje 404 kao nepostojeći. Isto važi bez naloga, po sesiji browsera.
+**Zašto:** u ADR-048 je ostala rupa (ocena ili mejl timu za tuđe pitanje pogađanjem broja).
+Vlasništvo se čita iz razgovora, ne iz nove kolone u logu: radi i za stara pitanja, i za
+razgovore prenete na korisnika pri prijavi (`claim`), bez migracije loga.
+**Cena:** odgovor iz obrisanog razgovora više ne može da se oceni; pretraga po JSON-u je
+linearna po pitanjima jednog vlasnika (stotine redova — zanemarljivo).

@@ -22,6 +22,7 @@ from docassist.api.deps import (
     library_of,
 )
 from docassist.api.routes import (
+    account,
     ask,
     auth,
     conversations,
@@ -76,7 +77,11 @@ def create_app(
     app.middleware("http")(block_cross_site)
     app.include_router(web.router)
     app.mount("/static", StaticFiles(directory=web.WEB_DIR), name="static")
-    for module in (auth, users, documents, inbox_routes, ask, conversations, monitoring, reports):
+    routers = (
+        *(auth, account, users, documents, inbox_routes),
+        *(ask, conversations, monitoring, reports),
+    )
+    for module in routers:
         app.include_router(module.router)
     return app
 

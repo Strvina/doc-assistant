@@ -134,7 +134,7 @@ def test_sign_in_and_out(app):
     assert "<title>Doc Assistant</title>" in client.get("/").text
     config = client.get("/api/config").json()
     assert config["login"] is True
-    assert config["user"] == {"username": "editor", "role": "editor"}
+    assert config["user"] == {"username": "editor", "full_name": "", "role": "editor"}
 
     assert client.post("/auth/logout").status_code == 200
     assert client.get("/documents").status_code == 401
@@ -393,6 +393,87 @@ def test_questions_are_limited_per_person_not_per_address(settings, store, tmp_p
     assert ana.post("/ask", json=ask).status_code == 429
     assert sign_in(app, "employee").post("/ask", json=ask).status_code == 429  # a new browser
     assert marko.post("/ask", json=ask).status_code == 200
+
+
+# --- one's own account: the account menu ------------------------------------------------
+
+
+def test_a_user_changes_their_own_name(app, store):
+    employee = sign_in(app, "employee")
+
+    changed = employee.patch("/account", json={"full_name": "  Ana   Petrović \n"})
+
+    assert changed.json()["full_name"] == "Ana Petrović"
+    assert employee.get("/account").json() == {
+        "username": "employee",
+        "full_name": "Ana Petrović",
+        "role": "employee",
+        "created_at": store.by_name("employee").created_at,
+    }
+    assert employee.get("/api/config").json()["user"]["full_name"] == "Ana Petrović"
+    assert sign_in(app, "admin").get("/users").json()[2]["full_name"] == "Ana Petrović"
+    long = employee.patch("/account", json={"full_name": "x" * 101})
+    assert long.json()["detail"]["code"] == "full_name"
+
+
+def test_a_user_changes_their_own_password(app, store):
+    here, elsewhere = sign_in(app, "employee"), sign_in(app, "employee")
+    change = {"current_password": PASSWORD, "new_password": "nova-lozinka-123"}
+
+    assert here.post("/account/password", json=change).json() == {"ok": True}
+
+    assert here.get("/conversations").status_code == 200  # this browser stays signed in
+    assert elsewhere.get("/conversations").status_code == 401  # the others are signed out
+    old = {"username": "employee", "password": PASSWORD}
+    assert TestClient(app).post("/auth/login", json=old).status_code == 401
+    sign_in(app, "employee", "nova-lozinka-123")
+
+
+def test_changing_the_password_needs_the_current_one(app, store):
+    employee = sign_in(app, "employee")
+
+    def code(current, new):
+        body = {"current_password": current, "new_password": new}
+        response = employee.post("/account/password", json=body)
+        assert response.status_code == 422, response.text
+        return response.json()["detail"]["code"]
+
+    assert code("pogresna-lozinka", "nova-lozinka-123") == "wrong_password"
+    assert code(PASSWORD, "kratka") == "password"
+    assert code(PASSWORD, PASSWORD) == "same_password"
+    sign_in(app, "employee")  # the password did not change
+
+
+def test_guessing_the_current_password_is_slowed_down(app, store):
+    employee = sign_in(app, "employee")
+    wrong = {"current_password": "pogresna-lozinka", "new_password": "nova-lozinka-123"}
+    for _ in range(5):
+        assert employee.post("/account/password", json=wrong).status_code == 422
+
+    right = {**wrong, "current_password": PASSWORD}
+    assert employee.post("/account/password", json=right).status_code == 429
+
+
+def test_the_account_needs_a_signed_in_user(app, settings, tmp_path):
+    assert TestClient(app).get("/account").status_code == 401
+    without_accounts = create_app(
+        settings=replace(settings, login_required=False),
+        store=VectorStore(tmp_path / "index2", FakeEmbedder()),
+        llm_factory=lambda s, p: FakeProvider(),
+    )
+    assert TestClient(without_accounts).get("/account").status_code == 404
+
+
+def test_only_ones_own_answers_can_be_rated_or_forwarded(app):
+    upload_faq(app)
+    employee, editor = sign_in(app, "employee"), sign_in(app, "editor")
+    log_id = employee.post("/ask", json={"question": "Kada radi kantina?"}).json()["log_id"]
+
+    rating = {"log_id": log_id, "rating": -1}
+    assert editor.post("/feedback", json=rating).status_code == 404
+    assert editor.post("/escalate", json={"log_id": log_id}).status_code == 404
+    assert employee.post("/feedback", json=rating).json() == {"ok": True}
+    assert employee.post("/escalate", json={"log_id": log_id}).status_code == 200
 
 
 # --- without accounts, and the command line ----------------------------------------------

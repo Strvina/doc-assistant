@@ -242,11 +242,7 @@ async function loadConfig() {
   $("#users-open").hidden = !state.config.can.manage_users;
   const user = state.config.user;  // null without accounts (LOGIN_REQUIRED=false)
   $("#user-chip").hidden = !user;
-  if (user) {
-    $("#user-name").textContent = user.username;
-    $("#user-role").textContent = ROLE_LABELS[user.role] || user.role;
-    $("#logout").title = `Odjavi se (${user.username})`;
-  }
+  if (user) showUser(user);
   $("#dropzone-hint").textContent = `PDF, Word, Excel, PowerPoint, TXT, slike · do ${state.config.max_upload_mb} MB`;
   if (state.config.extensions) $("#file-input").accept = state.config.extensions.join(",");
 }
@@ -1463,6 +1459,119 @@ async function clearQueries() {
   await openInsights();
 }
 
+// --- the account menu and one's own account (ADR-050) -----------------------------------
+
+function showUser(user) {
+  const name = user.full_name || user.username;
+  const role = ROLE_LABELS[user.role] || user.role;
+  $("#user-name").textContent = name;
+  $("#user-role").textContent = role;
+  $("#user-avatar").textContent = initials(name);
+  $("#user-button").title = `${name} · ${role}`;
+  $("#user-button").setAttribute("aria-label", `Nalog: ${name}, ${role}`);
+}
+
+function initials(name) {
+  const words = name.split(/[\s._@-]+/).filter(Boolean);
+  const letters = words.length > 1 ? words[0][0] + words[words.length - 1][0] : name.slice(0, 2);
+  return letters.toUpperCase();
+}
+
+const menuItems = () => [...$("#user-menu").querySelectorAll("button")].filter((b) => !b.hidden);
+
+function openUserMenu({ focus = "first" } = {}) {
+  $("#user-menu").hidden = false;
+  $("#user-button").setAttribute("aria-expanded", "true");
+  const items = menuItems();
+  (focus === "last" ? items[items.length - 1] : items[0]).focus();
+}
+
+// Returns true when the menu was open. Focus goes back to the button unless told otherwise
+// (a click elsewhere leaves it where the user clicked).
+function closeUserMenu({ restoreFocus = true } = {}) {
+  const menu = $("#user-menu");
+  if (menu.hidden) return false;
+  menu.hidden = true;
+  $("#user-button").setAttribute("aria-expanded", "false");
+  if (restoreFocus) $("#user-button").focus();
+  return true;
+}
+
+// Arrow keys move through the menu, Home/End jump, Tab leaves it (WAI-ARIA menu button).
+function userMenuKeys(event) {
+  const items = menuItems();
+  const at = items.indexOf(document.activeElement);
+  const go = (i) => { event.preventDefault(); items[(i + items.length) % items.length].focus(); };
+  if (event.key === "ArrowDown") go(at + 1);
+  else if (event.key === "ArrowUp") go(at - 1);
+  else if (event.key === "Home") go(0);
+  else if (event.key === "End") go(items.length - 1);
+  else if (event.key === "Tab") closeUserMenu({ restoreFocus: false });
+}
+
+// A menu item opens a dialog; closing the dialog gives the focus back to the account button.
+function fromMenu(open) {
+  return () => { closeUserMenu(); open(); };
+}
+
+async function openAccount() {
+  openModal($("#account"));
+  let account;
+  try {
+    account = await api("/account");
+  } catch (error) {
+    toast(`Nalog: ${userError(error)}`, "error");
+    return;
+  }
+  $("#account-username").textContent = account.username;
+  $("#password-username").value = account.username;
+  $("#account-role").textContent = ROLE_LABELS[account.role] || account.role;
+  $("#account-since").textContent = new Date(account.created_at).toLocaleDateString("sr-RS");
+  $("#account-full-name").value = account.full_name;
+}
+
+async function saveAccount(form) {
+  const button = form.querySelector("button[type=submit]");
+  button.disabled = true;
+  try {
+    const account = await api("/account", { method: "PATCH", headers: JSON_HEADERS,
+      body: JSON.stringify({ full_name: $("#account-full-name").value }) });
+    $("#account-full-name").value = account.full_name;
+    state.config.user.full_name = account.full_name;
+    showUser(state.config.user);
+    toast(account.full_name ? `Sačuvano: ${account.full_name}.` : "Ime je uklonjeno; prikazuje se korisničko ime.");
+  } catch (error) {
+    toast(userError(error), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function changePassword(form) {
+  const current = $("#current-password");
+  const fresh = $("#new-password-own");
+  const again = $("#new-password-again");
+  if (fresh.value !== again.value) {
+    toast("Nova lozinka i ponovljena nova lozinka se ne poklapaju.", "error");
+    again.focus();
+    return;
+  }
+  const button = form.querySelector("button[type=submit]");
+  button.disabled = true;
+  try {
+    await api("/account/password", { method: "POST", headers: JSON_HEADERS,
+      body: JSON.stringify({ current_password: current.value, new_password: fresh.value }) });
+    form.reset();
+    $("#password-username").value = state.config.user.username;
+    toast("Lozinka je promenjena. Ostali uređaji su odjavljeni.");
+  } catch (error) {
+    toast(userError(error), "error");
+    if (error.code === "wrong_password") { current.select(); current.focus(); }
+  } finally {
+    button.disabled = false;
+  }
+}
+
 // --- users and roles, for administrators (ADR-049) --------------------------------------
 
 const USER_ERRORS = {
@@ -1472,8 +1581,12 @@ const USER_ERRORS = {
   last_admin: "Ovo je jedini administrator — prvo napravi još jednog.",
   self: "Svoju ulogu i svoj nalog ne možeš da menjaš ovde.",
   missing: "Taj korisnik više ne postoji.",
+  wrong_password: "Trenutna lozinka nije tačna.",
+  same_password: "Nova lozinka je ista kao trenutna.",
+  full_name: "Ime i prezime može imati najviše 100 znakova.",
 };
-const userError = (error) => USER_ERRORS[error.code] || error.message;
+const userError = (error) => USER_ERRORS[error.code]
+  || (error.status === 429 ? "Previše pogrešnih lozinki. Pokušaj ponovo za 15 minuta." : error.message);
 
 function roleSelect(value, attrs = {}) {
   const select = el("select", attrs,
@@ -1506,8 +1619,8 @@ function renderUsers() {
     });
     return el("li", { class: "user-row" + (user.disabled ? " off" : "") },
       el("span", { class: "user-who" },
-        el("strong", {}, user.username),
-        el("small", {}, [user.me && "to si ti", user.disabled && "isključen — ne može da se prijavi",
+        el("strong", {}, user.full_name || user.username),
+        el("small", {}, [user.full_name && user.username, user.me && "to si ti", user.disabled && "isključen — ne može da se prijavi",
           `od ${new Date(user.created_at).toLocaleDateString("sr-RS")}`].filter(Boolean).join(" · "))),
       role,
       el("div", { class: "inbox-row-actions" },
@@ -1658,11 +1771,12 @@ function bindEvents() {
   document.addEventListener("keydown", trapFocus);
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
-      if (closeExportMenu()) return;
+      if (closeExportMenu() || closeUserMenu()) return;
       if (state.pending) cancelAsk();
       else if (!$("#insights").hidden) closeModal($("#insights"));
       else if (!$("#inbox").hidden) closeModal($("#inbox"));
       else if (!$("#users").hidden) closeModal($("#users"));
+      else if (!$("#account").hidden) closeModal($("#account"));
       else if (!$("#viewer").hidden) closeViewer();
       else closeLibraryDrawer();
     }
@@ -1673,6 +1787,7 @@ function bindEvents() {
   });
   document.addEventListener("click", (event) => {  // a click elsewhere closes the export menu
     if (!event.target.closest(".export-menu")) closeExportMenu();
+    if (!event.target.closest("#user-chip")) closeUserMenu({ restoreFocus: false });
   });
   $("#conv-list").addEventListener("scroll", closeExportMenu);
 
@@ -1702,7 +1817,22 @@ function bindEvents() {
     location.reload();  // the server now shows the sign-in page
   });
   $("#insights").addEventListener("click", (event) => { if (event.target.id === "insights") closeModal(event.currentTarget); });
-  $("#users-open").addEventListener("click", openUsers);
+  $("#user-button").addEventListener("click", () => {
+    if (!closeUserMenu()) openUserMenu();
+  });
+  $("#user-button").addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      openUserMenu({ focus: event.key === "ArrowUp" ? "last" : "first" });
+    }
+  });
+  $("#user-menu").addEventListener("keydown", userMenuKeys);
+  $("#account-open").addEventListener("click", fromMenu(openAccount));
+  $("#account-close").addEventListener("click", () => closeModal($("#account")));
+  $("#account").addEventListener("click", (event) => { if (event.target.id === "account") closeModal(event.currentTarget); });
+  $("#account-form").addEventListener("submit", (event) => { event.preventDefault(); saveAccount(event.currentTarget); });
+  $("#password-form").addEventListener("submit", (event) => { event.preventDefault(); changePassword(event.currentTarget); });
+  $("#users-open").addEventListener("click", fromMenu(openUsers));
   $("#users-close").addEventListener("click", () => closeModal($("#users")));
   $("#users").addEventListener("click", (event) => { if (event.target.id === "users") closeModal(event.currentTarget); });
   $("#new-role").replaceWith(roleSelect("employee", { id: "new-role", "aria-label": "Uloga novog korisnika" }));

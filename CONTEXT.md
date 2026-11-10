@@ -87,6 +87,10 @@ GitHub Actions · Docker / Hugging Face Spaces
   privremeno isključi nalog u web UI-ju; uklanjanje naloga briše i njegove razgovore. Sam sebi ne može
   da promeni ulogu, da se isključi ili obriše, a poslednji aktivni administrator ne može biti uklonjen.
   Provereno API testovima i u browseru.
+- **Meni naloga (ADR-050):** klik na ime gore desno → *Moj nalog* (ime i prezime, promena sopstvene lozinke uz
+  trenutnu; ostali uređaji se odjavljuju), *Korisnici i uloge* (admin, premešteno iz zaglavlja), *Odjavi se*.
+  Nove lične stavke idu u taj meni. 👍/👎 i prosleđivanje timu samo za odgovore iz sopstvenih razgovora
+  (`ConversationStore.owns_answer`). Provereno u browseru (Playwright, probni server na :8765).
 - **Kvalitet koda (ADR-033):** `api.py` podeljen na paket `docassist/api/` (ruteri po oblastima, `deps`,
   `security`, `schemas`); strogi `mypy` obavezan (CI + pre commita); šira ruff pravila. Pokrivenost 95 %.
 - **Samoosvežavanje indeksa (ADR-032):** zastareo ili nedovršen indeks web aplikacija pravi sama iz
@@ -119,11 +123,10 @@ GitHub Actions · Docker / Hugging Face Spaces
 
 **Revizija 2026-11-09 (#41–#48) je urađena** (bezbednost, performanse, SQLite indeks umesto ChromaDB-a,
 WAL, lista uživo, nalozi i uloge). Sledeće, redom:
-1. Korisnik sam menja svoju lozinku.
-2. Ako zatreba: vidljivost dokumenata po odeljenju; prijava firminim Microsoft/Google nalogom (traži firmin nalog
-   za proveru); `/feedback` i `/escalate` samo za sopstvena pitanja.
-Korisnik još nije uključio prijavu kod sebe (`LOGIN_REQUIRED=true` u `.env` + `users add <ime> --role admin`).
-Stari Chroma fajlovi u `data/index` čekaju njegovu potvrdu za brisanje.
+1. Ako zatreba: vidljivost dokumenata po odeljenju; prijava firminim Microsoft/Google nalogom (traži firmin
+   nalog za proveru); nove stavke u meniju naloga (korisnik je najavio da će ih biti).
+Prijava je kod korisnika uključena (`LOGIN_REQUIRED=true`, administrator `ime`). Stari Chroma fajlovi u
+`data/index` su obrisani (2026-11-10) — ostao je samo `index.sqlite`.
 
 **Odluka (2026-11-06): nema demo videa ni online dema, i za sada nema Claude-a — samo razvoj aplikacije
 (besplatni Groq/Gemini).** (Ranije, 2026-11-04: online demo se ne objavljuje.)
@@ -271,3 +274,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-09 | Dokumenti se pojavljuju u listi čim su indeksirani, bez osvežavanja stranice; ADR-047 | #47 |
 | 2026-11-09 | Nalozi i tri uloge (zaposleni / urednik / administrator), stranica za prijavu, korisnici iz CLI-ja; ADR-048 | #48 |
 | 2026-11-10 | Panel za administraciju naloga u web UI-ju (započeo Codex, pregledano i dorađeno); ADR-049 | #49 |
+| 2026-11-10 | Meni naloga (Moj nalog: ime i prezime, sopstvena lozinka), ocene i prosleđivanje samo za sopstvena pitanja; ispravljena širina prozora; ADR-050 | #50 |

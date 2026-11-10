@@ -125,15 +125,41 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 [data-theme="dark"] .moon { display: none; }
 .only-mobile { display: none; }
 
-/* Who is signed in (ADR-048): name, role and the sign-out button. */
+/* Who is signed in (ADR-048); a click opens the account menu (ADR-050). */
 .user-chip {
-  display: flex; align-items: center; gap: 4px;
-  margin-left: 6px; padding-left: 12px;
+  position: relative; display: flex; align-items: center;
+  margin-left: 6px; padding-left: 10px;
   border-left: 1px solid rgba(255, 255, 255, .16);
 }
-.user-text { display: flex; flex-direction: column; line-height: 1.15; text-align: right; }
-.user-text strong { font-size: 13px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-button {
+  display: flex; align-items: center; gap: 9px; height: 40px; padding: 0 8px 0 4px;
+  border: 0; border-radius: 10px; background: none; color: inherit; font: inherit; cursor: pointer;
+}
+.user-button:hover, .user-button[aria-expanded="true"] { background: rgba(127, 127, 127, .18); }
+.user-avatar {
+  display: grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 50%;
+  background: var(--amber); color: #1b1300; font: 700 12px/1 var(--mono); letter-spacing: .02em;
+}
+.user-text { display: flex; flex-direction: column; line-height: 1.15; text-align: left; }
+.user-text strong { font-size: 13px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .user-text small { font-size: 11px; color: #9fb4cc; }
+.user-caret { flex: none; width: 15px; height: 15px; color: #9fb4cc; transition: transform .15s; }
+.user-button[aria-expanded="true"] .user-caret { transform: rotate(180deg); }
+.user-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 60; min-width: 210px; padding: 5px;
+  display: grid; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-2);
+}
+.user-menu[hidden] { display: none; }
+.user-menu button {
+  display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 0; border-radius: 7px;
+  background: none; color: var(--ink); font: inherit; font-size: 13.5px; font-weight: 500;
+  text-align: left; cursor: pointer;
+}
+.user-menu button[hidden] { display: none; }
+.user-menu button:hover, .user-menu button:focus-visible { background: var(--surface-2); outline: none; }
+.user-menu svg { width: 17px; height: 17px; color: var(--muted); }
+.user-menu hr { margin: 4px 6px; border: 0; border-top: 1px solid var(--line); }
 
 /* --- sign-in page ---------------------------------------------------------------------- */
 .login-page { display: grid; place-items: center; padding: 24px; }
@@ -223,8 +249,25 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .inbox-dot.ok { background: var(--ok); }
 .inbox-dot.warn { background: var(--amber); }
 .inbox-dot.bad { background: var(--bad); }
+/* One's own account (ADR-050). */
+.modal-card.account-modal { width: min(520px, 100%); }
+.account-modal section { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+.account-modal h3 { margin: 0 0 10px; font-size: 15px; }
+.account-facts { display: grid; grid-template-columns: repeat(3, auto); justify-content: start; gap: 6px 28px; margin: -4px 0 0; }
+.account-facts dt { font-size: 12px; color: var(--muted); }
+.account-facts dd { margin: 2px 0 0; font-weight: 600; font-size: 14px; }
+.account-form { display: grid; gap: 6px; }
+.account-form label { font-size: 13px; font-weight: 600; color: var(--ink-2); margin-top: 6px; }
+.account-form input {
+  height: 38px; padding: 0 12px; font: inherit; font-size: 14px; color: var(--ink);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-2);
+}
+.account-form .muted { margin: 2px 0 6px; font-size: 12.5px; }
+.account-form .btn { justify-self: start; }
+.account-form .btn:disabled { opacity: .6; cursor: default; }
+@media (max-width: 520px) { .account-facts { grid-template-columns: 1fr 1fr; } }
 /* Users and roles, for administrators (ADR-049). */
-.users-modal { width: min(780px, 100%); }
+.modal-card.users-modal { width: min(780px, 100%); }
 .users-intro { margin: -6px 0 16px; font-size: 13.5px; line-height: 1.55; }
 .user-add { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 8px; margin-bottom: 16px; }
 .user-add input, .user-add select, .user-row select, .user-password input {
@@ -243,7 +286,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   .user-add, .q-list li.user-row { grid-template-columns: 1fr; }
   .user-password { grid-column: 1; flex-wrap: wrap; }
 }
-.inbox-modal { width: min(720px, 100%); }
+.modal-card.inbox-modal { width: min(720px, 100%); }
 .inbox-intro { margin: -6px 0 18px; font-size: 13.5px; line-height: 1.55; }
 .inbox-modal section { margin-top: 20px; }
 .inbox-modal h3 { margin: 0 0 8px; font-size: 15px; }
@@ -692,7 +735,7 @@ kbd { font: 600 10.5px/1 var(--mono); padding: 2px 5px; border-radius: 4px; bord
   .topbar { gap: 8px; padding: 0 10px; }
   .topbar-actions { gap: 0; }
   .user-chip { margin-left: 2px; padding-left: 4px; }
-  .user-text { display: none; }  /* the sign-out button stays; the name is in its tooltip */
+  .user-text, .user-caret { display: none; }  /* the initials open the menu; the name is in its tooltip */
 }
 @media (max-width: 520px) {
   .brand-text { display: none; }

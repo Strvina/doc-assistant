@@ -30,14 +30,14 @@ def login(
 ) -> dict[str, str]:
     if not settings.login_required:
         raise HTTPException(404, "This server has no user accounts (LOGIN_REQUIRED=false)")
-    failures = _failures(request, body.username)
-    if len(failures) >= LOGIN_ATTEMPTS:
+    wrong = failures(request, body.username)
+    if len(wrong) >= LOGIN_ATTEMPTS:
         raise HTTPException(429, "Too many wrong passwords. Try again in 15 minutes.")
     user = users.verify(body.username, body.password)
     if user is None:
-        failures.append(time.monotonic())
+        wrong.append(time.monotonic())
         raise HTTPException(401, "Wrong user name or password")
-    failures.clear()
+    wrong.clear()
 
     before = request.cookies.get(SESSION_COOKIE)
     session_id = start_session(request, response, settings, conversations)
@@ -58,8 +58,9 @@ def logout(request: Request, response: Response, users: UsersDep) -> dict[str, b
     return {"ok": True}
 
 
-def _failures(request: Request, username: str) -> list[float]:
-    """Times of the recent wrong passwords for this user name from this address."""
+def failures(request: Request, username: str) -> list[float]:
+    """Times of the recent wrong passwords for this user name from this address (at sign-in
+    and when changing one's own password)."""
     tracked = request.app.state.login_failures
     now = time.monotonic()
     if len(tracked) > MAX_TRACKED:
@@ -68,7 +69,7 @@ def _failures(request: Request, username: str) -> list[float]:
         ]:
             del tracked[key]
     address = request.client.host if request.client else "?"
-    failures: list[float] = tracked[(address, username.strip().lower())]
-    while failures and now - failures[0] > LOGIN_WINDOW_S:
-        failures.pop(0)
-    return failures
+    times: list[float] = tracked[(address, username.strip().lower())]
+    while times and now - times[0] > LOGIN_WINDOW_S:
+        times.pop(0)
+    return times
