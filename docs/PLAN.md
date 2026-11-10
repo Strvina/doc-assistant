@@ -110,6 +110,7 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 - [x] SQLite za više korisnika odjednom (WAL, bez `database is locked`); PostgreSQL razmotren i odbijen (ADR-046)
 - [x] Dokument se pojavljuje u listi čim je indeksiran (upload, osvežavanje indeksa, uvoz) bez osvežavanja stranice (ADR-047)
 - [x] Nalozi i uloge (zaposleni / urednik / administrator), prijava, korisnici iz komandne linije (ADR-048)
+- [x] Panel „Korisnici i uloge“ za administratora: dodavanje, promena uloge/lozinke, isključenje i brisanje naloga (ADR-049)
 
 ## Dodatno — formati
 

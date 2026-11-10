@@ -54,7 +54,12 @@ CREATE INDEX IF NOT EXISTS user_sessions_user ON user_sessions (user_id);
 
 
 class UserError(ValueError):
-    """A change to the users that cannot be made; the message says why."""
+    """A change to the users that cannot be made. The message says why; `code` names the
+    reason for a UI that words it in its own language."""
+
+    def __init__(self, message: str, code: str = "invalid") -> None:
+        super().__init__(message)
+        self.code = code
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,7 +129,7 @@ class UserStore:
                 )
                 user_id = cursor.lastrowid
         except sqlite3.IntegrityError as exc:
-            raise UserError(f"A user named {username!r} already exists") from exc
+            raise UserError(f"A user named {username!r} already exists", "taken") from exc
         assert user_id is not None  # set by every INSERT
         return User(user_id, username, role, created_at=now)
 
@@ -179,7 +184,7 @@ class UserStore:
         with closing(self._connect()) as db, db:
             self._keep_an_admin(db, user_id)
             if not db.execute("DELETE FROM users WHERE id = ?", (user_id,)).rowcount:
-                raise UserError("No such user")
+                raise UserError("No such user", "missing")
 
     def _change(self, user_id: int, assignment: str, value: object, *, keeps_admin: bool) -> None:
         # `assignment` is one of the fixed column assignments above, never user input.
@@ -188,7 +193,7 @@ class UserStore:
                 self._keep_an_admin(db, user_id)
             updated = db.execute(f"UPDATE users SET {assignment} WHERE id = ?", (value, user_id))
             if not updated.rowcount:
-                raise UserError("No such user")
+                raise UserError("No such user", "missing")
 
     @staticmethod
     def _keep_an_admin(db: sqlite3.Connection, user_id: int) -> None:
@@ -199,7 +204,7 @@ class UserStore:
         ).fetchone()[0]
         target = db.execute("SELECT role, disabled FROM users WHERE id = ?", (user_id,)).fetchone()
         if target and target["role"] == "admin" and not target["disabled"] and not others:
-            raise UserError("This is the only administrator: make another one first")
+            raise UserError("This is the only administrator: make another one first", "last_admin")
 
     def _one(self, sql: str, *params: object) -> User | None:
         with closing(self._connect()) as db:
@@ -243,16 +248,19 @@ def _checked_username(username: str) -> str:
     username = username.strip().lower()
     if not _USERNAME.fullmatch(username):
         raise UserError(
-            "A user name has 3 to 64 letters, digits or . _ - @ and starts with a letter or digit"
+            "A user name has 3 to 64 letters, digits or . _ - @ and starts with a letter or digit",
+            "username",
         )
     return username
 
 
 def _check_role(role: str) -> None:
     if role not in ROLES:
-        raise UserError(f"Unknown role {role!r}. Use one of: {', '.join(ROLES)}")
+        raise UserError(f"Unknown role {role!r}. Use one of: {', '.join(ROLES)}", "role")
 
 
 def _check_password(password: str) -> None:
     if not MIN_PASSWORD_LENGTH <= len(password) <= MAX_PASSWORD_LENGTH:
-        raise UserError(f"A password has {MIN_PASSWORD_LENGTH} to {MAX_PASSWORD_LENGTH} characters")
+        raise UserError(
+            f"A password has {MIN_PASSWORD_LENGTH} to {MAX_PASSWORD_LENGTH} characters", "password"
+        )

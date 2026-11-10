@@ -19,6 +19,7 @@ from pathlib import Path
 from docassist import reindex
 from docassist.agent import run_agent
 from docassist.config import Settings
+from docassist.conversations import ConversationStore
 from docassist.factory import (
     MissingAPIKeyError,
     build_library,
@@ -93,7 +94,7 @@ def _parser() -> argparse.ArgumentParser:
     password.add_argument("username")
     password.add_argument("--password-stdin", action="store_true", help=from_stdin)
     password.set_defaults(handler=cmd_users_password)
-    remove = actions.add_parser("remove", help="delete a user and their sign-ins")
+    remove = actions.add_parser("remove", help="delete a user and their saved conversations")
     remove.add_argument("username")
     remove.set_defaults(handler=cmd_users_remove)
 
@@ -135,15 +136,17 @@ def cmd_users_password(args: argparse.Namespace, settings: Settings) -> int:
 
 def cmd_users_remove(args: argparse.Namespace, settings: Settings) -> int:
     store = UserStore(settings.log_db)
-    store.remove(_existing(store, args.username).id)
-    print(f"Removed {args.username}.")
+    user = _existing(store, args.username)
+    store.remove(user.id)
+    removed = ConversationStore(settings.log_db).delete_owner(f"user:{user.id}")
+    print(f"Removed {user.username} and their {removed} saved conversations.")
     return 0
 
 
 def _existing(store: UserStore, username: str) -> User:
     user = store.by_name(username)
     if user is None:
-        raise UserError(f"No user named {username!r}")
+        raise UserError(f"No user named {username!r}", "missing")
     return user
 
 
