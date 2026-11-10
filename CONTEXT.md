@@ -83,6 +83,10 @@ GitHub Actions · Docker / Hugging Face Spaces
   admin (`users.py`, provere u `api/security.py`: `EDITOR`, `ADMIN`, `UPLOADS`, `ADMIN_CHANGES`), razgovori po
   osobi (`user:<id>`), korisnici iz CLI-ja (`users add|list|role|password|remove`). Podrazumevano isključeno:
   bez toga sve radi kao pre. Provereno u browseru sa sva tri naloga.
+- **Panel korisnika (ADR-049):** administrator može da doda nalog, promeni tuđu ulogu/lozinku ili
+  privremeno isključi nalog u web UI-ju; uklanjanje naloga briše i njegove razgovore. Sam sebi ne može
+  da promeni ulogu, da se isključi ili obriše, a poslednji aktivni administrator ne može biti uklonjen.
+  Provereno API testovima i u browseru.
 - **Kvalitet koda (ADR-033):** `api.py` podeljen na paket `docassist/api/` (ruteri po oblastima, `deps`,
   `security`, `schemas`); strogi `mypy` obavezan (CI + pre commita); šira ruff pravila. Pokrivenost 95 %.
 - **Samoosvežavanje indeksa (ADR-032):** zastareo ili nedovršen indeks web aplikacija pravi sama iz
@@ -115,10 +119,8 @@ GitHub Actions · Docker / Hugging Face Spaces
 
 **Revizija 2026-11-09 (#41–#48) je urađena** (bezbednost, performanse, SQLite indeks umesto ChromaDB-a,
 WAL, lista uživo, nalozi i uloge). Sledeće, redom:
-1. **Panel „Korisnici“ za administratora** u UI-ju (dodaj, promeni ulogu, nova lozinka, isključi) — sada je
-   upravljanje korisnicima samo u komandnoj liniji (ADR-048).
-2. Korisnik sam menja svoju lozinku.
-3. Ako zatreba: vidljivost dokumenata po odeljenju; prijava firminim Microsoft/Google nalogom (traži firmin nalog
+1. Korisnik sam menja svoju lozinku.
+2. Ako zatreba: vidljivost dokumenata po odeljenju; prijava firminim Microsoft/Google nalogom (traži firmin nalog
    za proveru); `/feedback` i `/escalate` samo za sopstvena pitanja.
 Korisnik još nije uključio prijavu kod sebe (`LOGIN_REQUIRED=true` u `.env` + `users add <ime> --role admin`).
 Stari Chroma fajlovi u `data/index` čekaju njegovu potvrdu za brisanje.
@@ -268,3 +270,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-09 | SQLite za više korisnika odjednom (WAL; 40 istovremenih bez greške); PostgreSQL odbijen uz merenje; ADR-046 | #46 |
 | 2026-11-09 | Dokumenti se pojavljuju u listi čim su indeksirani, bez osvežavanja stranice; ADR-047 | #47 |
 | 2026-11-09 | Nalozi i tri uloge (zaposleni / urednik / administrator), stranica za prijavu, korisnici iz CLI-ja; ADR-048 | #48 |
+| 2026-11-09 | Panel za administraciju naloga u web UI-ju; ADR-049 | — |

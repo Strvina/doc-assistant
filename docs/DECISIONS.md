@@ -761,3 +761,16 @@ pogrešna lozinka, 403 sa servera i kad dugmeta nema), bez CSP prekršaja.
 Upravljanje korisnicima je za sada samo u komandnoj liniji. Svi prijavljeni vide sve dokumente
 (vidljivost po odeljenju je sledeći korak ako zatreba). `/feedback` i `/escalate` primaju `log_id`
 bilo kog pitanja, pa prijavljeni korisnik može da oceni ili prosledi i tuđe pitanje ako pogodi broj.
+
+### ADR-049 · Administracija naloga iz web UI-ja
+**Odluka:** kada je prijava uključena, administrator dobija panel „Korisnici i uloge“: može da doda
+nalog, promeni ulogu, postavi novu lozinku, isključi/uključi ili obriše drugog korisnika. Nova
+lozinka i isključenje odmah odjavljuju korisnika sa svih uređaja. Brisanje naloga briše i njegove
+sačuvane razgovore; ako razgovore treba sačuvati, nalog se isključi. Panel ne vraća hash lozinke,
+ne dozvoljava administratoru da menja sopstvenu ulogu, da se isključi ili obriše, a `UserStore`
+sprečava uklanjanje poslednjeg aktivnog administratora. API proverava administratorsku ulogu i kad
+je dugme sakriveno u UI-ju.
+**Zašto:** CLI upravljanje iz ADR-048 je nepraktično za svakodnevno dodavanje i isključivanje
+zaposlenih. Zadržano je kao put za početno pravljenje administratora i oporavak naloga.
+**Cena:** lozinku administrator mora bezbedno da saopšti korisniku. Brisanje razgovora je trajno;
+UI zato prikazuje potvrdu, a privremeni gubitak pristupa treba rešavati opcijom „Isključi“.

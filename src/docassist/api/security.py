@@ -116,6 +116,7 @@ def permissions(role: str, settings: Settings) -> dict[str, bool]:
         "see_usage": admin,
         "delete_questions": admin and settings.allow_uploads,
         "manage_inbox": admin and settings.allow_uploads,
+        "manage_users": admin and settings.login_required,
     }
 
 

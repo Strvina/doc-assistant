@@ -141,6 +141,7 @@ const state = {
   docFilter: "", // the library search the list was drawn for
   docsShown: DOCUMENT_PAGE, // documents drawn so far (more appear when scrolling)
   olderTurns: [], // turns of the opened conversation not drawn yet, oldest first
+  users: [], // GET /users, for the administrator's panel
   scope: loadScope(), // doc_ids to search; empty = all documents
 };
 
@@ -192,12 +193,16 @@ async function api(path, options = {}) {
   const response = await fetch(path, { credentials: "same-origin", ...options });
   if (!response.ok) {
     let detail = `${response.status}`;
+    let code;
     try {
       const body = await response.json();
-      detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+      // A detail of { code, message } names the reason, so the UI can word it itself.
+      if (body.detail?.message) ({ code, message: detail } = body.detail);
+      else detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
     } catch {}
     const error = new Error(detail);
     error.status = response.status;
+    error.code = code;
     // With accounts: signed out elsewhere, disabled or a new password. Show the sign-in page.
     if (response.status === 401 && state.config?.login) location.reload();
     if (response.status === 503 && detail.includes("being rebuilt")) watchRebuild();
@@ -234,6 +239,7 @@ async function loadConfig() {
   const zone = $("#dropzone");
   zone.hidden = !state.config.can.edit_documents;
   $("#insights-open").hidden = !state.config.can.see_gaps;
+  $("#users-open").hidden = !state.config.can.manage_users;
   const user = state.config.user;  // null without accounts (LOGIN_REQUIRED=false)
   $("#user-chip").hidden = !user;
   if (user) {
@@ -1457,6 +1463,116 @@ async function clearQueries() {
   await openInsights();
 }
 
+// --- users and roles, for administrators (ADR-049) --------------------------------------
+
+const USER_ERRORS = {
+  taken: "Korisnik sa tim imenom već postoji.",
+  username: "Korisničko ime ima 3 do 64 slova, cifara ili znakova . _ - @, bez razmaka.",
+  password: "Lozinka mora imati najmanje 8 znakova.",
+  last_admin: "Ovo je jedini administrator — prvo napravi još jednog.",
+  self: "Svoju ulogu i svoj nalog ne možeš da menjaš ovde.",
+  missing: "Taj korisnik više ne postoji.",
+};
+const userError = (error) => USER_ERRORS[error.code] || error.message;
+
+function roleSelect(value, attrs = {}) {
+  const select = el("select", attrs,
+    ...Object.entries(ROLE_LABELS).map(([id, label]) => el("option", { value: id }, label)));
+  select.value = value;
+  return select;
+}
+
+async function openUsers() {
+  openModal($("#users"));
+  await loadUsers();
+}
+
+async function loadUsers() {
+  try {
+    state.users = await api("/users");
+  } catch (error) {
+    toast(`Korisnici: ${userError(error)}`, "error");
+    return;
+  }
+  renderUsers();
+}
+
+function renderUsers() {
+  $("#user-list").replaceChildren(...state.users.map((user) => {
+    const role = roleSelect(user.role, {
+      "aria-label": `Uloga: ${user.username}`, disabled: user.me,
+      title: user.me ? "Svoju ulogu ne možeš da promeniš" : undefined,
+      onchange: (e) => changeUser(user, { role: e.target.value }, `${user.username} je sada ${ROLE_LABELS[e.target.value].toLowerCase()}.`),
+    });
+    return el("li", { class: "user-row" + (user.disabled ? " off" : "") },
+      el("span", { class: "user-who" },
+        el("strong", {}, user.username),
+        el("small", {}, [user.me && "to si ti", user.disabled && "isključen — ne može da se prijavi",
+          `od ${new Date(user.created_at).toLocaleDateString("sr-RS")}`].filter(Boolean).join(" · "))),
+      role,
+      el("div", { class: "inbox-row-actions" },
+        // Not for oneself: a new password signs its owner out everywhere, this browser too.
+        !user.me && el("button", { class: "link", type: "button", onclick: (e) => passwordForm(e.currentTarget.closest("li"), user) }, "Nova lozinka"),
+        !user.me && el("button", { class: "link", type: "button",
+          onclick: () => changeUser(user, { disabled: !user.disabled },
+            user.disabled ? `${user.username} ponovo može da se prijavi.` : `${user.username} je isključen i odjavljen.`) },
+          user.disabled ? "Uključi" : "Isključi"),
+        !user.me && el("button", { class: "link danger", type: "button", onclick: () => removeUser(user) }, "Obriši")));
+  }));
+}
+
+// "Nova lozinka" turns the row into a small form; the user is then signed out everywhere.
+function passwordForm(row, user) {
+  const input = el("input", { type: "password", autocomplete: "new-password", minlength: 8, maxlength: 200, required: true,
+    placeholder: "Nova lozinka (najmanje 8 znakova)", "aria-label": `Nova lozinka: ${user.username}` });
+  const form = el("form", { class: "user-password",
+      onsubmit: (e) => { e.preventDefault(); changeUser(user, { password: input.value }, `${user.username}: nova lozinka je sačuvana, odjavljen je sa svih uređaja.`); } },
+    input,
+    el("button", { class: "btn small primary", type: "submit" }, "Sačuvaj"),
+    el("button", { class: "btn small", type: "button", onclick: renderUsers }, "Otkaži"));
+  row.replaceChildren(el("span", { class: "user-who" }, el("strong", {}, user.username)), form);
+  input.focus();
+}
+
+async function changeUser(user, change, done) {
+  try {
+    await api(`/users/${user.id}`, { method: "PATCH", headers: JSON_HEADERS, body: JSON.stringify(change) });
+    toast(done);
+  } catch (error) {
+    toast(userError(error), "error");
+  }
+  await loadUsers();  // also puts a refused choice back
+}
+
+async function removeUser(user) {
+  if (!confirm(`Obrisati nalog „${user.username}“ i sve njegove sačuvane razgovore? Ovo ne može da se vrati.\n\n` +
+    "Ako samo treba da mu se zabrani pristup, izaberi „Isključi“.")) return;
+  try {
+    await api(`/users/${user.id}`, { method: "DELETE" });
+    toast(`Nalog ${user.username} je obrisan.`);
+  } catch (error) {
+    toast(userError(error), "error");
+  }
+  await loadUsers();
+}
+
+async function addUser(form) {
+  const name = $("#new-username");
+  const password = $("#new-password");
+  const role = $("#new-role");
+  try {
+    const user = await api("/users", { method: "POST", headers: JSON_HEADERS,
+      body: JSON.stringify({ username: name.value, password: password.value, role: role.value }) });
+    toast(`Dodat je ${user.username} (${ROLE_LABELS[user.role].toLowerCase()}). Javi mu korisničko ime i lozinku.`);
+    form.reset();
+    role.value = "employee";
+  } catch (error) {
+    toast(userError(error), "error");
+    return;
+  }
+  await loadUsers();
+}
+
 // --- dialogs ----------------------------------------------------------------------------
 // A dialog takes the keyboard focus when it opens and gives it back to the button that opened
 // it when it closes; while it is open, Tab stays inside (what aria-modal="true" promises).
@@ -1546,6 +1662,7 @@ function bindEvents() {
       if (state.pending) cancelAsk();
       else if (!$("#insights").hidden) closeModal($("#insights"));
       else if (!$("#inbox").hidden) closeModal($("#inbox"));
+      else if (!$("#users").hidden) closeModal($("#users"));
       else if (!$("#viewer").hidden) closeViewer();
       else closeLibraryDrawer();
     }
@@ -1585,6 +1702,11 @@ function bindEvents() {
     location.reload();  // the server now shows the sign-in page
   });
   $("#insights").addEventListener("click", (event) => { if (event.target.id === "insights") closeModal(event.currentTarget); });
+  $("#users-open").addEventListener("click", openUsers);
+  $("#users-close").addEventListener("click", () => closeModal($("#users")));
+  $("#users").addEventListener("click", (event) => { if (event.target.id === "users") closeModal(event.currentTarget); });
+  $("#new-role").replaceWith(roleSelect("employee", { id: "new-role", "aria-label": "Uloga novog korisnika" }));
+  $("#user-add").addEventListener("submit", (event) => { event.preventDefault(); addUser(event.currentTarget); });
   $("#theme-toggle").addEventListener("click", () => {
     const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = next;

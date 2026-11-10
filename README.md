@@ -97,6 +97,9 @@ with their own account and has one of three roles (ADR-048): an **employee** ask
 their conversations, an **editor** also manages the documents and sees the gaps in the
 documentation, an **administrator** also sees usage and cost and manages the inbox folder.
 Users are created with `uv run python -m docassist.cli users add <name> --role admin`.
+Administrators can also add accounts, change roles or passwords, disable accounts, and remove accounts
+from the **Users and roles** panel (ADR-049). Removing an account also removes its saved conversations;
+disabling it preserves them.
 The question limit per IP address
 counts the connection's address; behind a proxy, uvicorn's `--forwarded-allow-ips` decides
 which proxy may name the real one.
@@ -170,8 +173,9 @@ Generated from `scripts/sample_docs_src/` by `uv run python scripts/build_sample
   and the text an AI model read from its pictures.
   Deleting a conversation removes it and its answers from the server. The query log (with the
   saved conversations) is one SQLite file: delete it, or rows older than your retention period.
-- **Access:** no user accounts yet (out of scope) — run it on an internal network, or set
-  `API_TOKEN`. The public demo uses fictional documents, uploads disabled (`ALLOW_UPLOADS=false`)
+- **Access:** accounts are optional (`LOGIN_REQUIRED=false` by default); enable them for named users and
+  employee/editor/admin roles. Otherwise run it on an internal network or set `API_TOKEN`. The public
+  demo uses fictional documents, uploads disabled (`ALLOW_UPLOADS=false`)
   and per-session / per-IP question limits.
 - **Prompt injection:** documents are passed as data and the model is told to ignore instructions in
   them; citations are verified; agent actions that matter need the user's confirmation and only

@@ -230,6 +230,11 @@ class ConversationStore:
             -last:
         ]
 
+    def delete_owner(self, owner: str) -> int:
+        """Delete every conversation of an owner (a removed user). Returns how many."""
+        with closing(self._connect()) as db, db:
+            return db.execute("DELETE FROM conversations WHERE owner = ?", (owner,)).rowcount
+
     def delete(self, owner: str, conversation_id: str) -> bool:
         with closing(self._connect()) as db, db:
             deleted = db.execute(

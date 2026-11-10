@@ -21,7 +21,16 @@ from docassist.api.deps import (
     inbox_config_file,
     library_of,
 )
-from docassist.api.routes import ask, auth, conversations, documents, monitoring, reports, web
+from docassist.api.routes import (
+    ask,
+    auth,
+    conversations,
+    documents,
+    monitoring,
+    reports,
+    users,
+    web,
+)
 from docassist.api.routes import inbox as inbox_routes
 from docassist.api.security import block_cross_site, security_headers
 from docassist.config import Settings
@@ -67,7 +76,7 @@ def create_app(
     app.middleware("http")(block_cross_site)
     app.include_router(web.router)
     app.mount("/static", StaticFiles(directory=web.WEB_DIR), name="static")
-    for module in (auth, documents, inbox_routes, ask, conversations, monitoring, reports):
+    for module in (auth, users, documents, inbox_routes, ask, conversations, monitoring, reports):
         app.include_router(module.router)
     return app
 

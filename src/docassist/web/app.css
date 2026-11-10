@@ -223,6 +223,26 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .inbox-dot.ok { background: var(--ok); }
 .inbox-dot.warn { background: var(--amber); }
 .inbox-dot.bad { background: var(--bad); }
+/* Users and roles, for administrators (ADR-049). */
+.users-modal { width: min(780px, 100%); }
+.users-intro { margin: -6px 0 16px; font-size: 13.5px; line-height: 1.55; }
+.user-add { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 8px; margin-bottom: 16px; }
+.user-add input, .user-add select, .user-row select, .user-password input {
+  height: 36px; min-width: 0; padding: 0 10px; font: inherit; font-size: 13.5px; color: var(--ink);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-2);
+}
+.user-add .btn { height: 36px; }
+.q-list li.user-row { grid-template-columns: 1fr auto auto; align-items: center; gap: 14px; }
+.user-who { display: grid; gap: 2px; min-width: 0; }
+.user-who strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-row.off .user-who strong { color: var(--muted); text-decoration: line-through; }
+.user-row select:disabled { opacity: .6; }
+.user-password { display: flex; gap: 8px; grid-column: 2 / -1; }
+.user-password input { flex: 1; }
+@media (max-width: 640px) {
+  .user-add, .q-list li.user-row { grid-template-columns: 1fr; }
+  .user-password { grid-column: 1; flex-wrap: wrap; }
+}
 .inbox-modal { width: min(720px, 100%); }
 .inbox-intro { margin: -6px 0 18px; font-size: 13.5px; line-height: 1.55; }
 .inbox-modal section { margin-top: 20px; }

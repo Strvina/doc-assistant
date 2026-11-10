@@ -229,8 +229,97 @@ def test_the_ui_is_told_what_the_role_may_do(app):
         "see_usage": False,
         "delete_questions": False,
         "manage_inbox": False,
+        "manage_users": False,
     }
     assert all(can["admin"].values())
+
+
+# --- the administrator's "Korisnici" panel (ADR-049) -------------------------------------
+
+
+def test_an_administrator_manages_the_users(app, store):
+    admin = sign_in(app, "admin")
+
+    listed = admin.get("/users").json()
+    assert [(u["username"], u["role"], u["me"]) for u in listed] == [
+        ("admin", "admin", True),
+        ("editor", "editor", False),
+        ("employee", "employee", False),
+    ]
+    assert "password_hash" not in listed[0] and "password" not in listed[0]
+
+    new = {"username": "Ana", "password": PASSWORD, "role": "employee"}
+    created = admin.post("/users", json=new)
+    assert created.status_code == 201 and created.json()["username"] == "ana"
+    ana = sign_in(app, "ana")
+    assert ana.post("/documents/demo").status_code == 403
+
+    ana_id = created.json()["id"]
+    assert admin.patch(f"/users/{ana_id}", json={"role": "editor"}).json()["role"] == "editor"
+    assert ana.post("/documents/demo").status_code == 200  # at once, without signing in again
+
+    assert admin.patch(f"/users/{ana_id}", json={"password": "nova-lozinka-123"}).status_code == 200
+    assert ana.get("/documents").status_code == 401  # signed out everywhere
+    ana = sign_in(app, "ana", "nova-lozinka-123")
+
+    assert admin.patch(f"/users/{ana_id}", json={"disabled": True}).json()["disabled"] is True
+    assert ana.get("/documents").status_code == 401
+    login = {"username": "ana", "password": "nova-lozinka-123"}
+    assert TestClient(app).post("/auth/login", json=login).status_code == 401
+    assert admin.patch(f"/users/{ana_id}", json={"disabled": False}).json()["disabled"] is False
+    sign_in(app, "ana", "nova-lozinka-123")
+
+
+def test_removing_a_user_removes_their_conversations(app, store):
+    upload_faq(app)
+    employee = sign_in(app, "employee")
+    employee.post("/ask", json={"question": "Kada radi kantina?"})
+    employee_id = store.by_name("employee").id
+    admin = sign_in(app, "admin")
+
+    removed = admin.delete(f"/users/{employee_id}")
+
+    assert removed.json() == {"conversations_deleted": 1}
+    assert employee.get("/conversations").status_code == 401
+    assert [u["username"] for u in admin.get("/users").json()] == ["admin", "editor"]
+    assert admin.delete(f"/users/{employee_id}").status_code == 404
+
+
+def test_refused_changes_say_why(app, store):
+    admin = sign_in(app, "admin")
+    me, editor = store.by_name("admin").id, store.by_name("editor").id
+
+    def code(response):
+        assert response.status_code in (404, 422), response.text
+        return response.json()["detail"]["code"]
+
+    user = {"username": "marko", "password": PASSWORD}
+    assert code(admin.post("/users", json={**user, "username": "editor"})) == "taken"
+    assert code(admin.post("/users", json={**user, "username": "x"})) == "username"
+    assert code(admin.post("/users", json={**user, "password": "kratka"})) == "password"
+    assert code(admin.post("/users", json={**user, "role": "boss"})) == "role"
+    assert code(admin.patch("/users/9999", json={"role": "editor"})) == "missing"
+    # An administrator cannot lock themselves out of the panel by a slip.
+    assert code(admin.patch(f"/users/{me}", json={"role": "editor"})) == "self"
+    assert code(admin.patch(f"/users/{me}", json={"disabled": True})) == "self"
+    assert code(admin.delete(f"/users/{me}")) == "self"
+    assert admin.patch(f"/users/{me}", json={"role": "admin"}).status_code == 200  # no change
+    assert [u.username for u in store.all()] == ["admin", "editor", "employee"]
+    assert store.get(editor).role == "editor"
+
+
+@pytest.mark.parametrize("role", ["employee", "editor"])
+def test_only_an_administrator_reaches_the_users(app, store, role):
+    client = sign_in(app, role)
+    target = store.by_name("admin").id
+    new = {"username": "marko", "password": PASSWORD, "role": "admin"}
+
+    assert client.get("/users").status_code == 403
+    assert client.post("/users", json=new).status_code == 403
+    assert client.patch(f"/users/{target}", json={"disabled": True}).status_code == 403
+    assert client.delete(f"/users/{target}").status_code == 403
+    assert TestClient(app).get("/users").status_code == 401  # not signed in at all
+    assert store.by_name("marko") is None and not store.by_name("admin").disabled
 
 
 def test_an_editor_sees_the_gaps_but_not_the_usage(app):
@@ -321,8 +410,10 @@ def test_without_accounts_everything_is_as_before(settings, tmp_path):
     assert "<title>Doc Assistant</title>" in client.get("/").text
     config = client.get("/api/config").json()
     assert config["login"] is False and config["user"] is None
+    assert config["can"].pop("manage_users") is False  # there are no users to manage
     assert all(config["can"].values())
     assert client.post("/documents/demo").status_code == 200
+    assert client.get("/users").status_code == 404
     login = {"username": "admin", "password": PASSWORD}
     assert client.post("/auth/login", json=login).status_code == 404
 

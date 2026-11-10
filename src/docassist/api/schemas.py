@@ -74,6 +74,29 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=200)
 
 
+class UserCreate(BaseModel):
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=200)
+    role: str = Field(default="employee", description="employee | editor | admin")
+
+
+class UserUpdate(BaseModel):
+    """Only the fields that are sent are changed."""
+
+    role: str | None = None
+    password: str | None = Field(default=None, min_length=1, max_length=200)
+    disabled: bool | None = None
+
+
+class UserOut(BaseModel):
+    id: int
+    username: str
+    role: str
+    disabled: bool
+    created_at: str
+    me: bool = False  # the signed-in administrator looking at the list
+
+
 class RenameRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
 
