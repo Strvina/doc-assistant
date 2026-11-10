@@ -230,6 +230,17 @@ class ConversationStore:
             -last:
         ]
 
+    def owns_answer(self, owner: str, log_id: int) -> bool:
+        """True when the answer logged as `log_id` is in one of the owner's conversations:
+        only then may they rate it or forward it to a team."""
+        with closing(self._connect()) as db:
+            row = db.execute(
+                "SELECT 1 FROM turns t JOIN conversations c ON c.id = t.conversation_id"
+                " WHERE c.owner = ? AND json_extract(t.response, '$.log_id') = ? LIMIT 1",
+                (owner, log_id),
+            ).fetchone()
+        return row is not None
+
     def delete_owner(self, owner: str) -> int:
         """Delete every conversation of an owner (a removed user). Returns how many."""
         with closing(self._connect()) as db, db:

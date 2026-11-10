@@ -388,6 +388,18 @@ def test_ask_validates_input(client):
     assert client.post("/ask", json={"question": "x", "top_k": 50}).status_code == 422
 
 
+def test_another_browser_cannot_rate_or_forward_an_answer(client):
+    upload(client, "faq.txt")
+    client.get("/")  # browser session
+    log_id = client.post("/ask", json={"question": "Kada radi kantina?"}).json()["log_id"]
+    other = TestClient(client.app)
+    other.get("/")  # a session of its own
+
+    assert other.post("/feedback", json={"log_id": log_id, "rating": -1}).status_code == 404
+    assert other.post("/escalate", json={"log_id": log_id}).status_code == 404
+    assert client.post("/feedback", json={"log_id": log_id, "rating": -1}).json() == {"ok": True}
+
+
 def test_feedback_stats_and_insights(client):
     upload(client, "faq.txt")
     client.get("/")  # browser session

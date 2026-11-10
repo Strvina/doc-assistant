@@ -95,7 +95,11 @@ def config(
         },
         "allow_uploads": settings.allow_uploads,
         "login": settings.login_required,
-        "user": {"username": user.username, "role": user.role} if user else None,
+        "user": (
+            {"username": user.username, "full_name": user.full_name, "role": user.role}
+            if user
+            else None
+        ),
         "can": can,
         "max_upload_mb": settings.max_upload_mb,
         "extensions": list(SUPPORTED_EXTENSIONS),

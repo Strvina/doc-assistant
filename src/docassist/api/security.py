@@ -35,6 +35,22 @@ def current_user(request: Request, settings: SettingsDep, users: UsersDep) -> Us
 UserDep = Annotated[User | None, Depends(current_user)]
 
 
+def require_accounts(settings: SettingsDep) -> None:
+    """A route dependency: the route exists only when people sign in (LOGIN_REQUIRED)."""
+    if not settings.login_required:
+        raise HTTPException(404, "This server has no user accounts (LOGIN_REQUIRED=false)")
+
+
+def signed_in_user(user: UserDep) -> User:
+    """The signed-in user, for routes about one's own account."""
+    if user is None:
+        raise HTTPException(401, "Sign in first")
+    return user
+
+
+MeDep = Annotated[User, Depends(signed_in_user)]
+
+
 def client_kind(
     request: Request,
     settings: SettingsDep,

@@ -111,6 +111,8 @@ Svaka faza = jedna ili više grana/PR-ova. Štikliraj `[x]` kad je stavka spojen
 - [x] Dokument se pojavljuje u listi čim je indeksiran (upload, osvežavanje indeksa, uvoz) bez osvežavanja stranice (ADR-047)
 - [x] Nalozi i uloge (zaposleni / urednik / administrator), prijava, korisnici iz komandne linije (ADR-048)
 - [x] Panel „Korisnici i uloge“ za administratora: dodavanje, promena uloge/lozinke, isključenje i brisanje naloga (ADR-049)
+- [x] Meni naloga (klik na ime): *Moj nalog* — ime i prezime, promena sopstvene lozinke (ADR-050)
+- [x] 👍/👎 i prosleđivanje timu samo za sopstvena pitanja (ADR-050)
 
 ## Dodatno — formati
 
