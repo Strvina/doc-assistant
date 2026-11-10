@@ -66,6 +66,10 @@ def client_kind(
     if settings.login_required:
         if user is None:
             raise HTTPException(401, "Sign in first")
+        if user.must_change_password:
+            # A password an administrator chose opens only "set your own password" (ADR-051).
+            detail = {"code": "change_password", "message": "Set your own password first"}
+            raise HTTPException(403, detail)
         return "web"
     if known_session(request, conversations):
         return "web"

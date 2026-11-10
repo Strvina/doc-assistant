@@ -793,3 +793,15 @@ Vlasništvo se čita iz razgovora, ne iz nove kolone u logu: radi i za stara pit
 razgovore prenete na korisnika pri prijavi (`claim`), bez migracije loga.
 **Cena:** odgovor iz obrisanog razgovora više ne može da se oceni; pretraga po JSON-u je
 linearna po pitanjima jednog vlasnika (stotine redova — zanemarljivo).
+
+### ADR-051 · Privremena lozinka od administratora
+**Odluka:** lozinka koju administrator zada u panelu (nov nalog ili „Nova lozinka“) je
+**privremena** (`users.must_change_password = 1`). Posle prijave takav korisnik vidi samo prozor
+„Postavi svoju lozinku“ (ne zatvara se; može i da se odjavi), a server sve ostalo odbija sa 403
+`{"code": "change_password"}` — provera je u `client_kind`, kroz koji prolaze sve rute sa
+podacima. Rade samo `/api/config`, `/account` i odjava. Kad postavi svoju (`/account/password`,
+uz privremenu kao trenutnu), oznaka se briše. Lozinke iz komandne linije (`users add`,
+`users password`) nisu privremene: tako se pravi prvi administrator i oporavlja nalog.
+**Zašto:** administrator inače zna lozinku svakog zaposlenog i može da se prijavi kao on;
+uobičajena praksa u firmama je da prvu lozinku korisnik odmah zameni.
+**Cena:** jedan korak više pri prvoj prijavi.

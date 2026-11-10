@@ -95,6 +95,7 @@ class UserOut(BaseModel):
     disabled: bool
     created_at: str
     full_name: str = ""
+    must_change_password: bool = False  # still has the password the administrator gave
     me: bool = False  # the signed-in administrator looking at the list
 
 

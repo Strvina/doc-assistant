@@ -54,6 +54,12 @@ def sign_in(app, username, password=PASSWORD):
     return client
 
 
+def own_password(client, temporary, own=PASSWORD):
+    """Replace the temporary password an administrator gave with one's own (ADR-051)."""
+    change = {"current_password": temporary, "new_password": own}
+    assert client.post("/account/password", json=change).json() == {"ok": True}
+
+
 def upload_faq(app):
     files = [("files", ("faq.txt", (SAMPLE_DOCS / "faq.txt").read_bytes()))]
     assert sign_in(app, "editor").post("/documents", files=files).status_code == 200
@@ -134,7 +140,12 @@ def test_sign_in_and_out(app):
     assert "<title>Doc Assistant</title>" in client.get("/").text
     config = client.get("/api/config").json()
     assert config["login"] is True
-    assert config["user"] == {"username": "editor", "full_name": "", "role": "editor"}
+    assert config["user"] == {
+        "username": "editor",
+        "full_name": "",
+        "role": "editor",
+        "must_change_password": False,
+    }
 
     assert client.post("/auth/logout").status_code == 200
     assert client.get("/documents").status_code == 401
@@ -248,19 +259,22 @@ def test_an_administrator_manages_the_users(app, store):
     ]
     assert "password_hash" not in listed[0] and "password" not in listed[0]
 
-    new = {"username": "Ana", "password": PASSWORD, "role": "employee"}
+    new = {"username": "Ana", "password": "privremena-1", "role": "employee"}
     created = admin.post("/users", json=new)
     assert created.status_code == 201 and created.json()["username"] == "ana"
-    ana = sign_in(app, "ana")
+    assert created.json()["must_change_password"] is True
+    ana = sign_in(app, "ana", "privremena-1")
+    own_password(ana, "privremena-1")
     assert ana.post("/documents/demo").status_code == 403
 
     ana_id = created.json()["id"]
     assert admin.patch(f"/users/{ana_id}", json={"role": "editor"}).json()["role"] == "editor"
     assert ana.post("/documents/demo").status_code == 200  # at once, without signing in again
 
-    assert admin.patch(f"/users/{ana_id}", json={"password": "nova-lozinka-123"}).status_code == 200
+    assert admin.patch(f"/users/{ana_id}", json={"password": "privremena-2"}).status_code == 200
     assert ana.get("/documents").status_code == 401  # signed out everywhere
-    ana = sign_in(app, "ana", "nova-lozinka-123")
+    ana = sign_in(app, "ana", "privremena-2")
+    own_password(ana, "privremena-2", "nova-lozinka-123")
 
     assert admin.patch(f"/users/{ana_id}", json={"disabled": True}).json()["disabled"] is True
     assert ana.get("/documents").status_code == 401
@@ -462,6 +476,38 @@ def test_the_account_needs_a_signed_in_user(app, settings, tmp_path):
         llm_factory=lambda s, p: FakeProvider(),
     )
     assert TestClient(without_accounts).get("/account").status_code == 404
+
+
+def test_a_temporary_password_opens_only_setting_ones_own(app, store):
+    admin = sign_in(app, "admin")
+    marko = {"username": "marko", "password": "privremena-1", "role": "editor"}
+    marko_id = admin.post("/users", json=marko).json()["id"]
+    client = sign_in(app, "marko", "privremena-1")
+
+    # The page and who is signed in load, so the UI can ask for the new password ...
+    assert client.get("/api/config").json()["user"]["must_change_password"] is True
+    assert client.get("/account").status_code == 200
+    # ... but nothing else does, whatever the role.
+    for method, path in [("get", "/documents"), ("get", "/conversations"), ("get", "/queries")]:
+        refused = getattr(client, method)(path, params={"kind": "gaps"})
+        assert refused.status_code == 403
+        assert refused.json()["detail"]["code"] == "change_password"
+    assert client.post("/ask", json={"question": "Kada radi kantina?"}).status_code == 403
+
+    own_password(client, "privremena-1")
+
+    assert client.get("/documents").status_code == 200
+    assert client.get("/api/config").json()["user"]["must_change_password"] is False
+    assert [u["must_change_password"] for u in admin.get("/users").json()] == [False] * 4
+    # A new password from the administrator is temporary again.
+    admin.patch(f"/users/{marko_id}", json={"password": "privremena-2"})
+    assert store.get(marko_id).must_change_password is True
+
+
+def test_passwords_set_on_the_command_line_are_not_temporary(store):
+    assert not store.by_name("admin").must_change_password  # the `users add` path
+    store.set_password(store.by_name("editor").id, "nova-lozinka-123")
+    assert not store.by_name("editor").must_change_password
 
 
 def test_only_ones_own_answers_can_be_rated_or_forwarded(app):

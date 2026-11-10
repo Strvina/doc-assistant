@@ -1530,6 +1530,26 @@ async function openAccount() {
   $("#account-full-name").value = account.full_name;
 }
 
+// Signed in with a temporary password from an administrator: the account dialog shows only
+// the password form, cannot be closed, and the app loads once the password is the user's own.
+function requireOwnPassword() {
+  const modal = $("#account");
+  modal.dataset.required = "";
+  $("#account-title").textContent = "Postavi svoju lozinku";
+  $("#current-password-label").textContent = "Privremena lozinka (od administratora)";
+  $("#account-username").textContent = state.config.user.username;
+  $("#password-username").value = state.config.user.username;
+  $("#account-role").textContent = ROLE_LABELS[state.config.user.role] || state.config.user.role;
+  $("#account-since").closest("div").hidden = true;
+  openModal(modal);
+  $("#current-password").focus();
+}
+
+async function signOut() {
+  try { await api("/auth/logout", { method: "POST" }); } catch {}
+  location.reload();  // the server now shows the sign-in page
+}
+
 async function saveAccount(form) {
   const button = form.querySelector("button[type=submit]");
   button.disabled = true;
@@ -1561,6 +1581,10 @@ async function changePassword(form) {
   try {
     await api("/account/password", { method: "POST", headers: JSON_HEADERS,
       body: JSON.stringify({ current_password: current.value, new_password: fresh.value }) });
+    if ("required" in $("#account").dataset) {
+      location.reload();  // the app can load now
+      return;
+    }
     form.reset();
     $("#password-username").value = state.config.user.username;
     toast("Lozinka je promenjena. Ostali uređaji su odjavljeni.");
@@ -1620,7 +1644,8 @@ function renderUsers() {
     return el("li", { class: "user-row" + (user.disabled ? " off" : "") },
       el("span", { class: "user-who" },
         el("strong", {}, user.full_name || user.username),
-        el("small", {}, [user.full_name && user.username, user.me && "to si ti", user.disabled && "isključen — ne može da se prijavi",
+        el("small", {}, [user.full_name && user.username, user.me && "to si ti",
+          user.must_change_password && "lozinka je još privremena", user.disabled && "nalog je isključen — prijava nije moguća",
           `od ${new Date(user.created_at).toLocaleDateString("sr-RS")}`].filter(Boolean).join(" · "))),
       role,
       el("div", { class: "inbox-row-actions" },
@@ -1628,7 +1653,7 @@ function renderUsers() {
         !user.me && el("button", { class: "link", type: "button", onclick: (e) => passwordForm(e.currentTarget.closest("li"), user) }, "Nova lozinka"),
         !user.me && el("button", { class: "link", type: "button",
           onclick: () => changeUser(user, { disabled: !user.disabled },
-            user.disabled ? `${user.username} ponovo može da se prijavi.` : `${user.username} je isključen i odjavljen.`) },
+            user.disabled ? `Nalog ${user.username} je ponovo uključen.` : `Nalog ${user.username} je isključen i odjavljen.`) },
           user.disabled ? "Uključi" : "Isključi"),
         !user.me && el("button", { class: "link danger", type: "button", onclick: () => removeUser(user) }, "Obriši")));
   }));
@@ -1637,9 +1662,9 @@ function renderUsers() {
 // "Nova lozinka" turns the row into a small form; the user is then signed out everywhere.
 function passwordForm(row, user) {
   const input = el("input", { type: "password", autocomplete: "new-password", minlength: 8, maxlength: 200, required: true,
-    placeholder: "Nova lozinka (najmanje 8 znakova)", "aria-label": `Nova lozinka: ${user.username}` });
+    placeholder: "Privremena lozinka (8+ znakova)", "aria-label": `Privremena lozinka: ${user.username}` });
   const form = el("form", { class: "user-password",
-      onsubmit: (e) => { e.preventDefault(); changeUser(user, { password: input.value }, `${user.username}: nova lozinka je sačuvana, odjavljen je sa svih uređaja.`); } },
+      onsubmit: (e) => { e.preventDefault(); changeUser(user, { password: input.value }, `${user.username}: privremena lozinka je sačuvana, nalog je odjavljen. Pri prijavi se postavlja nova.`); } },
     input,
     el("button", { class: "btn small primary", type: "submit" }, "Sačuvaj"),
     el("button", { class: "btn small", type: "button", onclick: renderUsers }, "Otkaži"));
@@ -1676,7 +1701,7 @@ async function addUser(form) {
   try {
     const user = await api("/users", { method: "POST", headers: JSON_HEADERS,
       body: JSON.stringify({ username: name.value, password: password.value, role: role.value }) });
-    toast(`Dodat je ${user.username} (${ROLE_LABELS[user.role].toLowerCase()}). Javi mu korisničko ime i lozinku.`);
+    toast(`Dodat je nalog ${user.username} (${ROLE_LABELS[user.role].toLowerCase()}). Pošalji korisniku ime i privremenu lozinku; pri prvoj prijavi postavlja svoju.`);
     form.reset();
     role.value = "employee";
   } catch (error) {
@@ -1700,7 +1725,7 @@ function openModal(modal) {
 }
 
 function closeModal(modal, { restoreFocus = true } = {}) {
-  if (modal.hidden) return;
+  if (modal.hidden || "required" in modal.dataset) return;
   modal.hidden = true;
   if (restoreFocus && modal.opener?.isConnected) modal.opener.focus();
   modal.opener = null;
@@ -1812,10 +1837,8 @@ function bindEvents() {
   $("#inbox-close").addEventListener("click", () => closeModal($("#inbox")));
   $("#inbox").addEventListener("click", (event) => { if (event.target.id === "inbox") closeModal(event.currentTarget); });
   $("#queries-clear").addEventListener("click", clearQueries);
-  $("#logout").addEventListener("click", async () => {
-    try { await api("/auth/logout", { method: "POST" }); } catch {}
-    location.reload();  // the server now shows the sign-in page
-  });
+  $("#logout").addEventListener("click", signOut);
+  $("#account-logout").addEventListener("click", signOut);
   $("#insights").addEventListener("click", (event) => { if (event.target.id === "insights") closeModal(event.currentTarget); });
   $("#user-button").addEventListener("click", () => {
     if (!closeUserMenu()) openUserMenu();
@@ -1870,6 +1893,10 @@ async function main() {
     await loadConfig();
   } catch (error) {
     toast(`Server nije dostupan: ${error.message}`, "error");
+    return;
+  }
+  if (state.config.user?.must_change_password) {
+    requireOwnPassword();  // the server answers nothing else until then (ADR-051)
     return;
   }
   try {
