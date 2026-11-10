@@ -270,4 +270,4 @@ deploy workflow se sam preskače dok GitHub varijabla `HF_SPACE` nije postavljen
 | 2026-11-09 | SQLite za više korisnika odjednom (WAL; 40 istovremenih bez greške); PostgreSQL odbijen uz merenje; ADR-046 | #46 |
 | 2026-11-09 | Dokumenti se pojavljuju u listi čim su indeksirani, bez osvežavanja stranice; ADR-047 | #47 |
 | 2026-11-09 | Nalozi i tri uloge (zaposleni / urednik / administrator), stranica za prijavu, korisnici iz CLI-ja; ADR-048 | #48 |
-| 2026-11-09 | Panel za administraciju naloga u web UI-ju; ADR-049 | — |
+| 2026-11-10 | Panel za administraciju naloga u web UI-ju (započeo Codex, pregledano i dorađeno); ADR-049 | #49 |
